@@ -1,4 +1,10 @@
 {
-  "words": ["semanifold"],
-  "ignorePaths": ["Cargo.toml"]
+  "words": [
+    "clippy",
+    "dtolnay",
+    "semanifold"
+  ],
+  "ignorePaths": [
+    "Cargo.toml"
+  ]
 }

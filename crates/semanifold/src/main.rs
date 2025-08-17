@@ -26,6 +26,7 @@ fn run() -> anyhow::Result<()> {
 
     match &cli.command {
         Some(Commands::Add(add)) => cli::add::run(add, &changeset_path, &config)?,
+        Some(Commands::Init(init)) => cli::init::run(init)?,
         None => {}
     }
 

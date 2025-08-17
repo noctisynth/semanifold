@@ -467,6 +467,7 @@ dependencies = [
  "log",
  "saphyr",
  "semanifold-resolver",
+ "toml",
 ]
 
 [[package]]

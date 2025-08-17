@@ -1,12 +1,13 @@
 use clap::Parser;
-use logger::LevelFilter;
+use log::LevelFilter;
+use semanifold_resolver::config;
 
 use crate::cli::{Cli, Commands};
 
 pub mod cli;
 pub mod logger;
 
-fn main() -> anyhow::Result<()> {
+fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if cli.debug {
@@ -15,10 +16,18 @@ fn main() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
+    let config = config::load_config()?;
+
     match &cli.command {
-        Some(Commands::Add(add)) => cli::add::run(add)?,
+        Some(Commands::Add(add)) => cli::add::run(add, &config)?,
         None => {}
     }
 
     Ok(())
+}
+
+fn main() {
+    if let Err(e) = run() {
+        log::error!("Error: {}", e);
+    }
 }

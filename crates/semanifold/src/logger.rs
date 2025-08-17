@@ -1,6 +1,4 @@
 use colored::{ColoredString, Colorize};
-pub use log::LevelFilter;
-pub use log::{debug, error, info, trace, warn};
 
 fn format_level(level: log::Level) -> ColoredString {
     match level {
@@ -15,12 +13,20 @@ fn format_level(level: log::Level) -> ColoredString {
 pub fn setup_logger(level: log::LevelFilter) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{:<5} {} {}",
-                format_level(record.level()),
-                record.target().cyan(),
-                message
-            ))
+            if matches!(record.level(), log::Level::Debug) {
+                out.finish(format_args!(
+                    "{:<5} {} {}",
+                    format_level(record.level()),
+                    record.target().cyan(),
+                    message
+                ))
+            } else {
+                out.finish(format_args!(
+                    "{:<5} {}",
+                    format_level(record.level()),
+                    message
+                ))
+            }
         })
         .level(level)
         .chain(std::io::stdout())

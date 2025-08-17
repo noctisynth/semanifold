@@ -13,6 +13,6 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(short, long)]
+    #[arg(global = true, short, long)]
     pub debug: bool,
 }

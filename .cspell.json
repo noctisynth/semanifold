@@ -2,8 +2,10 @@
   "words": [
     "clippy",
     "dtolnay",
+    "rfind",
     "saphyr",
-    "semanifold"
+    "semanifold",
+    "thiserror"
   ],
   "ignorePaths": [
     "Cargo.toml"

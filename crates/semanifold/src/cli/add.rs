@@ -1,11 +1,10 @@
-use std::fmt;
+use std::{fmt, path::Path};
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use inquire::{Autocomplete, MultiSelect, Select, Text, autocompletion::Replacement};
-use log::{info, warn};
-use saphyr::{Mapping, Yaml, YamlEmitter};
-use semanifold_resolver::config;
+use inquire::{Autocomplete, MultiSelect, Text, autocompletion::Replacement};
+
+use semanifold_resolver::{changeset, config};
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
@@ -20,6 +19,16 @@ impl fmt::Display for Level {
             Level::Patch => write!(f, "patch"),
             Level::Minor => write!(f, "minor"),
             Level::Major => write!(f, "major"),
+        }
+    }
+}
+
+impl Level {
+    pub fn to_bump_level(&self) -> changeset::BumpLevel {
+        match self {
+            Level::Patch => changeset::BumpLevel::Patch,
+            Level::Minor => changeset::BumpLevel::Minor,
+            Level::Major => changeset::BumpLevel::Major,
         }
     }
 }
@@ -67,7 +76,7 @@ impl Autocomplete for TagAutocomplete {
     }
 }
 
-pub(crate) fn run(add: &Add, config: &config::Config) -> anyhow::Result<()> {
+pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyhow::Result<()> {
     let name = if let Some(name) = &add.name {
         name.clone()
     } else {
@@ -82,7 +91,7 @@ pub(crate) fn run(add: &Add, config: &config::Config) -> anyhow::Result<()> {
         }
     };
 
-    let packages = loop {
+    let mut packages = loop {
         let packages = MultiSelect::new(
             "What packages are affected by this change?",
             config.packages.keys().cloned().collect::<Vec<_>>(),
@@ -95,21 +104,34 @@ pub(crate) fn run(add: &Add, config: &config::Config) -> anyhow::Result<()> {
         break packages;
     };
 
-    let level = if let Some(level) = &add.level {
-        level.clone()
-    } else {
-        Select::new(
-            "What kind of change is this?",
-            Level::value_variants().to_vec(),
-        )
-        .prompt()?
-    };
-
     let tag = Text::new("What tag should this change be under?")
         .with_autocomplete(TagAutocomplete {
             tags: config.tags.keys().cloned().collect::<Vec<_>>(),
         })
         .prompt()?;
+
+    let mut changeset = changeset::Changeset::new(name.clone(), root_path);
+    let level_variants = Level::value_variants().to_vec();
+    for variant in level_variants.iter().rev() {
+        if packages.is_empty() {
+            break;
+        }
+
+        let selected_packages = MultiSelect::new(
+            &format!(
+                "Which packages should be {} bumped?",
+                match variant {
+                    Level::Patch => "patch".cyan(),
+                    Level::Minor => "minor".yellow(),
+                    Level::Major => "major".red(),
+                }
+            ),
+            packages.clone(),
+        )
+        .prompt()?;
+        changeset.add_packages(&selected_packages, variant.to_bump_level(), tag.clone());
+        packages.retain(|p| !selected_packages.contains(p));
+    }
 
     let summary = if let Some(summary) = &add.summary {
         summary.clone()
@@ -123,29 +145,9 @@ pub(crate) fn run(add: &Add, config: &config::Config) -> anyhow::Result<()> {
             break summary;
         }
     };
+    changeset.summary(summary);
 
-    let mut fm = String::new();
-    let mut emitter = YamlEmitter::new(&mut fm);
-    let mut fm_map = Mapping::new();
-    for package in packages {
-        fm_map.insert(
-            Yaml::value_from_str(package.leak()),
-            Yaml::value_from_str(
-                if tag.is_empty() {
-                    format!("{}", level)
-                } else {
-                    format!("{}:{}", level, tag)
-                }
-                .leak(),
-            ),
-        );
-    }
-    emitter.dump(&Yaml::Mapping(fm_map))?;
-
-    let content = format!("{fm}\n---\n\n{summary}\n");
-
-    info!("Generated changeset {}:\n{}", name.green(), content);
-    warn!("Semanifold is still in development, not ready for production use.");
+    changeset.apply()?;
 
     Ok(())
 }

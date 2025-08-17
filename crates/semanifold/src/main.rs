@@ -1,6 +1,6 @@
 use clap::Parser;
 use log::LevelFilter;
-use semanifold_resolver::config;
+use semanifold_resolver::{config, resolver};
 
 use crate::cli::{Cli, Commands};
 
@@ -18,13 +18,14 @@ fn run() -> anyhow::Result<()> {
 
     log::debug!("Parsed CLI arguments: {:?}", &cli);
 
-    let config_path = config::get_config_path()?;
+    let changeset_path = resolver::get_changeset_path()?;
+    let config_path = config::get_config_path(&changeset_path)?;
     let config = config::load_config(&config_path)?;
 
     log::debug!("Loaded config: {:?}", &config);
 
     match &cli.command {
-        Some(Commands::Add(add)) => cli::add::run(add, &config)?,
+        Some(Commands::Add(add)) => cli::add::run(add, &changeset_path, &config)?,
         None => {}
     }
 

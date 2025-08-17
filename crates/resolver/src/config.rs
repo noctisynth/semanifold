@@ -6,12 +6,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PackageConfig {
     path: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub tags: HashMap<String, String>,
     pub packages: HashMap<String, PackageConfig>,
@@ -58,7 +58,6 @@ pub fn get_config_path() -> anyhow::Result<PathBuf> {
         .iter()
         .find_map(|path| {
             let config_path = changeset_path.join(path);
-            log::debug!("Checking config path: {:?}", config_path);
             if config_path.exists() {
                 Some(config_path)
             } else {
@@ -67,12 +66,13 @@ pub fn get_config_path() -> anyhow::Result<PathBuf> {
         })
         .ok_or(anyhow::anyhow!("Failed to find config file"))?;
 
+    log::debug!("Found config path: {:?}", config_path);
+
     Ok(config_path)
 }
 
-pub fn load_config() -> anyhow::Result<Config> {
-    let config_path = get_config_path()?;
-    let config_content = std::fs::read_to_string(&config_path)?;
+pub fn load_config(config_path: &Path) -> anyhow::Result<Config> {
+    let config_content = std::fs::read_to_string(config_path)?;
     let config = if config_path.extension() == Some(OsStr::new("toml")) {
         toml::from_str(&config_content)?
     } else {

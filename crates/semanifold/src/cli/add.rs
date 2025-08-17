@@ -7,7 +7,7 @@ use log::{info, warn};
 use saphyr::{Mapping, Yaml, YamlEmitter};
 use semanifold_resolver::config;
 
-#[derive(clap::ValueEnum, Clone)]
+#[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
     Patch,
     Minor,
@@ -24,7 +24,7 @@ impl fmt::Display for Level {
     }
 }
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 pub(crate) struct Add {
     pub name: Option<String>,
     #[arg(short, long)]

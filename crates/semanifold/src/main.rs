@@ -16,7 +16,12 @@ fn run() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
-    let config = config::load_config()?;
+    log::debug!("Parsed CLI arguments: {:?}", &cli);
+
+    let config_path = config::get_config_path()?;
+    let config = config::load_config(&config_path)?;
+
+    log::debug!("Loaded config: {:?}", &config);
 
     match &cli.command {
         Some(Commands::Add(add)) => cli::add::run(add, &config)?,

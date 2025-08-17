@@ -151,7 +151,7 @@ impl Changeset {
         let mut emitter = YamlEmitter::new(&mut fm);
         let mut fm_map = Mapping::new();
         for package in &self.packages {
-            let mark = if package.tag.len() == 0 {
+            let mark = if package.tag.is_empty() {
                 format!("{}", package.level)
             } else {
                 format!("{}:{}", package.level, package.tag)

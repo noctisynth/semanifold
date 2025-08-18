@@ -1,0 +1,3 @@
+[cli.init]
+title = "Init semanifold"
+default =  "Is default init?(y/n)"

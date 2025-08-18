@@ -5,7 +5,10 @@ use semanifold_resolver::{config, resolver};
 use crate::cli::{Cli, Commands};
 
 pub mod cli;
+pub mod i18n;
 pub mod logger;
+
+rust_i18n::i18n!();
 
 fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -26,6 +29,7 @@ fn run() -> anyhow::Result<()> {
 
     match &cli.command {
         Some(Commands::Add(add)) => cli::add::run(add, &changeset_path, &config)?,
+        Some(Commands::Init(init)) => cli::init::run(init)?,
         None => {}
     }
 
@@ -33,6 +37,7 @@ fn run() -> anyhow::Result<()> {
 }
 
 fn main() {
+    i18n::init();
     if let Err(e) = run() {
         log::error!("Error: {e}");
     }

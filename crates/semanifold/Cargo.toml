@@ -10,5 +10,8 @@ colored = "3.0.0"
 fern = "0.7.1"
 inquire = "0.7.5"
 log = "0.4.27"
+rust-i18n = "3.1.5"
 saphyr = "0.0.6"
 semanifold-resolver = { version = "0.1.0", path = "../resolver" }
+sys-locale = "0.3.2"
+toml = "0.9.5"

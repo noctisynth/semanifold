@@ -81,24 +81,24 @@ impl Changeset {
                                 .as_str()
                                 .ok_or(ResolveError::InvalidChangeset {
                                     path: path.to_path_buf(),
-                                    reason: format!("Invalid package name: {:?}", k),
+                                    reason: format!("Invalid package name: {k:?}"),
                                 })?
                                 .to_string();
                             let mark = v
                                 .as_str()
                                 .ok_or(ResolveError::InvalidChangeset {
                                     path: path.to_path_buf(),
-                                    reason: format!("Invalid package mark: {:?}", v),
+                                    reason: format!("Invalid package mark: {v:?}"),
                                 })?
                                 .to_string();
                             let mut mark = mark.split(':');
                             let level = mark.next().ok_or(ResolveError::InvalidChangeset {
                                 path: path.to_path_buf(),
-                                reason: format!("Invalid package mark: {:?}", v),
+                                reason: format!("Invalid package mark: {v:?}"),
                             })?;
                             let tag = mark.next().ok_or(ResolveError::InvalidChangeset {
                                 path: path.to_path_buf(),
-                                reason: format!("Invalid package mark: {:?}", v),
+                                reason: format!("Invalid package mark: {v:?}"),
                             })?;
                             let level = match level {
                                 "major" => BumpLevel::Major,
@@ -107,7 +107,7 @@ impl Changeset {
                                 _ => {
                                     return Err(ResolveError::InvalidChangeset {
                                         path: path.to_path_buf(),
-                                        reason: format!("Invalid bump level: {}", level),
+                                        reason: format!("Invalid bump level: {level}"),
                                     });
                                 }
                             };
@@ -143,7 +143,7 @@ impl Changeset {
     }
 
     pub fn apply_to(&self, changeset_path: &Path) -> anyhow::Result<()> {
-        log::debug!("Applying changeset: {:?}", self);
+        log::debug!("Applying changeset: {self:?}");
 
         let file_path = changeset_path.join(format!("{}.md", self.name));
 

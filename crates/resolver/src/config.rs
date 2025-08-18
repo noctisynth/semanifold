@@ -31,7 +31,7 @@ pub fn get_config_path(changeset_path: &Path) -> anyhow::Result<PathBuf> {
         })
         .ok_or(anyhow::anyhow!("Failed to find config file"))?;
 
-    log::debug!("Found config path: {:?}", config_path);
+    log::debug!("Found config path: {config_path:?}");
 
     Ok(config_path)
 }

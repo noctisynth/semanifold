@@ -34,6 +34,6 @@ fn run() -> anyhow::Result<()> {
 
 fn main() {
     if let Err(e) = run() {
-        log::error!("Error: {}", e);
+        log::error!("Error: {e}");
     }
 }

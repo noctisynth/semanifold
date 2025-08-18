@@ -147,7 +147,7 @@ pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyho
     };
     changeset.summary(summary);
 
-    changeset.apply()?;
+    changeset.commit()?;
 
     Ok(())
 }

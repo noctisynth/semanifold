@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    changeset::Changeset,
+    changeset::{BumpLevel, Changeset},
     utils::{self, find_at_parent},
 };
 
@@ -14,8 +14,8 @@ pub struct ResolvedPackage {
 }
 
 pub trait Resolver {
-    fn resolve(&self) -> anyhow::Result<ResolvedPackage>;
-    fn bump(&self, version: &str) -> anyhow::Result<()>;
+    fn resolve(&mut self) -> anyhow::Result<&ResolvedPackage>;
+    fn bump(&mut self, level: BumpLevel) -> anyhow::Result<()>;
 }
 
 pub fn get_changeset_path() -> anyhow::Result<PathBuf> {

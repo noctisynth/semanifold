@@ -142,7 +142,7 @@ impl Changeset {
         }
     }
 
-    pub fn apply_to(&self, changeset_path: &Path) -> anyhow::Result<()> {
+    pub fn commit_to(&self, changeset_path: &Path) -> anyhow::Result<()> {
         log::debug!("Applying changeset: {self:?}");
 
         let file_path = changeset_path.join(format!("{}.md", self.name));
@@ -169,7 +169,7 @@ impl Changeset {
         Ok(())
     }
 
-    pub fn apply(&self) -> anyhow::Result<()> {
-        self.apply_to(&self.root_path)
+    pub fn commit(&self) -> anyhow::Result<()> {
+        self.commit_to(&self.root_path)
     }
 }

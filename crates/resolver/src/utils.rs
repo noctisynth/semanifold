@@ -1,5 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use semver::Version;
+
+use crate::changeset::BumpLevel;
+
 pub fn find_at_parent(
     path_name: &str,
     starts_at: &Path,
@@ -32,4 +36,14 @@ pub fn list_files<F: Fn(&Path) -> bool>(path: &Path, filter: F) -> anyhow::Resul
         }
     }
     Ok(files)
+}
+
+pub fn bump_version(version: &str, level: BumpLevel) -> anyhow::Result<Version> {
+    let mut version = semver::Version::parse(version)?;
+    match level {
+        BumpLevel::Minor => version.minor = version.minor + 1,
+        BumpLevel::Major => version.major = version.major + 1,
+        BumpLevel::Patch => version.patch = version.patch + 1,
+    };
+    Ok(version)
 }

@@ -1,5 +1,10 @@
 use std::path::{Path, PathBuf};
 
+use crate::{
+    changeset::Changeset,
+    utils::{self, find_at_parent},
+};
+
 pub mod rust;
 
 pub struct ResolvedPackage {
@@ -11,29 +16,6 @@ pub struct ResolvedPackage {
 pub trait Resolver {
     fn resolve(&self) -> anyhow::Result<ResolvedPackage>;
     fn bump(&self, version: &str) -> anyhow::Result<()>;
-}
-
-pub fn find_at_parent(
-    path_name: &str,
-    starts_at: &Path,
-    ends_at: Option<&Path>,
-) -> Option<PathBuf> {
-    let mut current_path = starts_at;
-    loop {
-        if ends_at.is_some() && current_path == ends_at.unwrap() {
-            break None;
-        } else {
-            let config_path = current_path.join(path_name);
-            if config_path.exists() {
-                break Some(config_path);
-            }
-        }
-        if let Some(parent_path) = current_path.parent() {
-            current_path = parent_path;
-        } else {
-            break None;
-        }
-    }
 }
 
 pub fn get_changeset_path() -> anyhow::Result<PathBuf> {
@@ -54,4 +36,15 @@ pub fn get_changeset_path() -> anyhow::Result<PathBuf> {
     };
 
     Ok(changeset_path)
+}
+
+pub fn get_changesets(path: &Path) -> anyhow::Result<Vec<Changeset>> {
+    let mut changesets = Vec::new();
+    utils::list_files(path, |p| p.extension() == Some("md".as_ref()))?
+        .into_iter()
+        .try_fold(&mut changesets, |changesets, path| {
+            changesets.push(Changeset::from_file(&path)?);
+            Ok::<_, anyhow::Error>(changesets)
+        })?;
+    Ok(changesets)
 }

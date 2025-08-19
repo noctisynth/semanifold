@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use semver::Version;
 
-use crate::changeset::BumpLevel;
+use crate::{changeset::BumpLevel, error::ResolveError};
 
 pub fn find_at_parent(
     path_name: &str,
@@ -27,7 +27,10 @@ pub fn find_at_parent(
     }
 }
 
-pub fn list_files<F: Fn(&Path) -> bool>(path: &Path, filter: F) -> anyhow::Result<Vec<PathBuf>> {
+pub fn list_files<F: Fn(&Path) -> bool>(
+    path: &Path,
+    filter: F,
+) -> Result<Vec<PathBuf>, ResolveError> {
     let mut files = Vec::new();
     for entry in std::fs::read_dir(path)? {
         let path = entry?.path();
@@ -38,8 +41,12 @@ pub fn list_files<F: Fn(&Path) -> bool>(path: &Path, filter: F) -> anyhow::Resul
     Ok(files)
 }
 
-pub fn bump_version(version: &str, level: BumpLevel) -> anyhow::Result<Version> {
-    let mut version = semver::Version::parse(version)?;
+pub fn bump_version(version: &str, level: BumpLevel) -> Result<Version, ResolveError> {
+    let mut version =
+        semver::Version::parse(version).map_err(|e| ResolveError::InvalidVersion {
+            version: version.to_string(),
+            reason: e.to_string(),
+        })?;
     match level {
         BumpLevel::Minor => version.minor += 1,
         BumpLevel::Major => version.major += 1,

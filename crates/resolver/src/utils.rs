@@ -41,9 +41,9 @@ pub fn list_files<F: Fn(&Path) -> bool>(path: &Path, filter: F) -> anyhow::Resul
 pub fn bump_version(version: &str, level: BumpLevel) -> anyhow::Result<Version> {
     let mut version = semver::Version::parse(version)?;
     match level {
-        BumpLevel::Minor => version.minor = version.minor + 1,
-        BumpLevel::Major => version.major = version.major + 1,
-        BumpLevel::Patch => version.patch = version.patch + 1,
+        BumpLevel::Minor => version.minor += 1,
+        BumpLevel::Major => version.major += 1,
+        BumpLevel::Patch => version.patch += 1,
     };
     Ok(version)
 }

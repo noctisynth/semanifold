@@ -28,7 +28,7 @@ where
 }
 
 impl Resolver for RustResolver<'_, '_> {
-    fn resolve<'r>(&'r mut self) -> anyhow::Result<&'r ResolvedPackage> {
+    fn resolve(&mut self) -> anyhow::Result<&ResolvedPackage> {
         if self.package.is_some() {
             return Ok(self.package.as_ref().unwrap());
         }
@@ -52,12 +52,12 @@ impl Resolver for RustResolver<'_, '_> {
         let package = self.resolve()?;
 
         let bumped_version = utils::bump_version(&package.version, level)?.to_string();
-        let toml_str = std::fs::read_to_string(&self.pkg_config.path.join("Cargo.toml"))?;
+        let toml_str = std::fs::read_to_string(self.pkg_config.path.join("Cargo.toml"))?;
         let mut toml_doc = toml_str.parse::<toml_edit::DocumentMut>()?;
         let package = toml_doc["package"].as_table_mut().unwrap();
         package["version"] = toml_edit::value(bumped_version);
         std::fs::write(
-            &self.pkg_config.path.join("Cargo.toml"),
+            self.pkg_config.path.join("Cargo.toml"),
             toml_doc.to_string(),
         )?;
         Ok(())

@@ -1,10 +1,10 @@
-[tags]
-feat = "New Feature"
-fix = "Bug Fix"
-chore = "Chore"
-refactor = "Refactor"
-perf = "Performance Improvement"
-
 [packages]
 semanifold = { path = "crates/semanifold" }
 semanifold-resolver = { path = "crates/resolver" }
+
+[tags]
+chore = "Chore"
+feat = "New Feature"
+fix = "Bug Fix"
+perf = "Performance Improvement"
+refactor = "Refactor"

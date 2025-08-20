@@ -1,10 +1,12 @@
 use clap::{Parser, Subcommand};
 
 pub mod add;
+pub mod init;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
     Add(add::Add),
+    Init(init::Init),
 }
 
 #[derive(Parser, Debug)]

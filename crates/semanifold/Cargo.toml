@@ -14,4 +14,4 @@ rust-i18n = "3.1.5"
 saphyr = "0.0.6"
 semanifold-resolver = { version = "0.1.0", path = "../resolver" }
 sys-locale = "0.3.2"
-toml = "0.9.5"
+toml_edit = "0.23.3"

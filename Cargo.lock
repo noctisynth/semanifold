@@ -701,8 +701,8 @@ dependencies = [
  "rust-i18n",
  "saphyr",
  "semanifold-resolver",
- "sys-locale",
- "toml 0.9.5",
+ "toml",
+ "toml_edit",
 ]
 
 [[package]]

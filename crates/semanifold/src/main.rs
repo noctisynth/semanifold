@@ -20,6 +20,10 @@ fn run() -> anyhow::Result<()> {
     }
 
     log::debug!("Parsed CLI arguments: {:?}", &cli);
+    // init command must be executed before read config file
+    if let Some(Commands::Init(init)) = &cli.command {
+        return cli::init::run(init);
+    }
 
     let changeset_path = resolver::get_changeset_path()?;
     let config_path = config::get_config_path(&changeset_path)?;
@@ -29,7 +33,7 @@ fn run() -> anyhow::Result<()> {
 
     match &cli.command {
         Some(Commands::Add(add)) => cli::add::run(add, &changeset_path, &config)?,
-        Some(Commands::Init(init)) => cli::init::run(init)?,
+        Some(Commands::Init(_init)) => {}
         None => {}
     }
 

@@ -468,6 +468,7 @@ dependencies = [
  "saphyr",
  "semanifold-resolver",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

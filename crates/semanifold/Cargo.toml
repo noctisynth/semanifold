@@ -13,3 +13,4 @@ log = "0.4.27"
 saphyr = "0.0.6"
 semanifold-resolver = { version = "0.1.0", path = "../resolver" }
 toml = "0.9.5"
+toml_edit = "0.23.3"

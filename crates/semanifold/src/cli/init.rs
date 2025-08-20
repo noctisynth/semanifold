@@ -19,7 +19,29 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
 
     let mut table = toml::Table::new();
     // init packages
-    let packages = toml::Table::new();
+    let mut packages = toml::Table::new();
+    packages.insert(
+        "semanifold".to_string(),
+        toml::Value::Table({
+            let mut tbl = toml::value::Table::new();
+            tbl.insert(
+                "path".to_string(),
+                toml::Value::String("crates/semanifold".to_string()),
+            );
+            tbl
+        }),
+    );
+    packages.insert(
+        "semanifold-resolver".to_string(),
+        toml::Value::Table({
+            let mut tbl = toml::value::Table::new();
+            tbl.insert(
+                "path".to_string(),
+                toml::Value::String("crates/resolver".to_string()),
+            );
+            tbl
+        }),
+    );
     table.insert("packages".to_string(), toml::Value::Table(packages));
     // init tags
     let mut tags = toml::Table::new();

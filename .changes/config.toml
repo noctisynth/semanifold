@@ -1,6 +1,6 @@
 [packages]
-semanifold = { path = "crates/semanifold" }
 semanifold-resolver = { path = "crates/resolver" }
+semanifold = { path = "crates/semanifold" }
 
 [tags]
 chore = "Chore"

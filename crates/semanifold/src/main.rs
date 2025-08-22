@@ -43,6 +43,7 @@ fn run() -> anyhow::Result<()> {
 fn main() {
     // choose locale
     i18n::init();
+
     if let Err(e) = run() {
         log::error!("Error: {e}");
     }

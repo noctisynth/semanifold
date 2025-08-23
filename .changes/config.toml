@@ -1,10 +1,8 @@
 [packages]
-semanifold-resolver = { path = "crates/resolver" }
-semanifold = { path = "crates/semanifold" }
 
 [tags]
-chore = "Chore"
-feat = "New Feature"
-fix = "Bug Fix"
 perf = "Performance Improvement"
+chore = "Chore"
+fix = "Bug Fix"
 refactor = "Refactor"
+feat = "New Feature"

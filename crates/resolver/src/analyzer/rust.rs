@@ -22,7 +22,7 @@ impl RustAnalyzer {
     fn analyze_package(&self, root: &PathBuf) -> anyhow::Result<HashMap<String, Package>> {
         let mut res_package = HashMap::new();
 
-        let config_path = root
+        let config = root
             .read_dir()?
             .filter_map(Result::ok)
             .find(|entry| {
@@ -35,14 +35,14 @@ impl RustAnalyzer {
             })
             .map(|entry| entry.path());
 
-        let Some(config_path) = config_path else {
+        let Some(config_path) = config else {
             log::warn!("Not found Cargo.toml in {}", root.display());
             return Ok(res_package);
         };
 
         let doc = std::fs::read_to_string(config_path)?.parse::<Table>()?;
 
-        if let Some(package) = doc.get("packages").and_then(|value| value.as_table()) {
+        if let Some(package) = doc.get("package").and_then(|value| value.as_table()) {
             match package["name"].as_str() {
                 Some(name) => {
                     res_package.insert(name.to_string(), Package { path: root.clone() });

@@ -1,3 +1,4 @@
+pub mod analyzer;
 pub mod changeset;
 pub mod config;
 pub mod error;

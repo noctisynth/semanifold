@@ -2,7 +2,7 @@ use std::{fmt::Debug, path::PathBuf};
 
 use clap::{Args, arg};
 use log::info;
-use toml_edit::{DocumentMut, Table, value};
+use semanifold_resolver::analyzer;
 
 #[derive(Debug, Args)]
 pub(crate) struct Init {
@@ -13,25 +13,20 @@ pub(crate) struct Init {
 pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
     std::fs::create_dir_all(&init.root)?;
 
-    // init config.toml file
     let config_path = init.root.join("config.toml");
 
-    let mut doc = DocumentMut::new();
-    //init packages
-    let mut packages = Table::new();
-    packages["semanifold"]["path"] = value("crates/semanifold");
-    packages["semanifold-resolver"]["path"] = value("crates/resolver");
-    doc["packages"] = toml_edit::Item::Table(packages);
-    // init tags
-    let mut tags = Table::new();
-    tags["chore"] = value("Chore");
-    tags["feat"] = value("New Feature");
-    tags["fix"] = value("Bug Fix");
-    tags["perf"] = value("Performance Improvement");
-    tags["refactor"] = value("Refactor");
-    doc["tags"] = toml_edit::Item::Table(tags);
+    let parent_path = init.root.parent().unwrap().to_path_buf();
+    //init config
+    let analyzer = analyzer::default(&parent_path)?;
+
+    let config = analyzer.analyze()?;
+
+    // 写入config.toml文件
+    let config_doc = toml::to_string_pretty(&config)?;
+
     // write config.toml file
-    std::fs::write(config_path, doc.to_string())?;
+    std::fs::write(config_path, config_doc)?;
+
     info!("Initialized semanifold in {}", init.root.display());
     Ok(())
 }

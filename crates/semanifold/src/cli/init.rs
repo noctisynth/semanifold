@@ -1,7 +1,6 @@
 use std::{fmt::Debug, path::PathBuf};
 
 use clap::{Args, arg};
-use log::info;
 use toml_edit::{DocumentMut, Table, value};
 
 #[derive(Debug, Args)]
@@ -32,6 +31,10 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
     doc["tags"] = toml_edit::Item::Table(tags);
     // write config.toml file
     std::fs::write(config_path, doc.to_string())?;
-    info!("Initialized semanifold in {}", init.root.display());
+    log::info!(
+        "{} {}",
+        rust_i18n::t!("cli.init.finish"),
+        init.root.display()
+    );
     Ok(())
 }

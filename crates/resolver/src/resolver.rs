@@ -1,22 +1,37 @@
-use std::path::{Path, PathBuf};
-
 use crate::{
     changeset::{BumpLevel, Changeset},
     error::ResolveError,
     utils,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 pub mod rust;
-
+pub mod toml_serializer;
 pub struct ResolvedPackage {
     pub name: String,
     pub version: String,
     pub path: PathBuf,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConfigPackage {
+    pub path: PathBuf,
+}
+
+//
+#[derive(Serialize, Deserialize)]
+pub struct ChangesConfig {
+    #[serde(rename = "packages", serialize_with = "toml_serializer::serialize")]
+    packages: BTreeMap<String, ConfigPackage>,
+    tags: BTreeMap<String, String>,
+}
+
 pub trait Resolver {
     fn resolve(&mut self) -> anyhow::Result<&ResolvedPackage>;
     fn bump(&mut self, level: BumpLevel) -> anyhow::Result<()>;
+    fn analyze_project(&mut self, root: &PathBuf) -> anyhow::Result<ChangesConfig>;
 }
 
 pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {
@@ -44,4 +59,15 @@ pub fn get_changesets(path: &Path) -> Result<Vec<Changeset>, ResolveError> {
             Ok::<_, ResolveError>(changesets)
         })?;
     Ok(changesets)
+}
+
+pub fn default(root: &PathBuf) -> anyhow::Result<Box<dyn Resolver>> {
+    if root.join("Cargo.toml").exists() {
+        return Ok(Box::new(rust::RustResolver {
+            pkg_config: todo!(),
+            config: todo!(),
+            package: todo!(),
+        }));
+    }
+    Err(anyhow::anyhow!("Not found project resolver"))
 }

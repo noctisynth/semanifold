@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 use toml::Table;
 
 use crate::analyzer::{InitConfig, Package, ProjectAnalyzer};
@@ -19,8 +19,8 @@ impl ProjectAnalyzer for RustAnalyzer {
 }
 
 impl RustAnalyzer {
-    fn analyze_package(&self, root: &PathBuf) -> anyhow::Result<HashMap<String, Package>> {
-        let mut res_package = HashMap::new();
+    fn analyze_package(&self, root: &PathBuf) -> anyhow::Result<BTreeMap<String, Package>> {
+        let mut res_package = BTreeMap::new();
 
         let config = root
             .read_dir()?
@@ -77,7 +77,7 @@ impl RustAnalyzer {
         return Ok(res_package);
     }
 
-    fn generate_tag(&self) -> anyhow::Result<std::collections::HashMap<String, String>> {
+    fn generate_tag(&self) -> anyhow::Result<BTreeMap<String, String>> {
         // 获取用户输入
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
@@ -85,7 +85,7 @@ impl RustAnalyzer {
 
         // 根据输入决定是否初始化map
         if input == "y" || input == "1" {
-            Ok(std::collections::HashMap::from_iter([
+            Ok(BTreeMap::from_iter([
                 ("chore".to_string(), "Chore".to_string()),
                 ("feat".to_string(), "New Feature".to_string()),
                 ("fix".to_string(), "Bug Fix".to_string()),
@@ -93,7 +93,7 @@ impl RustAnalyzer {
                 ("refactor".to_string(), "Refactor".to_string()),
             ]))
         } else {
-            Ok(std::collections::HashMap::new())
+            Ok(BTreeMap::new())
         }
     }
 }

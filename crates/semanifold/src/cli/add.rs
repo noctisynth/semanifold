@@ -76,9 +76,24 @@ impl Autocomplete for TagAutocomplete {
     }
 }
 
+fn sanitize_filename(filename: &str) -> String {
+    const ILLEGAL_CHARS: [char; 8] = ['<', '>', ':', '"', '/', '\\', '|', ' '];
+
+    filename
+        .chars()
+        .map(|c| {
+            if ILLEGAL_CHARS.contains(&c) {
+                '-'
+            } else {
+                c.to_ascii_lowercase()
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyhow::Result<()> {
     let name = if let Some(name) = &add.name {
-        name.clone()
+        sanitize_filename(name)
     } else {
         loop {
             let name = Text::new("What is the name of the change?")
@@ -87,9 +102,11 @@ pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyho
             if name.is_empty() {
                 continue;
             }
-            break name;
+            break sanitize_filename(&name);
         }
     };
+
+    log::debug!("Change name: {}", name);
 
     let mut packages = loop {
         let packages = MultiSelect::new(

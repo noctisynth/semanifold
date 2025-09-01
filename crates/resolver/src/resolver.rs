@@ -19,9 +19,9 @@ pub trait Resolver {
     /// Resolve a package
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
-    fn resolve_all(&mut self) -> anyhow::Result<Vec<ResolvedPackage>>;
+    fn resolve_all(&mut self) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version
-    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> anyhow::Result<()>;
+    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError>;
 }
 
 pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {

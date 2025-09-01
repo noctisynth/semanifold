@@ -45,15 +45,27 @@ impl Resolver for RustResolver<'_> {
         Ok(package)
     }
 
-    fn resolve_all(&mut self) -> anyhow::Result<Vec<ResolvedPackage>> {
+    fn resolve_all(&mut self) -> Result<Vec<ResolvedPackage>, ResolveError> {
         unimplemented!()
     }
 
-    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> anyhow::Result<()> {
+    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError> {
         let bumped_version = utils::bump_version(&package.version, level)?.to_string();
         let toml_str = std::fs::read_to_string(package.path.join("Cargo.toml"))?;
-        let mut toml_doc = toml_str.parse::<toml_edit::DocumentMut>()?;
-        let package_table = toml_doc["package"].as_table_mut().unwrap();
+        let mut toml_doc =
+            toml_str
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|e| ResolveError::ParseError {
+                    path: package.path.join("Cargo.toml"),
+                    reason: e.to_string(),
+                })?;
+        let package_table =
+            toml_doc["package"]
+                .as_table_mut()
+                .ok_or_else(|| ResolveError::ParseError {
+                    path: package.path.join("Cargo.toml"),
+                    reason: "package table not found".to_string(),
+                })?;
         package_table["version"] = toml_edit::value(bumped_version);
         std::fs::write(package.path.join("Cargo.toml"), toml_doc.to_string())?;
         Ok(())

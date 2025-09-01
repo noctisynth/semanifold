@@ -1,12 +1,12 @@
 use clap::{Parser, Subcommand};
 
-pub mod add;
+pub mod commit;
 pub mod init;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
     #[command(about = "Commit a new change")]
-    Add(add::Add),
+    Commit(commit::Commit),
     #[command(about = "Initialize semanifold changesets config")]
     Init(init::Init),
 }

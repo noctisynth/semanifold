@@ -34,7 +34,7 @@ impl Level {
 }
 
 #[derive(Parser, Debug)]
-pub(crate) struct Add {
+pub(crate) struct Commit {
     pub name: Option<String>,
     #[arg(short, long)]
     pub level: Option<Level>,
@@ -91,8 +91,8 @@ fn sanitize_filename(filename: &str) -> String {
         .collect()
 }
 
-pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyhow::Result<()> {
-    let name = if let Some(name) = &add.name {
+pub(crate) fn run(commit: &Commit, root_path: &Path, config: &config::Config) -> anyhow::Result<()> {
+    let name = if let Some(name) = &commit.name {
         sanitize_filename(name)
     } else {
         loop {
@@ -150,7 +150,7 @@ pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyho
         packages.retain(|p| !selected_packages.contains(p));
     }
 
-    let summary = if let Some(summary) = &add.summary {
+    let summary = if let Some(summary) = &commit.summary {
         summary.clone()
     } else {
         loop {

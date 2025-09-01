@@ -6,6 +6,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::ResolveError;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PackageConfig {
     pub path: PathBuf,
@@ -17,7 +19,7 @@ pub struct Config {
     pub packages: HashMap<String, PackageConfig>,
 }
 
-pub fn get_config_path(changeset_path: &Path) -> anyhow::Result<PathBuf> {
+pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
     let config_paths = ["config.toml", "config.json"];
     let config_path = config_paths
         .iter()
@@ -29,19 +31,27 @@ pub fn get_config_path(changeset_path: &Path) -> anyhow::Result<PathBuf> {
                 None
             }
         })
-        .ok_or(anyhow::anyhow!("Failed to find config file"))?;
+        .ok_or(ResolveError::FileOrDirNotFound {
+            path: "config.toml".into(),
+        })?;
 
     log::debug!("Found config path: {config_path:?}");
 
     Ok(config_path)
 }
 
-pub fn load_config(config_path: &Path) -> anyhow::Result<Config> {
+pub fn load_config(config_path: &Path) -> Result<Config, ResolveError> {
     let config_content = std::fs::read_to_string(config_path)?;
     let config = if config_path.extension() == Some(OsStr::new("toml")) {
-        toml::from_str(&config_content)?
+        toml::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: e.to_string(),
+        })?
     } else {
-        serde_json::from_str(&config_content)?
+        serde_json::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: e.to_string(),
+        })?
     };
     Ok(config)
 }

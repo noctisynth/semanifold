@@ -1,5 +1,6 @@
 use crate::{
     changeset::{BumpLevel, Changeset},
+    config::PackageConfig,
     error::ResolveError,
     utils,
 };
@@ -29,8 +30,12 @@ pub struct ChangesConfig {
 }
 
 pub trait Resolver {
-    fn resolve(&mut self) -> anyhow::Result<&ResolvedPackage>;
-    fn bump(&mut self, level: BumpLevel) -> anyhow::Result<()>;
+    /// Resolve a package
+    fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
+    /// Resolve all packages
+    fn resolve_all(&mut self) -> anyhow::Result<Vec<ResolvedPackage>>;
+    /// Bump version
+    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> anyhow::Result<()>;
     fn analyze_project(&mut self, root: &PathBuf) -> anyhow::Result<ChangesConfig>;
 }
 

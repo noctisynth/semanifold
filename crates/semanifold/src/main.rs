@@ -5,7 +5,10 @@ use semanifold_resolver::{config, resolver};
 use crate::cli::{Cli, Commands};
 
 pub mod cli;
+pub mod i18n;
 pub mod logger;
+
+rust_i18n::i18n!();
 
 fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -38,6 +41,9 @@ fn run() -> anyhow::Result<()> {
 }
 
 fn main() {
+    // choose locale
+    i18n::init();
+
     if let Err(e) = run() {
         log::error!("Error: {e}");
     }

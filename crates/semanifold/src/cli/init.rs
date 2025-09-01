@@ -28,5 +28,11 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
     std::fs::write(config_path, config_doc)?;
 
     info!("Initialized semanifold in {}", init.root.display());
+    std::fs::write(config_path, doc.to_string())?;
+    log::info!(
+        "{} {}",
+        rust_i18n::t!("cli.init.finish"),
+        init.root.display()
+    );
     Ok(())
 }

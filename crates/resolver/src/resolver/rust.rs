@@ -6,6 +6,7 @@ use toml::Table;
 use crate::{
     changeset::BumpLevel,
     config::{Config, PackageConfig},
+    error::ResolveError,
     resolver::{ChangesConfig, ConfigPackage, ResolvedPackage, Resolver},
     utils,
 };
@@ -21,48 +22,43 @@ struct CargoToml {
     pub package: CargoPackage,
 }
 
-pub struct RustResolver<'p, 'c>
-where
-    'p: 'c,
-{
-    pub pkg_config: &'p PackageConfig,
+pub struct RustResolver<'c> {
     pub config: &'c Config,
-    pub package: Option<ResolvedPackage>,
 }
 
-impl Resolver for RustResolver<'_, '_> {
-    fn resolve(&mut self) -> anyhow::Result<&ResolvedPackage> {
-        if self.package.is_some() {
-            return Ok(self.package.as_ref().unwrap());
-        }
-
-        let toml_path = self.pkg_config.path.join("Cargo.toml");
+impl Resolver for RustResolver<'_> {
+    fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError> {
+        let toml_path = pkg_config.path.join("Cargo.toml");
         if !toml_path.exists() {
-            return Err(anyhow::anyhow!("Failed to find Cargo.toml"));
+            return Err(ResolveError::FileOrDirNotFound {
+                path: toml_path.clone(),
+            });
         }
         let toml_str = std::fs::read_to_string(&toml_path)?;
-        let cargo_toml: CargoToml = toml::from_str(&toml_str)?;
+        let cargo_toml: CargoToml =
+            toml::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
+                path: toml_path.clone(),
+                reason: e.to_string(),
+            })?;
         let package = ResolvedPackage {
             name: cargo_toml.package.name,
             version: cargo_toml.package.version,
-            path: self.pkg_config.path.clone(),
+            path: pkg_config.path.clone(),
         };
-        self.package = Some(package);
-        Ok(self.package.as_ref().unwrap())
+        Ok(package)
     }
 
-    fn bump(&mut self, level: BumpLevel) -> anyhow::Result<()> {
-        let package = self.resolve()?;
+    fn resolve_all(&mut self) -> anyhow::Result<Vec<ResolvedPackage>> {
+        unimplemented!()
+    }
 
+    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> anyhow::Result<()> {
         let bumped_version = utils::bump_version(&package.version, level)?.to_string();
-        let toml_str = std::fs::read_to_string(self.pkg_config.path.join("Cargo.toml"))?;
+        let toml_str = std::fs::read_to_string(package.path.join("Cargo.toml"))?;
         let mut toml_doc = toml_str.parse::<toml_edit::DocumentMut>()?;
-        let package = toml_doc["package"].as_table_mut().unwrap();
-        package["version"] = toml_edit::value(bumped_version);
-        std::fs::write(
-            self.pkg_config.path.join("Cargo.toml"),
-            toml_doc.to_string(),
-        )?;
+        let package_table = toml_doc["package"].as_table_mut().unwrap();
+        package_table["version"] = toml_edit::value(bumped_version);
+        std::fs::write(package.path.join("Cargo.toml"), toml_doc.to_string())?;
         Ok(())
     }
 
@@ -76,7 +72,7 @@ impl Resolver for RustResolver<'_, '_> {
     }
 }
 
-impl RustResolver<'_, '_> {
+impl RustResolver<'_> {
     fn analyze_package(&self, root: &PathBuf) -> anyhow::Result<BTreeMap<String, ConfigPackage>> {
         let mut res_package = BTreeMap::new();
 

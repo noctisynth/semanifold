@@ -152,8 +152,8 @@ impl Changeset {
         })
     }
 
-    pub fn commit_to(&self, changeset_path: &Path) -> anyhow::Result<()> {
-        log::debug!("Applying changeset: {self:?}");
+    pub fn commit_to(&self, changeset_path: &Path) -> Result<(), ResolveError> {
+        log::debug!("Commit changeset: {self:?}");
 
         let file_path = changeset_path.join(format!("{}.md", self.name));
 
@@ -172,14 +172,19 @@ impl Changeset {
                 Yaml::value_from_str(mark.leak()),
             );
         }
-        emitter.dump(&Yaml::Mapping(fm_map))?;
+        emitter
+            .dump(&Yaml::Mapping(fm_map))
+            .map_err(|e| ResolveError::ParseError {
+                path: file_path.clone(),
+                reason: e.to_string(),
+            })?;
 
         let content = format!("{fm}\n---\n\n{}\n", self.summary);
         std::fs::write(file_path, content)?;
         Ok(())
     }
 
-    pub fn commit(&self) -> anyhow::Result<()> {
+    pub fn commit(&self) -> Result<(), ResolveError> {
         self.commit_to(&self.root_path)
     }
 }

@@ -106,7 +106,7 @@ pub(crate) fn run(add: &Add, root_path: &Path, config: &config::Config) -> anyho
         }
     };
 
-    log::debug!("Change name: {}", name);
+    log::debug!("Change name: {name}");
 
     let mut packages = loop {
         let packages = MultiSelect::new(

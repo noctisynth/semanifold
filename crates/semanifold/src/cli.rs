@@ -5,7 +5,9 @@ pub mod init;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
+    #[command(about = "Commit a new change")]
     Add(add::Add),
+    #[command(about = "Initialize semanifold changesets config")]
     Init(init::Init),
 }
 
@@ -15,6 +17,6 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(global = true, short, long)]
+    #[arg(global = true, short, long, help = "Enable debug mode")]
     pub debug: bool,
 }

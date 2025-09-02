@@ -6,7 +6,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::ResolveError;
+use crate::{error::ResolveError, resolver};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PackageConfig {
@@ -54,4 +54,10 @@ pub fn load_config(config_path: &Path) -> Result<Config, ResolveError> {
         })?
     };
     Ok(config)
+}
+
+pub fn get_config() -> Result<Config, ResolveError> {
+    let changeset_path = resolver::get_changeset_path()?;
+    let config_path = get_config_path(&changeset_path)?;
+    load_config(&config_path)
 }

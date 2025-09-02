@@ -4,36 +4,21 @@ use crate::{
     error::ResolveError,
     utils,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub mod rust;
-pub mod toml_serializer;
+
 pub struct ResolvedPackage {
     pub name: String,
     pub version: String,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigPackage {
-    pub path: PathBuf,
-}
-
-//
-#[derive(Serialize, Deserialize)]
-pub struct ChangesConfig {
-    #[serde(rename = "packages", serialize_with = "toml_serializer::serialize")]
-    packages: BTreeMap<String, ConfigPackage>,
-    tags: BTreeMap<String, String>,
-}
-
 pub trait Resolver {
     /// Resolve a package
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
-    fn resolve_all(&mut self) -> Result<Vec<ResolvedPackage>, ResolveError>;
+    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version
     fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError>;
 }

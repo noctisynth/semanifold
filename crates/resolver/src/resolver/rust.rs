@@ -102,7 +102,7 @@ impl Resolver for RustResolver {
                 reason: e.to_string(),
             })?;
 
-        log::debug!("members: {:?}", members);
+        log::debug!("members: {members:?}");
 
         let packages = members
             .into_iter()

@@ -5,7 +5,7 @@ pub mod init;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
-    #[command(about = "Commit a new change", visible_alias="add")]
+    #[command(about = "Commit a new change", visible_alias = "add")]
     Commit(commit::Commit),
     #[command(about = "Initialize semanifold changesets config")]
     Init(init::Init),

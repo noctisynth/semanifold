@@ -696,7 +696,6 @@ dependencies = [
  "clap",
  "colored",
  "fern",
- "glob",
  "inquire",
  "log",
  "rust-i18n",

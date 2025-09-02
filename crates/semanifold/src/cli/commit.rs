@@ -101,8 +101,9 @@ pub(crate) fn run(
     } else {
         loop {
             let name = Text::new("What is the name of the change?")
-                .with_initial_value("init")
-                .prompt()?;
+                .prompt()?
+                .trim()
+                .to_string();
             if name.is_empty() {
                 continue;
             }

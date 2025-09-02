@@ -43,7 +43,7 @@ pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
 pub fn load_config(config_path: &Path) -> Result<Config, ResolveError> {
     let config_content = std::fs::read_to_string(config_path)?;
     let config = if config_path.extension() == Some(OsStr::new("toml")) {
-        toml::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
+        toml_edit::de::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?
@@ -64,7 +64,7 @@ pub fn get_config() -> Result<Config, ResolveError> {
 
 pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveError> {
     let config_content = if config_path.extension() == Some(OsStr::new("toml")) {
-        toml::to_string(config).map_err(|e| ResolveError::InvalidConfig {
+        toml_edit::ser::to_string_pretty(config).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?

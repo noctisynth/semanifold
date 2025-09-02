@@ -1,12 +1,12 @@
 [tags]
+feat = "New Feature"
+perf = "Performance Improvement"
 refactor = "Refactor"
 chore = "Chore"
 fix = "Bug Fix"
-feat = "New Feature"
-perf = "Performance Improvement"
-
-[packages.semanifold]
-path = "crates/semanifold"
 
 [packages.semanifold-resolver]
 path = "crates/resolver"
+
+[packages.semanifold]
+path = "crates/semanifold"

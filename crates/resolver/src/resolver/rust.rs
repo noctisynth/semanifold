@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -39,7 +39,7 @@ impl Resolver for RustResolver {
         }
         let toml_str = std::fs::read_to_string(&toml_path)?;
         let cargo_toml: CargoToml =
-            toml::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
+            toml_edit::de::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
                 path: toml_path.clone(),
                 reason: e.to_string(),
             })?;
@@ -67,7 +67,7 @@ impl Resolver for RustResolver {
 
         let toml_str = std::fs::read_to_string(&cargo_toml_path)?;
         let cargo_toml: CargoToml =
-            toml::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
+            toml_edit::de::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
                 path: cargo_toml_path.clone(),
                 reason: e.to_string(),
             })?;
@@ -83,36 +83,29 @@ impl Resolver for RustResolver {
             return Ok(vec![package]);
         }
 
-        let members = cargo_toml
-            .workspace
-            .unwrap()
-            .members
-            .iter()
-            .map(|member| glob::glob(&root.join(member).to_string_lossy()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| ResolveError::ParseError {
-                path: cargo_toml_path.clone(),
-                reason: e.to_string(),
-            })?
-            .into_iter()
-            .flatten()
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| ResolveError::ParseError {
-                path: cargo_toml_path.clone(),
-                reason: e.to_string(),
-            })?;
+        let members = cargo_toml.workspace.unwrap().members.iter().try_fold(
+            Vec::new(),
+            |mut members, member| {
+                let pattern = root.join(member).to_string_lossy().into_owned();
+                let paths = glob::glob(&pattern)
+                    .map_err(|e| ResolveError::ParseError {
+                        path: cargo_toml_path.clone(),
+                        reason: e.to_string(),
+                    })?
+                    .flatten()
+                    .collect::<Vec<_>>();
+                members.extend(paths);
+                Ok::<_, ResolveError>(members)
+            },
+        )?;
 
         log::debug!("members: {members:?}");
 
         let packages = members
             .into_iter()
             .map(|path| {
-                self.resolve(&PackageConfig {
-                    path: PathBuf::from(path.to_string_lossy().replace(
-                        &[root.to_string_lossy().to_string(), "".into()].join("/"),
-                        "",
-                    )),
-                })
+                let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path);
+                self.resolve(&PackageConfig { path: rel_path })
             })
             .collect::<Result<Vec<_>, _>>()?;
 

@@ -529,6 +529,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "pathdiff"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -634,7 +640,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "siphasher",
- "toml 0.8.23",
+ "toml",
  "triomphe",
 ]
 
@@ -712,12 +718,12 @@ dependencies = [
  "anyhow",
  "glob",
  "log",
+ "pathdiff",
  "saphyr",
  "semver",
  "serde",
  "serde_json",
  "thiserror",
- "toml 0.9.5",
  "toml_edit 0.23.3",
 ]
 
@@ -906,21 +912,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75129e1dc5000bfbaa9fee9d1b21f974f9fbad9daec557a521ee6e080825f6e8"
-dependencies = [
- "indexmap",
- "serde",
- "serde_spanned 1.0.0",
- "toml_datetime 0.7.0",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
 name = "toml_datetime"
 version = "0.6.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -959,6 +950,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17d3b47e6b7a040216ae5302712c94d1cf88c95b47efa80e2c59ce96c878267e"
 dependencies = [
  "indexmap",
+ "serde",
+ "serde_spanned 1.0.0",
  "toml_datetime 0.7.0",
  "toml_parser",
  "toml_writer",

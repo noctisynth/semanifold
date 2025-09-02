@@ -33,10 +33,9 @@ pub trait Resolver {
     /// Resolve a package
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
-    fn resolve_all(&mut self) -> anyhow::Result<Vec<ResolvedPackage>>;
+    fn resolve_all(&mut self) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version
-    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> anyhow::Result<()>;
-    fn analyze_project(&mut self, root: &PathBuf) -> anyhow::Result<ChangesConfig>;
+    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError>;
 }
 
 pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {
@@ -64,15 +63,4 @@ pub fn get_changesets(path: &Path) -> Result<Vec<Changeset>, ResolveError> {
             Ok::<_, ResolveError>(changesets)
         })?;
     Ok(changesets)
-}
-
-pub fn default(root: &PathBuf) -> anyhow::Result<Box<dyn Resolver>> {
-    if root.join("Cargo.toml").exists() {
-        return Ok(Box::new(rust::RustResolver {
-            pkg_config: todo!(),
-            config: todo!(),
-            package: todo!(),
-        }));
-    }
-    Err(anyhow::anyhow!("Not found project resolver"))
 }

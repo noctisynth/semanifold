@@ -32,7 +32,7 @@ fn run() -> anyhow::Result<()> {
     log::debug!("Loaded config: {:?}", &config);
 
     match &cli.command {
-        Some(Commands::Add(add)) => cli::add::run(add, &changeset_path, &config)?,
+        Some(Commands::Commit(commit)) => cli::commit::run(commit, &changeset_path, &config)?,
         Some(Commands::Init(_init)) => {}
         None => {}
     }

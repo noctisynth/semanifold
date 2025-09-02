@@ -1,38 +1,97 @@
-use std::{fmt::Debug, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
-use clap::{Args, arg};
-use log::info;
-use semanifold_resolver::analyzer;
+use clap::Args;
+use inquire::{Confirm, Select};
+use semanifold_resolver::{
+    config::{self, PackageConfig},
+    error::ResolveError,
+    resolver::{self, Resolver},
+};
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub(crate) enum ResolverType {
+    Rust,
+}
+
+impl std::fmt::Display for ResolverType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolverType::Rust => write!(f, "rust"),
+        }
+    }
+}
 
 #[derive(Debug, Args)]
 pub(crate) struct Init {
-    #[arg(short, long, default_value = "./.changes")]
-    pub root: PathBuf,
+    #[arg(short, long, default_value = ".changes")]
+    pub target: Option<PathBuf>,
+    #[arg(short, long, default_value = "rust")]
+    pub resolvers: Vec<ResolverType>,
 }
 
 pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
-    std::fs::create_dir_all(&init.root)?;
+    const AVAILABLE_TARGETS: [&str; 2] = [".changes", ".changesets"];
 
-    let config_path = init.root.join("config.toml");
+    let current_dir = std::env::current_dir()?;
+    let target = if let Some(target) = &init.target {
+        current_dir.join(target)
+    } else {
+        loop {
+            let target = Select::new("What is the target directory?", AVAILABLE_TARGETS.to_vec())
+                .prompt()?;
+            break current_dir.join(target);
+        }
+    };
 
-    let parent_path = init.root.parent().unwrap().to_path_buf();
-    //init config
-    let analyzer = analyzer::default(&parent_path)?;
+    log::debug!("target: {}", target.display());
 
-    let config = analyzer.analyze()?;
+    let resolvers = if init.resolvers.is_empty() {
+        vec![ResolverType::Rust]
+    } else {
+        init.resolvers.clone()
+    };
 
-    // 写入config.toml文件
-    let config_doc = toml::to_string_pretty(&config)?;
+    log::debug!("resolvers: {:?}", resolvers);
 
-    // write config.toml file
-    std::fs::write(config_path, config_doc)?;
+    let packages = resolvers
+        .iter()
+        .try_fold(HashMap::new(), |mut acc, name| match name {
+            ResolverType::Rust => {
+                let mut resolver = resolver::rust::RustResolver;
+                let packages = resolver.resolve_all(&current_dir)?;
+                packages.into_iter().for_each(|pkg| {
+                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
+                        path: pkg.path.clone(),
+                    });
+                });
+                Ok::<_, ResolveError>(acc)
+            }
+        })?;
 
-    info!("Initialized semanifold in {}", init.root.display());
-    std::fs::write(config_path, doc.to_string())?;
-    log::info!(
-        "{} {}",
-        rust_i18n::t!("cli.init.finish"),
-        init.root.display()
-    );
+    log::debug!("packages: {:?}", packages);
+
+    let tags = if Confirm::new("Add default tags to config?")
+        .with_default(true)
+        .prompt()?
+    {
+        HashMap::from_iter([
+            ("chore".to_string(), "Chore".to_string()),
+            ("feat".to_string(), "New Feature".to_string()),
+            ("fix".to_string(), "Bug Fix".to_string()),
+            ("perf".to_string(), "Performance Improvement".to_string()),
+            ("refactor".to_string(), "Refactor".to_string()),
+        ])
+    } else {
+        HashMap::default()
+    };
+
+    let config = config::Config { tags, packages };
+
+    if !target.exists() {
+        std::fs::create_dir_all(&target)?;
+    }
+
+    config::save_config(&target.join("config.toml"), &config)?;
+
     Ok(())
 }

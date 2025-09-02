@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     changeset::BumpLevel,
-    config::{Config, PackageConfig},
+    config::PackageConfig,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver},
     utils,
@@ -27,11 +27,9 @@ struct CargoToml {
     pub workspace: Option<CargoWorkspace>,
 }
 
-pub struct RustResolver<'c> {
-    pub config: &'c Config,
-}
+pub struct RustResolver;
 
-impl Resolver for RustResolver<'_> {
+impl Resolver for RustResolver {
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError> {
         let toml_path = pkg_config.path.join("Cargo.toml");
         if !toml_path.exists() {
@@ -57,63 +55,68 @@ impl Resolver for RustResolver<'_> {
         Ok(package)
     }
 
-    fn resolve_all(&mut self, _root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
-        todo!()
-        // let mut res_package = BTreeMap::new();
+    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
+        let cargo_toml_path = root.join("Cargo.toml");
+        if !cargo_toml_path.exists() {
+            log::warn!(
+                "Cannot resolve package in {}, Cargo.toml not found.",
+                root.display()
+            );
+            return Ok(vec![]);
+        }
 
-        // let config = root
-        //     .read_dir()?
-        //     .filter_map(Result::ok)
-        //     .find(|entry| {
-        //         entry.path().is_file()
-        //             && entry
-        //                 .file_name()
-        //                 .to_str()
-        //                 .map(|name| name.eq_ignore_ascii_case("Cargo.toml"))
-        //                 .unwrap_or(false)
-        //     })
-        //     .map(|entry| entry.path());
+        let toml_str = std::fs::read_to_string(&cargo_toml_path)?;
+        let cargo_toml: CargoToml =
+            toml::from_str(&toml_str).map_err(|e| ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: e.to_string(),
+            })?;
 
-        // let Some(config_path) = config else {
-        //     log::warn!("Not found Cargo.toml in {}", root.display());
-        //     return Ok(res_package);
-        // };
+        if cargo_toml.workspace.is_none() {
+            if cargo_toml.package.is_none() {
+                log::warn!("Failed to resolve package in {}", root.display());
+                return Ok(vec![]);
+            }
+            let package = self.resolve(&PackageConfig {
+                path: root.to_path_buf(),
+            })?;
+            return Ok(vec![package]);
+        }
 
-        // let doc = std::fs::read_to_string(config_path)?.parse::<Table>()?;
+        let members = cargo_toml
+            .workspace
+            .unwrap()
+            .members
+            .iter()
+            .map(|member| glob::glob(&root.join(member).to_string_lossy()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: e.to_string(),
+            })?
+            .into_iter()
+            .flatten()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: e.to_string(),
+            })?;
 
-        // if let Some(package) = doc.get("package").and_then(|value| value.as_table()) {
-        //     match package["name"].as_str() {
-        //         Some(name) => {
-        //             res_package.insert(name.to_string(), ConfigPackage { path: root.clone() });
-        //         }
-        //         None => {
-        //             log::warn!("Not found package name in {}", root.display());
-        //             return Ok(res_package);
-        //         }
-        //     }
-        // }
+        log::debug!("members: {:?}", members);
 
-        // let Some(workspace) = doc.get("workspace").and_then(|v| v.as_table()) else {
-        //     return Ok(res_package);
-        // };
-        // let Some(members) = workspace.get("members").and_then(|v| v.as_array()) else {
-        //     return Ok(res_package);
-        // };
+        let packages = members
+            .into_iter()
+            .map(|path| {
+                self.resolve(&PackageConfig {
+                    path: PathBuf::from(path.to_string_lossy().replace(
+                        &[root.to_string_lossy().to_string(), "".into()].join("/"),
+                        "",
+                    )),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-        // members
-        //     .iter()
-        //     .filter_map(|map| map.as_str())
-        //     .flat_map(|pattern| glob::glob(&root.join(pattern).to_string_lossy()).ok())
-        //     .flatten()
-        //     .filter_map(Result::ok)
-        //     .for_each(|path| {
-        //         log::info!("Found package in {}", path.display());
-        //         if let Ok(package) = self.analyze_package(&path) {
-        //             res_package.extend(package);
-        //         }
-        //     });
-
-        // return Ok(res_package);
+        Ok(packages)
     }
 
     fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError> {

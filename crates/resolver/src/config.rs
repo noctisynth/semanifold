@@ -61,3 +61,19 @@ pub fn get_config() -> Result<Config, ResolveError> {
     let config_path = get_config_path(&changeset_path)?;
     load_config(&config_path)
 }
+
+pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveError> {
+    let config_content = if config_path.extension() == Some(OsStr::new("toml")) {
+        toml::to_string(config).map_err(|e| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: e.to_string(),
+        })?
+    } else {
+        serde_json::to_string(config).map_err(|e| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: e.to_string(),
+        })?
+    };
+    std::fs::write(config_path, config_content)?;
+    Ok(())
+}

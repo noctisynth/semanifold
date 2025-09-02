@@ -91,7 +91,11 @@ fn sanitize_filename(filename: &str) -> String {
         .collect()
 }
 
-pub(crate) fn run(commit: &Commit, root_path: &Path, config: &config::Config) -> anyhow::Result<()> {
+pub(crate) fn run(
+    commit: &Commit,
+    root_path: &Path,
+    config: &config::Config,
+) -> anyhow::Result<()> {
     let name = if let Some(name) = &commit.name {
         sanitize_filename(name)
     } else {

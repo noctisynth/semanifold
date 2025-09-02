@@ -1,11 +1,10 @@
-use std::path::{Path, PathBuf};
-
 use crate::{
     changeset::{BumpLevel, Changeset},
     config::PackageConfig,
     error::ResolveError,
     utils,
 };
+use std::path::{Path, PathBuf};
 
 pub mod rust;
 
@@ -19,7 +18,7 @@ pub trait Resolver {
     /// Resolve a package
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
-    fn resolve_all(&mut self) -> Result<Vec<ResolvedPackage>, ResolveError>;
+    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version
     fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError>;
 }

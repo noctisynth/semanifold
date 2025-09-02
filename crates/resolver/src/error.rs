@@ -12,6 +12,6 @@ pub enum ResolveError {
     FileOrDirNotFound { path: PathBuf },
     #[error("Invalid version {version}: {reason}")]
     InvalidVersion { version: String, reason: String },
-    #[error("Parse error {path}: {reason}")]
+    #[error("Failed to parse {path}: {reason}")]
     ParseError { path: PathBuf, reason: String },
 }

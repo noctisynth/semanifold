@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     ffi::OsStr,
     path::{Path, PathBuf},
 };
@@ -15,8 +15,8 @@ pub struct PackageConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    pub tags: HashMap<String, String>,
-    pub packages: HashMap<String, PackageConfig>,
+    pub tags: BTreeMap<String, String>,
+    pub packages: BTreeMap<String, PackageConfig>,
 }
 
 pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {

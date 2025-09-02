@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
 use clap::Args;
 use inquire::{Confirm, Select};
@@ -53,7 +53,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
 
     let packages = resolvers
         .iter()
-        .try_fold(HashMap::new(), |mut acc, name| match name {
+        .try_fold(BTreeMap::new(), |mut acc, name| match name {
             ResolverType::Rust => {
                 let mut resolver = resolver::rust::RustResolver;
                 let packages = resolver.resolve_all(&current_dir)?;
@@ -72,7 +72,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
         .with_default(true)
         .prompt()?
     {
-        HashMap::from_iter([
+        BTreeMap::from_iter([
             ("chore".to_string(), "Chore".to_string()),
             ("feat".to_string(), "New Feature".to_string()),
             ("fix".to_string(), "Bug Fix".to_string()),
@@ -80,7 +80,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
             ("refactor".to_string(), "Refactor".to_string()),
         ])
     } else {
-        HashMap::default()
+        BTreeMap::default()
     };
 
     let config = config::Config { tags, packages };

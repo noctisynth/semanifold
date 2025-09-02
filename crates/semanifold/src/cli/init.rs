@@ -36,11 +36,9 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
     let target = if let Some(target) = &init.target {
         current_dir.join(target)
     } else {
-        loop {
-            let target = Select::new("What is the target directory?", AVAILABLE_TARGETS.to_vec())
-                .prompt()?;
-            break current_dir.join(target);
-        }
+        let target =
+            Select::new("What is the target directory?", AVAILABLE_TARGETS.to_vec()).prompt()?;
+        current_dir.join(target)
     };
 
     log::debug!("target: {}", target.display());
@@ -51,7 +49,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
         init.resolvers.clone()
     };
 
-    log::debug!("resolvers: {:?}", resolvers);
+    log::debug!("resolvers: {resolvers:?}");
 
     let packages = resolvers
         .iter()
@@ -68,7 +66,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
             }
         })?;
 
-    log::debug!("packages: {:?}", packages);
+    log::debug!("packages: {packages:?}");
 
     let tags = if Confirm::new("Add default tags to config?")
         .with_default(true)

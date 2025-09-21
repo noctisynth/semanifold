@@ -1,2 +1,5 @@
+# 在文字内插入变量： %{变量名}
+# 代码中： t!("cli.init.finish", 变量名 = 变量) 
 [cli.init]
-finish = "semanifold 初始化完成，相关文件请打开："
+finish = "semanifold 已在 '%{path}' 初始化"
+tags = "是否需要生成默认标签？"

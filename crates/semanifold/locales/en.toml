@@ -1,2 +1,5 @@
+# Insert variable in text: %{variable_name}
+# In code: t!("cli.init.finish", variable_name = variable_value)
 [cli.init]
-finish = "Initialized semanifold in"
+finish = "Initialized semanifold in '%{path}'"
+tags = "Add default tags to config?"

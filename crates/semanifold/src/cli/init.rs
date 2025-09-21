@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use clap::Args;
 use inquire::{Confirm, Select};
+use rust_i18n::t;
 use semanifold_resolver::{
     config::{self, PackageConfig},
     error::ResolveError,
@@ -68,7 +69,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
 
     log::debug!("packages: {packages:?}");
 
-    let tags = if Confirm::new("Add default tags to config?")
+    let tags = if Confirm::new(&t!("cli.init.tags"))
         .with_default(true)
         .prompt()?
     {
@@ -91,5 +92,6 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
 
     config::save_config(&target.join("config.toml"), &config)?;
 
+    log::info!("{}", t!("cli.init.finish", path = target.display()));
     Ok(())
 }

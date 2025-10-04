@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, builder::styling};
 
 pub mod commit;
 pub mod init;
@@ -12,13 +12,11 @@ pub(crate) enum Commands {
 }
 
 fn get_styles() -> clap::builder::Styles {
-    use clap::builder::styling;
-    let styles = styling::Styles::styled()
+    styling::Styles::styled()
         .header(styling::AnsiColor::Green.on_default() | styling::Effects::BOLD)
         .usage(styling::AnsiColor::Green.on_default() | styling::Effects::BOLD)
         .literal(styling::AnsiColor::Cyan.on_default() | styling::Effects::BOLD)
-        .placeholder(styling::AnsiColor::Cyan.on_default());
-    styles
+        .placeholder(styling::AnsiColor::Cyan.on_default())
 }
 
 #[derive(Parser, Debug)]

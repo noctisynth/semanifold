@@ -4,6 +4,7 @@ use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use inquire::{Autocomplete, MultiSelect, Text, autocompletion::Replacement};
 
+use rust_i18n::t;
 use semanifold_resolver::{changeset, config};
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -91,13 +92,25 @@ fn sanitize_filename(filename: &str) -> String {
         .collect()
 }
 
+fn file_exists(root_path: &Path, filename: &str) -> bool {
+    let path = root_path.join(format!("{filename}.md"));
+    path.exists()
+}
+
 pub(crate) fn run(
     commit: &Commit,
     root_path: &Path,
     config: &config::Config,
 ) -> anyhow::Result<()> {
     let name = if let Some(name) = &commit.name {
-        sanitize_filename(name)
+        let sanitized_name = sanitize_filename(name);
+        if sanitized_name.is_empty() {
+            return Err(anyhow::anyhow!(t!("cli.commit.empty_name")));
+        }
+        if file_exists(root_path, &sanitized_name) {
+            return Err(anyhow::anyhow!(t!("cli.commit.commit_exists", name = name)));
+        }
+        sanitized_name
     } else {
         loop {
             let name = Text::new("What is the name of the change?")

@@ -1,11 +1,11 @@
 use clap::Parser;
+use colored::Colorize;
 use log::LevelFilter;
 use semanifold_resolver::{config, resolver};
 
 use crate::cli::{Cli, Commands};
 
 pub mod cli;
-pub mod i18n;
 pub mod logger;
 
 rust_i18n::i18n!();
@@ -19,6 +19,7 @@ fn run() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
+    // TODO: refactor to context based
     log::debug!("Parsed CLI arguments: {:?}", &cli);
     // init command must be executed before read config file
     if let Some(Commands::Init(init)) = &cli.command {
@@ -41,10 +42,12 @@ fn run() -> anyhow::Result<()> {
 }
 
 fn main() {
-    // choose locale
-    i18n::init();
+    if let Some(locale) = sys_locale::get_locale() {
+        rust_i18n::set_locale(&locale);
+    }
 
     if let Err(e) = run() {
-        log::error!("Error: {e}");
+        log::error!("{}", e.to_string().red());
+        std::process::exit(1);
     }
 }

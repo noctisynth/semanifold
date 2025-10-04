@@ -1,2 +1,3 @@
-[cli.init]
-finish = "Initialized semanifold in"
+[cli.commit]
+empty_name = "Commit name cannot be empty"
+commit_exists = "Commit with name %{name} already exists"

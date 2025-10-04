@@ -6,7 +6,7 @@ fn format_level(level: log::Level) -> ColoredString {
         log::Level::Debug => level.as_str().blue(),
         log::Level::Info => level.as_str().green(),
         log::Level::Warn => level.as_str().yellow(),
-        log::Level::Error => level.as_str().red(),
+        log::Level::Error => level.as_str().bright_red(),
     }
 }
 

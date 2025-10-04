@@ -1,2 +1,3 @@
-[cli.init]
-finish = "semanifold 初始化完成，相关文件请打开："
+[cli.commit]
+empty_name = "提交名称不能为空"
+commit_exists = "名为 %{name} 的提交已存在"

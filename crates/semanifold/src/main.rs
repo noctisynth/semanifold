@@ -8,7 +8,7 @@ use crate::cli::{Cli, Commands};
 pub mod cli;
 pub mod logger;
 
-rust_i18n::i18n!();
+rust_i18n::i18n!("locales", fallback = "en");
 
 fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();

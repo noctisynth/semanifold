@@ -1,3 +1,10 @@
 [cli.commit]
+query_name = "What is the name of the commit?"
+query_packages = "Which packages to include?"
+query_tags = "Which tag should this change be under?"
+query_pkg_bump = "Which packages should be %{level} bumped?"
+query_summary = "Summary of changes:"
 empty_name = "Commit name cannot be empty"
 commit_exists = "Commit with name %{name} already exists"
+warn_no_packages = "No packages selected"
+empty_summary = "Summary cannot be empty"

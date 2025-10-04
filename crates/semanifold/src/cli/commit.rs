@@ -113,7 +113,7 @@ pub(crate) fn run(
         sanitized_name
     } else {
         loop {
-            let name = Text::new("What is the name of the change?")
+            let name = Text::new(&t!("cli.commit.query_name"))
                 .prompt()?
                 .trim()
                 .to_string();
@@ -128,18 +128,18 @@ pub(crate) fn run(
 
     let mut packages = loop {
         let packages = MultiSelect::new(
-            "What packages are affected by this change?",
+            &t!("cli.commit.query_packages"),
             config.packages.keys().cloned().collect::<Vec<_>>(),
         )
         .prompt()?;
         if packages.is_empty() {
-            log::warn!("No packages selected.");
+            log::warn!("{}", t!("cli.commit.warn_no_packages"));
             continue;
         }
         break packages;
     };
 
-    let tag = Text::new("What tag should this change be under?")
+    let tag = Text::new(&t!("cli.commit.query_tags"))
         .with_autocomplete(TagAutocomplete {
             tags: config.tags.keys().cloned().collect::<Vec<_>>(),
         })
@@ -154,12 +154,15 @@ pub(crate) fn run(
 
         let selected_packages = MultiSelect::new(
             &format!(
-                "Which packages should be {} bumped?",
-                match variant {
-                    Level::Patch => "patch".cyan(),
-                    Level::Minor => "minor".yellow(),
-                    Level::Major => "major".red(),
-                }
+                "{}",
+                t!(
+                    "cli.commit.query_pkg_bump",
+                    level = match variant {
+                        Level::Patch => "patch".cyan(),
+                        Level::Minor => "minor".yellow(),
+                        Level::Major => "major".red(),
+                    }
+                ),
             ),
             packages.clone(),
         )
@@ -172,9 +175,9 @@ pub(crate) fn run(
         summary.clone()
     } else {
         loop {
-            let summary = inquire::prompt_text("Summary:")?;
+            let summary = inquire::prompt_text(&t!("cli.commit.query_summary"))?;
             if summary.is_empty() {
-                log::warn!("Summary cannot be empty.");
+                log::warn!("{}", t!("cli.commit.empty_summary"));
                 continue;
             }
             break summary;

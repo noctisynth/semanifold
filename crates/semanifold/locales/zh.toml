@@ -1,3 +1,10 @@
 [cli.commit]
+query_name = "提交的名称是什么？"
+query_packages = "要包含哪些包？"
+query_tags = "此更改应属于哪个标签？"
+query_pkg_bump = "哪些包应被 %{level} 提升？"
+query_summary = "更改摘要："
 empty_name = "提交名称不能为空"
 commit_exists = "名为 %{name} 的提交已存在"
+warn_no_packages = "未选择任何包"
+empty_summary = "摘要不能为空"

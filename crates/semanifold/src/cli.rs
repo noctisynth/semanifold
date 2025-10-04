@@ -11,8 +11,18 @@ pub(crate) enum Commands {
     Init(init::Init),
 }
 
+fn get_styles() -> clap::builder::Styles {
+    use clap::builder::styling;
+    let styles = styling::Styles::styled()
+        .header(styling::AnsiColor::Green.on_default() | styling::Effects::BOLD)
+        .usage(styling::AnsiColor::Green.on_default() | styling::Effects::BOLD)
+        .literal(styling::AnsiColor::Cyan.on_default() | styling::Effects::BOLD)
+        .placeholder(styling::AnsiColor::Cyan.on_default());
+    styles
+}
+
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None, arg_required_else_help = true)]
+#[command(version, styles = get_styles(), about, long_about = None, arg_required_else_help = true)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,

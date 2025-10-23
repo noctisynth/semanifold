@@ -92,7 +92,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         for comment in comments {
             log::debug!("comment: {:?}", comment);
         }
-        octocrab
+        if let Err(e) = octocrab
             .issues(owner, repo_name)
             .create_comment(
                 pr_number,
@@ -104,8 +104,10 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
                     changesets.len()
                 ),
             )
-            .await?;
-        // octocrab.issues(owner, repo_name).update_comment(comment_id, body)
+            .await
+        {
+            log::warn!("Failed to create comment: {:?}", e);
+        };
     }
 
     Ok(())

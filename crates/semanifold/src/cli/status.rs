@@ -1,4 +1,4 @@
-use std::env;
+use std::{collections::HashMap, env};
 
 use clap::Parser;
 use colored::Colorize;
@@ -29,18 +29,27 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let changesets = resolver::get_changesets(changeset_root)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
 
+    let mut bump_map = HashMap::new();
     for (package_name, package_config) in &config.packages {
         let level = utils::get_bump_level(&changesets, package_name);
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(package_config)?;
+        let bumped_version = utils::bump_version(&resolved_package.version, level)?;
+
+        bump_map.insert(
+            package_name,
+            (
+                level,
+                resolved_package.version.clone(),
+                bumped_version.clone(),
+            ),
+        );
 
         println!(
             "{:name_width$} {} → {}",
             package_name.cyan(),
             resolved_package.version.yellow(),
-            utils::bump_version(&resolved_package.version, level)?
-                .to_string()
-                .green()
+            bumped_version.to_string().green()
         );
     }
 
@@ -91,11 +100,20 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             .iter()
             .find(|c| c.user.login == "github-actions[bot]");
 
+        let markdown_table = bump_map
+            .iter()
+            .map(|(k, (l, v, b))| format!("| {} | {} | {} | {}", k, l, v, b))
+            .collect::<Vec<_>>()
+            .join("\n");
         let comment_body = format!(
             "## Workspace change through: {}\n\n\
-            {} changesets found\n",
+            {} changesets found\n\n\
+            | Package | Bump Level | Current Version | Bumped Version |\n\
+            | ------- | ---------- | --------------- | -------------- |\n\
+            {}",
             &last_commit.sha,
-            changesets.len()
+            changesets.len(),
+            &markdown_table,
         );
 
         if let Some(comment) = existing {

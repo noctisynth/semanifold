@@ -109,7 +109,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             "## Workspace change through: {}\n\n\
             {} changesets found\n\n\
             <details>\n\
-            <summary>Planned changes to release</summary>\n\
+            <summary>Planned changes to release</summary>\n\n\
             | Package | Bump Level | Current Version | Next Version |\n\
             | ------- | ---------- | --------------- | ------------ |\n\
             {}\n\

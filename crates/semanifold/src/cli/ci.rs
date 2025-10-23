@@ -77,7 +77,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let _pr = octocrab
         .pulls(owner, repo_name)
         .create(
-            &format!("release: {}", release_branch),
+            format!("release: {}", release_branch),
             release_branch,
             "main",
         )

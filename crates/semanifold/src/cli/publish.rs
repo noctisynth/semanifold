@@ -10,11 +10,7 @@ pub(crate) struct Publish {
 }
 
 pub(crate) fn publish(config: &Config, dry_run: bool) -> anyhow::Result<()> {
-    let packages = config
-        .packages
-        .iter()
-        .map(|(_, config)| config)
-        .collect::<Vec<_>>();
+    let packages = config.packages.values().collect::<Vec<_>>();
 
     log::debug!("Packages to publish: {:?}", &packages);
 

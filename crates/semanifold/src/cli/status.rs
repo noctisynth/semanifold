@@ -32,7 +32,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     for (package_name, package_config) in &config.packages {
         let level = utils::get_bump_level(&changesets, package_name);
         let mut resolver = package_config.resolver.get_resolver();
-        let resolved_package = resolver.resolve(&package_config)?;
+        let resolved_package = resolver.resolve(package_config)?;
 
         println!(
             "{:name_width$} {} → {}",

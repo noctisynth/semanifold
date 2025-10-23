@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 pub mod rust;
 
+#[derive(Debug)]
 pub struct ResolvedPackage {
     pub name: String,
     pub version: String,

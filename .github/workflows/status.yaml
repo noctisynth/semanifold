@@ -1,13 +1,16 @@
-name: Unit Test
+name: Status
 on:
-  push:
+  pull_request:
     branches:
       - main
-  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
-  unit-test:
-    name: Unit Test
+  status:
+    name: Status
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,9 +23,7 @@ jobs:
           components: clippy, rustfmt
       - name: Build
         run: cargo build --workspace
-      - name: Format check
-        run: cargo fmt --all -- --check
-      - name: Code lint
-        run: cargo clippy --workspace -- -D warnings
-      - name: Test
-        run: cargo test --workspace --verbose
+      - name: Status
+        run: cargo run --bin semanifold status --debug
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

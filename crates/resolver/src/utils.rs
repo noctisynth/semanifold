@@ -1,8 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::max,
+    path::{Path, PathBuf},
+};
 
 use semver::Version;
 
-use crate::{changeset::BumpLevel, error::ResolveError};
+use crate::{
+    changeset::{BumpLevel, Changeset},
+    error::ResolveError,
+};
 
 pub fn find_at_parent(
     path_name: &str,
@@ -60,4 +66,16 @@ pub fn bump_version(version: &str, level: BumpLevel) -> Result<Version, ResolveE
         BumpLevel::Patch => version.patch += 1,
     };
     Ok(version)
+}
+
+pub fn get_bump_level(changesets: &[Changeset], package_name: &str) -> BumpLevel {
+    let mut level = BumpLevel::Patch;
+    for changeset in changesets {
+        changeset.packages.iter().for_each(|package| {
+            if package.name == package_name {
+                level = max(level, package.level);
+            }
+        });
+    }
+    level
 }

@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use clap::Args;
 use inquire::{Confirm, Select};
 use semanifold_resolver::{
-    config::{self, PackageConfig},
+    config::{self, BranchesConfig, PackageConfig},
     context,
     error::ResolveError,
     resolver::{self, Resolver},
@@ -91,6 +91,10 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     };
 
     let config = config::Config {
+        branches: BranchesConfig {
+            base: "main".to_string(),
+            release: "release".to_string(),
+        },
         tags,
         packages,
         resolver: BTreeMap::new(),

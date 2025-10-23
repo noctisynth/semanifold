@@ -1,3 +1,7 @@
+[branches]
+base = "main"
+release = "release"
+
 [tags]
 chore = "Chore"
 feat = "New Feature"

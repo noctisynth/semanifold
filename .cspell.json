@@ -2,12 +2,14 @@
   "words": [
     "clippy",
     "dtolnay",
+    "octocrab",
     "pathdiff",
     "postpublish",
     "rfind",
     "saphyr",
     "semanifold",
     "semif",
+    "Swatinem",
     "thiserror"
   ],
   "ignorePaths": [

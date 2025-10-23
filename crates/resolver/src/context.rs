@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use crate::{config, error, resolver};
 
@@ -24,5 +24,9 @@ impl Context {
 
     pub fn is_initialized(&self) -> bool {
         self.config.is_some() && self.changeset_root.is_some() && self.config_path.is_some()
+    }
+
+    pub fn is_ci(&self) -> bool {
+        env::var("GITHUB_ACTIONS").is_ok()
     }
 }

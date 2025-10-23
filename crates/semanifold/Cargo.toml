@@ -13,10 +13,13 @@ anyhow = "1.0.99"
 clap = { version = "4.5.45", features = ["derive"] }
 colored = "3.0.0"
 fern = "0.7.1"
+git2 = "0.20.2"
 inquire = "0.7.5"
 log = "0.4.27"
+octocrab = "0.47.0"
 rust-i18n = "3.1.5"
 saphyr = "0.0.6"
 semanifold-resolver = { version = "0.1.0", path = "../resolver" }
 sys-locale = "0.3.2"
+tokio = { version = "1.48.0", features = ["full"] }
 toml_edit = "0.23.3"

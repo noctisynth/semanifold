@@ -1,6 +1,6 @@
 use clap::Parser;
 use rust_i18n::t;
-use semanifold_resolver::context::Context;
+use semanifold_resolver::{config::Config, context::Context};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -9,20 +9,8 @@ pub(crate) struct Publish {
     dry_run: bool,
 }
 
-pub(crate) fn run(publish: &Publish, ctx: &Context) -> anyhow::Result<()> {
-    let Context {
-        config: Some(config),
-        ..
-    } = ctx
-    else {
-        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
-    };
-
-    let packages = config
-        .packages
-        .iter()
-        .map(|(_, config)| config)
-        .collect::<Vec<_>>();
+pub(crate) fn publish(config: &Config, dry_run: bool) -> anyhow::Result<()> {
+    let packages = config.packages.values().collect::<Vec<_>>();
 
     log::debug!("Packages to publish: {:?}", &packages);
 
@@ -39,7 +27,22 @@ pub(crate) fn run(publish: &Publish, ctx: &Context) -> anyhow::Result<()> {
                 &package.resolver
             ))?;
         log::debug!("Resolver config: {:?}", &resolver_config);
-        resolver.publish(&resolved_package, resolver_config, publish.dry_run)?;
+        resolver.publish(&resolved_package, resolver_config, dry_run)?;
     }
+
+    Ok(())
+}
+
+pub(crate) fn run(opts: &Publish, ctx: &Context) -> anyhow::Result<()> {
+    let Context {
+        config: Some(config),
+        ..
+    } = ctx
+    else {
+        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
+    };
+
+    publish(config, opts.dry_run)?;
+
     Ok(())
 }

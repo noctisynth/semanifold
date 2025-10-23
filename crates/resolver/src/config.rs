@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 use crate::{error::ResolveError, resolver};
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct BranchesConfig {
+    pub base: String,
+    pub release: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PackageConfig {
     pub path: PathBuf,
     pub resolver: resolver::ResolverType,
@@ -28,6 +34,7 @@ pub struct ResolverConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
+    pub branches: BranchesConfig,
     pub tags: BTreeMap<String, String>,
     pub packages: BTreeMap<String, PackageConfig>,
     pub resolver: BTreeMap<resolver::ResolverType, ResolverConfig>,

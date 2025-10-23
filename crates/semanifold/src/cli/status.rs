@@ -74,12 +74,38 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
     log::debug!("is_pull_request: {}", is_pull_request);
     if status.comment && is_pull_request {
-        let pr = octocrab.pulls(owner, repo_name);
-        let comments = pr.list_comments(Some(pr_number)).send().await?;
+        let issues = octocrab.issues(owner, repo_name);
+
+        let comments = issues.list_comments(pr_number).send().await?;
+        let commits = octocrab
+            .pulls(owner, repo_name)
+            .pr_commits(pr_number)
+            .send()
+            .await?;
+
+        // let existing = comments
+        //     .into_iter()
+        //     .find(|c| c.user);
+
+        log::debug!("commits: {:?}", commits);
         log::debug!("comments: {:?}", comments);
         for comment in comments {
             log::debug!("comment: {:?}", comment);
         }
+        octocrab
+            .issues(owner, repo_name)
+            .create_comment(
+                pr_number,
+                format!(
+                    r#"## Workspace change through: [{}]
+
+                {} changesets found"#,
+                    commits.last.unwrap_or_default(),
+                    changesets.len()
+                ),
+            )
+            .await?;
+        // octocrab.issues(owner, repo_name).update_comment(comment_id, body)
     }
 
     Ok(())

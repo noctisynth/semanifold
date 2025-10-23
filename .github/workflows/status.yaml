@@ -21,3 +21,5 @@ jobs:
         run: cargo build --workspace
       - name: Status
         run: cargo run --bin semanifold status --debug
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

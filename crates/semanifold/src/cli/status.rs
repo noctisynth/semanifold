@@ -50,6 +50,8 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
     let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_default();
     let head_ref = env::var("GITHUB_HEAD_REF").unwrap_or_default();
+    let ref_name = env::var("GITHUB_REF_NAME").unwrap_or_default();
+    log::debug!("GITHUB_REF_NAME: {}", &ref_name);
     log::debug!("GITHUB_HEAD_REF: {}", &head_ref);
     log::debug!("GITHUB_BASE_REF: {}", &base_ref);
     let github_repo = env::var("GITHUB_REPOSITORY")?;

@@ -1,7 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 use log::LevelFilter;
-use semanifold_resolver::{config, resolver};
+use semanifold_resolver::context;
 
 use crate::cli::{Cli, Commands};
 
@@ -21,20 +21,15 @@ fn run() -> anyhow::Result<()> {
 
     // TODO: refactor to context based
     log::debug!("Parsed CLI arguments: {:?}", &cli);
-    // init command must be executed before read config file
-    if let Some(Commands::Init(init)) = &cli.command {
-        return cli::init::run(init);
-    }
 
-    let changeset_path = resolver::get_changeset_path()?;
-    let config_path = config::get_config_path(&changeset_path)?;
-    let config = config::load_config(&config_path)?;
+    let ctx = context::Context::create().unwrap_or_default();
 
-    log::debug!("Loaded config: {:?}", &config);
+    log::debug!("Loaded config: {:?}", &ctx.config);
 
     match &cli.command {
-        Some(Commands::Commit(commit)) => cli::commit::run(commit, &changeset_path, &config)?,
-        Some(Commands::Init(_init)) => {}
+        Some(Commands::Commit(commit)) => cli::commit::run(commit, &ctx)?,
+        Some(Commands::Init(init)) => cli::init::run(init, &ctx)?,
+        Some(Commands::Version(version)) => cli::version::run(version, &ctx)?,
         None => {}
     }
 

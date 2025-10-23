@@ -7,6 +7,16 @@ refactor = "Refactor"
 
 [packages.semanifold]
 path = "crates/semanifold"
+resolver = "rust"
 
 [packages.semanifold-resolver]
 path = "crates/resolver"
+resolver = "rust"
+
+[resolver.rust]
+prepublish = [{ command = "cargo publish --dry-run" }]
+publish = [{ command = "cargo publish" }]
+
+[resolver.rust.postpublish]
+use = "semif:fetch"
+opts = { url = "https://crates.io/crates/{{package}}/{{version}}" }

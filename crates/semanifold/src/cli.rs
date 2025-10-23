@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, builder::styling};
 
 pub mod commit;
 pub mod init;
+pub mod version;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
@@ -9,6 +10,8 @@ pub(crate) enum Commands {
     Commit(commit::Commit),
     #[command(about = "Initialize semanifold changesets config")]
     Init(init::Init),
+    #[command(about = "Bump version of packages")]
+    Version(version::Version),
 }
 
 fn get_styles() -> clap::builder::Styles {

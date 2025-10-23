@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ResolveError;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum BumpLevel {
-    Major,
-    Minor,
-    Patch,
+    Major = 2,
+    Minor = 1,
+    Patch = 0,
 }
 
 impl fmt::Display for BumpLevel {

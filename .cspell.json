@@ -3,9 +3,11 @@
     "clippy",
     "dtolnay",
     "pathdiff",
+    "postpublish",
     "rfind",
     "saphyr",
     "semanifold",
+    "semif",
     "thiserror"
   ],
   "ignorePaths": [

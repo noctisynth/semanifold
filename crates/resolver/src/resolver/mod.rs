@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
     changeset::{BumpLevel, Changeset},
     config::PackageConfig,
@@ -14,13 +16,32 @@ pub struct ResolvedPackage {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolverType {
+    Rust,
+}
+
+impl ResolverType {
+    pub fn get_resolver(self) -> Box<dyn Resolver> {
+        match self {
+            ResolverType::Rust => Box::new(rust::RustResolver),
+        }
+    }
+}
+
 pub trait Resolver {
     /// Resolve a package
     fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
     fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version
-    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError>;
+    fn bump(
+        &mut self,
+        package: &ResolvedPackage,
+        level: BumpLevel,
+        dry_run: bool,
+    ) -> Result<(), ResolveError>;
 }
 
 pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {

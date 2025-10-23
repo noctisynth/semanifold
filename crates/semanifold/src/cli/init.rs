@@ -4,6 +4,7 @@ use clap::Args;
 use inquire::{Confirm, Select};
 use semanifold_resolver::{
     config::{self, PackageConfig},
+    context,
     error::ResolveError,
     resolver::{self, Resolver},
 };
@@ -29,7 +30,12 @@ pub(crate) struct Init {
     pub resolvers: Vec<ResolverType>,
 }
 
-pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
+pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
+    if ctx.is_initialized() {
+        log::warn!("Semanifold is already initialized.");
+        return Ok(());
+    }
+
     const AVAILABLE_TARGETS: [&str; 2] = [".changes", ".changesets"];
 
     let current_dir = std::env::current_dir()?;
@@ -60,6 +66,7 @@ pub(crate) fn run(init: &Init) -> anyhow::Result<()> {
                 packages.into_iter().for_each(|pkg| {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
+                        resolver: resolver::ResolverType::Rust,
                     });
                 });
                 Ok::<_, ResolveError>(acc)

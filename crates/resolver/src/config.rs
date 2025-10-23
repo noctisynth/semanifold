@@ -11,6 +11,7 @@ use crate::{error::ResolveError, resolver};
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PackageConfig {
     pub path: PathBuf,
+    pub resolver: resolver::ResolverType,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

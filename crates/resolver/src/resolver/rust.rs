@@ -6,7 +6,7 @@ use crate::{
     changeset::BumpLevel,
     config::PackageConfig,
     error::ResolveError,
-    resolver::{ResolvedPackage, Resolver},
+    resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
 };
 
@@ -79,6 +79,7 @@ impl Resolver for RustResolver {
             }
             let package = self.resolve(&PackageConfig {
                 path: root.to_path_buf(),
+                resolver: ResolverType::Rust,
             })?;
             return Ok(vec![package]);
         }
@@ -105,14 +106,22 @@ impl Resolver for RustResolver {
             .into_iter()
             .map(|path| {
                 let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path);
-                self.resolve(&PackageConfig { path: rel_path })
+                self.resolve(&PackageConfig {
+                    path: rel_path.to_path_buf(),
+                    resolver: ResolverType::Rust,
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(packages)
     }
 
-    fn bump(&mut self, package: &ResolvedPackage, level: BumpLevel) -> Result<(), ResolveError> {
+    fn bump(
+        &mut self,
+        package: &ResolvedPackage,
+        level: BumpLevel,
+        dry_run: bool,
+    ) -> Result<(), ResolveError> {
         let bumped_version = utils::bump_version(&package.version, level)?.to_string();
         let toml_str = std::fs::read_to_string(package.path.join("Cargo.toml"))?;
         let mut toml_doc =
@@ -129,8 +138,18 @@ impl Resolver for RustResolver {
                     path: package.path.join("Cargo.toml"),
                     reason: "package table not found".to_string(),
                 })?;
-        package_table["version"] = toml_edit::value(bumped_version);
-        std::fs::write(package.path.join("Cargo.toml"), toml_doc.to_string())?;
+        package_table["version"] = toml_edit::value(&bumped_version);
+
+        let toml_content = toml_doc.to_string();
+        if !dry_run {
+            std::fs::write(package.path.join("Cargo.toml"), toml_content)?;
+        } else {
+            log::info!(
+                "Dry run: Would update {} to version {}",
+                package.name,
+                bumped_version
+            );
+        }
         Ok(())
     }
 }

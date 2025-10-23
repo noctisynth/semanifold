@@ -48,8 +48,15 @@ pub fn bump_version(version: &str, level: BumpLevel) -> Result<Version, ResolveE
             reason: e.to_string(),
         })?;
     match level {
-        BumpLevel::Minor => version.minor += 1,
-        BumpLevel::Major => version.major += 1,
+        BumpLevel::Major => {
+            version.major += 1;
+            version.minor = 0;
+            version.patch = 0;
+        }
+        BumpLevel::Minor => {
+            version.minor += 1;
+            version.patch = 0;
+        }
         BumpLevel::Patch => version.patch += 1,
     };
     Ok(version)

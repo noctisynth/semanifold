@@ -1,0 +1,28 @@
+use std::path::PathBuf;
+
+use crate::{config, error, resolver};
+
+#[derive(Default)]
+pub struct Context {
+    pub config: Option<config::Config>,
+    pub changeset_root: Option<PathBuf>,
+    pub config_path: Option<PathBuf>,
+}
+
+impl Context {
+    pub fn create() -> Result<Self, error::ResolveError> {
+        let changeset_root = resolver::get_changeset_path()?;
+        let config_path = config::get_config_path(&changeset_root)?;
+        let config = config::load_config(&config_path)?;
+
+        Ok(Self {
+            config: Some(config),
+            changeset_root: Some(changeset_root),
+            config_path: Some(config_path),
+        })
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        self.config.is_some() && self.changeset_root.is_some() && self.config_path.is_some()
+    }
+}

@@ -5,7 +5,7 @@ use colored::Colorize;
 use inquire::{Autocomplete, MultiSelect, Text, autocompletion::Replacement};
 
 use rust_i18n::t;
-use semanifold_resolver::{changeset, config};
+use semanifold_resolver::{changeset, context::Context};
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
@@ -97,17 +97,22 @@ fn file_exists(root_path: &Path, filename: &str) -> bool {
     path.exists()
 }
 
-pub(crate) fn run(
-    commit: &Commit,
-    root_path: &Path,
-    config: &config::Config,
-) -> anyhow::Result<()> {
+pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
+    let Context {
+        config: Some(config),
+        config_path: _,
+        changeset_root: Some(changeset_root),
+    } = ctx
+    else {
+        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
+    };
+
     let name = if let Some(name) = &commit.name {
         let sanitized_name = sanitize_filename(name);
         if sanitized_name.is_empty() {
             return Err(anyhow::anyhow!(t!("cli.commit.empty_name")));
         }
-        if file_exists(root_path, &sanitized_name) {
+        if file_exists(changeset_root, &sanitized_name) {
             return Err(anyhow::anyhow!(t!("cli.commit.commit_exists", name = name)));
         }
         sanitized_name
@@ -145,7 +150,7 @@ pub(crate) fn run(
         })
         .prompt()?;
 
-    let mut changeset = changeset::Changeset::new(name.clone(), root_path);
+    let mut changeset = changeset::Changeset::new(name.clone(), changeset_root);
     let level_variants = Level::value_variants().to_vec();
     for variant in level_variants.iter().rev() {
         if packages.is_empty() {

@@ -1,8 +1,10 @@
-use std::cmp::max;
+use std::{cmp::max, path::Path};
 
 use clap::Parser;
 use rust_i18n::t;
-use semanifold_resolver::{changeset::BumpLevel, context::Context, resolver, utils};
+use semanifold_resolver::{
+    changeset::BumpLevel, config::Config, context::Context, resolver, utils,
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -10,16 +12,7 @@ pub(crate) struct Version {
     dry_run: bool,
 }
 
-pub(crate) fn run(version: &Version, ctx: &Context) -> anyhow::Result<()> {
-    let Context {
-        config: Some(config),
-        config_path: _,
-        changeset_root: Some(changeset_root),
-    } = ctx
-    else {
-        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
-    };
-
+pub(crate) fn version(config: &Config, changeset_root: &Path, dry_run: bool) -> anyhow::Result<()> {
     for (package_name, package_config) in &config.packages {
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(package_config)?;
@@ -36,8 +29,22 @@ pub(crate) fn run(version: &Version, ctx: &Context) -> anyhow::Result<()> {
         }
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
-        resolver.bump(&resolved_package, &bumped_version, version.dry_run)?;
+        resolver.bump(&resolved_package, &bumped_version, dry_run)?;
     }
+    Ok(())
+}
+
+pub(crate) fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
+    let Context {
+        config: Some(config),
+        changeset_root: Some(changeset_root),
+        ..
+    } = ctx
+    else {
+        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
+    };
+
+    version(config, changeset_root, opts.dry_run)?;
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand, builder::styling};
 
+pub mod ci;
 pub mod commit;
 pub mod init;
 pub mod publish;
@@ -15,6 +16,8 @@ pub(crate) enum Commands {
     Version(version::Version),
     #[command(about = "Publish packages")]
     Publish(publish::Publish),
+    #[command(about = "Run CI tasks")]
+    CI(ci::CI),
 }
 
 fn get_styles() -> clap::builder::Styles {

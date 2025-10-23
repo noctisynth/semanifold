@@ -7,6 +7,7 @@ use crate::cli::{Cli, Commands};
 
 pub mod cli;
 pub mod logger;
+pub mod utils;
 
 rust_i18n::i18n!("locales", fallback = "en");
 
@@ -30,6 +31,7 @@ fn run() -> anyhow::Result<()> {
         Some(Commands::Init(init)) => cli::init::run(init, &ctx)?,
         Some(Commands::Version(version)) => cli::version::run(version, &ctx)?,
         Some(Commands::Publish(publish)) => cli::publish::run(publish, &ctx)?,
+        Some(Commands::CI(ci)) => utils::run_async(cli::ci::run(ci, &ctx))?,
         None => {}
     }
 

@@ -1,5 +1,6 @@
 use std::env;
 
+use anyhow::Context as _;
 use clap::Parser;
 use git2::{IndexAddOption, Repository};
 use octocrab::Octocrab;
@@ -21,12 +22,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
 
-    let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_default();
-    let head_ref = env::var("GITHUB_HEAD_REF").unwrap_or_default();
-    let github_repo = env::var("GITHUB_REPOSITORY")?;
+    let ref_name = env::var("GITHUB_REF_NAME").context("GITHUB_REF_NAME is not set")?;
+    let github_repo = env::var("GITHUB_REPOSITORY").context("GITHUB_REPOSITORY is not set")?;
 
-    log::debug!("GITHUB_HEAD_REF: {}", &head_ref);
-    log::debug!("GITHUB_BASE_REF: {}", &base_ref);
+    log::debug!("GITHUB_REF_NAME: {}", &ref_name);
 
     let repo = Repository::open(changeset_root.parent().unwrap())?;
     let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
@@ -37,9 +36,9 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;
 
-    let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
-    if !is_pull_request {
-        log::warn!("Not a pull request to base branch, skip versioning and publishing.");
+    let is_base_branch = ref_name == config.branches.base;
+    if !is_base_branch {
+        log::warn!("Not a push to base branch, skip versioning and publishing.");
         return Ok(());
     }
 

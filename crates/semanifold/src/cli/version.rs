@@ -11,16 +11,19 @@ pub(crate) struct Version {
 }
 
 pub(crate) fn version(config: &Config, changeset_root: &Path, dry_run: bool) -> anyhow::Result<()> {
+    let changesets = resolver::get_changesets(changeset_root)?;
+
     for (package_name, package_config) in &config.packages {
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(package_config)?;
 
-        let changesets = resolver::get_changesets(changeset_root)?;
         let level = utils::get_bump_level(&changesets, package_name);
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
         resolver.bump(&resolved_package, &bumped_version, dry_run)?;
     }
+
+    changesets.iter().try_for_each(|c| c.clean())?;
     Ok(())
 }
 

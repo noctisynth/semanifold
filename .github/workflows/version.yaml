@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   status:
-    name: Status
+    name: Version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

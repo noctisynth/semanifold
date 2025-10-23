@@ -187,4 +187,10 @@ impl Changeset {
     pub fn commit(&self) -> Result<(), ResolveError> {
         self.commit_to(&self.root_path)
     }
+
+    pub fn clean(&self) -> Result<(), ResolveError> {
+        let file_path = self.root_path.join(format!("{}.md", self.name));
+        std::fs::remove_file(file_path)?;
+        Ok(())
+    }
 }

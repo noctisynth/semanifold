@@ -1,6 +1,6 @@
 name: Version
 on:
-  pull_request:
+  push:
     branches:
       - main
 

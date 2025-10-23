@@ -67,9 +67,9 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     log::debug!("GITHUB_BASE_REF: {}", &base_ref);
     log::debug!("GITHUB_REPOSITORY: {}", &github_repo);
 
-    let (owner, repo_name) = github_repo
-        .split_once('/')
-        .ok_or_else(|| anyhow::anyhow!("GITHUB_REPOSITORY is not in the format owner/repo"))?;
+    let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
+        "GITHUB_REPOSITORY is not in the format owner/repo"
+    ))?;
     let pr_number = ref_name
         .split_once('/')
         .ok_or_else(|| anyhow::anyhow!("GITHUB_REF_NAME is not in the format <pr_number>/merge"))?

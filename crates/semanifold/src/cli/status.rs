@@ -90,46 +90,28 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         let existing = comments
             .iter()
             .find(|c| c.user.login == "github-actions[bot]");
-        log::debug!("existing: {:?}", existing);
 
-        for comment in &comments {
-            log::debug!("comment: {:?}", comment);
-        }
+        let comment_body = format!(
+            "## Workspace change through: `{}`\n\n
+            {} changesets found\n",
+            &last_commit.sha,
+            changesets.len()
+        );
 
         if let Some(comment) = existing {
             if let Err(e) = octocrab
                 .issues(owner, repo_name)
-                .update_comment(
-                    comment.id,
-                    format!(
-                        r#"## Workspace change through: [{}]
-
-{} changesets found"#,
-                        last_commit.sha,
-                        changesets.len()
-                    ),
-                )
+                .update_comment(comment.id, comment_body)
                 .await
             {
                 log::warn!("Failed to create comment: {:?}", e);
             };
-        } else {
-            if let Err(e) = octocrab
-                .issues(owner, repo_name)
-                .create_comment(
-                    pr_number,
-                    format!(
-                        r#"## Workspace change through: [{}]
-
-{} changesets found"#,
-                        last_commit.sha,
-                        changesets.len()
-                    ),
-                )
-                .await
-            {
-                log::warn!("Failed to create comment: {:?}", e);
-            };
+        } else if let Err(e) = octocrab
+            .issues(owner, repo_name)
+            .create_comment(pr_number, comment_body)
+            .await
+        {
+            log::warn!("Failed to create comment: {:?}", e);
         };
     }
 

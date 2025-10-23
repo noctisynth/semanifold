@@ -102,15 +102,18 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
         let markdown_table = bump_map
             .iter()
-            .map(|(k, (l, v, b))| format!("| {} | {} | {} | {}", k, l, v, b))
+            .map(|(k, (l, v, b))| format!("| {} | {} | {} | {} |", k, l, v, b))
             .collect::<Vec<_>>()
             .join("\n");
         let comment_body = format!(
             "## Workspace change through: {}\n\n\
             {} changesets found\n\n\
-            | Package | Bump Level | Current Version | Bumped Version |\n\
-            | ------- | ---------- | --------------- | -------------- |\n\
-            {}",
+            <details>\n\
+            <summary>Planned changes to release</summary>\n\
+            | Package | Bump Level | Current Version | Next Version |\n\
+            | ------- | ---------- | --------------- | ------------ |\n\
+            {}\n\
+            </details>",
             &last_commit.sha,
             changesets.len(),
             &markdown_table,

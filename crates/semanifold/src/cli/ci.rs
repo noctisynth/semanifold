@@ -3,7 +3,7 @@ use std::env;
 use anyhow::Context as _;
 use clap::Parser;
 use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
-use octocrab::Octocrab;
+use octocrab::{Octocrab, params};
 use rust_i18n::t;
 use semanifold_resolver::context::Context;
 
@@ -17,7 +17,7 @@ fn build_callbacks(token: &str) -> RemoteCallbacks<'static> {
     let token = token.to_string();
 
     callbacks.credentials(move |_url, username_from_url, _allowed_types| {
-        if let Some(_) = username_from_url {
+        if username_from_url.is_some() {
             Cred::userpass_plaintext(&token, "")
         } else {
             Cred::userpass_plaintext("x-access-token", &token)
@@ -54,6 +54,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     log::debug!("GITHUB_REF_NAME: {}", &ref_name);
 
     let repo = Repository::open(changeset_root.parent().unwrap())?;
+    let mut git_config = repo.config()?;
+    git_config.set_str("user.name", "github-actions")?;
+    git_config.set_str("user.email", "github-actions@users.noreply.github.com")?;
+
     let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
         "GITHUB_REPOSITORY is not in the format owner/repo"
     ))?;
@@ -75,14 +79,13 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     let base_branch = &config.branches.base;
     let release_branch = &config.branches.release;
-    repo.branch(release_branch, &commit, true)?;
 
-    let mut co = git2::build::CheckoutBuilder::new();
+    repo.branch(release_branch, &commit, true)?;
     repo.set_head(&format!("refs/heads/{}", release_branch))?;
-    repo.checkout_head(Some(co.force()))?;
+    repo.checkout_head(None)?;
 
     let mut index = repo.index()?;
-    index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
+    index.add_all(["."].iter(), IndexAddOption::DEFAULT, None)?;
     index.write()?;
 
     let tree_id = index.write_tree()?;
@@ -101,19 +104,41 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     force_push_release(&repo, &env::var("GITHUB_TOKEN")?, release_branch)?;
 
-    let _pr = octocrab
+    let existing_prs = octocrab
         .pulls(owner, repo_name)
-        .create(
-            format!("release: {}", release_branch),
-            release_branch,
-            base_branch,
-        )
-        .body(
-            "# Releases\n\n\
-            Changelogs is still under development.\n",
-        )
+        .list()
+        .state(params::State::Open)
+        .head(release_branch)
+        .base(base_branch)
         .send()
-        .await?;
+        .await?
+        .take_items();
+
+    if existing_prs.is_empty() {
+        log::info!("No existing PR found, create a new one.");
+        octocrab
+            .pulls(owner, repo_name)
+            .create("chore(release): bump versions", release_branch, base_branch)
+            .body(
+                "# Releases\n\n\
+            Changelogs is still under development.\n",
+            )
+            .send()
+            .await?;
+    } else {
+        let pr = existing_prs.first().unwrap();
+        log::info!("Existing PR #{} found, skip creating a new one.", pr.number);
+        octocrab
+            .pulls(owner, repo_name)
+            .update(pr.number)
+            .title("chore(release): bump versions")
+            .body(
+                "# Releases\n\n\
+            Changelogs is still under development.\n",
+            )
+            .send()
+            .await?;
+    }
 
     Ok(())
 }

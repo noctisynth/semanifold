@@ -1,0 +1,21 @@
+name: Status
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  status:
+    name: Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Build
+        run: cargo build --workspace
+      - name: Status
+        run: cargo run --bin semanifold status --debug

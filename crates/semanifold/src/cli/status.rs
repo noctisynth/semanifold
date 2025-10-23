@@ -49,6 +49,8 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     }
 
     let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_default();
+    let head_ref = env::var("GITHUB_HEAD_REF").unwrap_or_default();
+    log::debug!("GITHUB_HEAD_REF: {}", &head_ref);
     log::debug!("GITHUB_BASE_REF: {}", &base_ref);
     let github_repo = env::var("GITHUB_REPOSITORY")?;
     log::debug!("GITHUB_REPOSITORY: {}", &github_repo);
@@ -57,21 +59,15 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         .split_once('/')
         .ok_or_else(|| anyhow::anyhow!("GITHUB_REPOSITORY is not in the format owner/repo"))?;
 
-    log::debug!("GITHUB_BASE_REF: {}", &base_ref);
-
     let octocrab = Octocrab::builder()
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;
 
-    log::debug!("GITHUB_REF_NAME: {}", &base_ref);
-
-    let is_pull_request = base_ref == config.branches.base;
+    let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
+    log::debug!("is_pull_request: {}", is_pull_request);
     if status.comment && is_pull_request {
-        let comments = octocrab
-            .pulls(owner, repo_name)
-            .list_comments(None)
-            .send()
-            .await?;
+        let pr = octocrab.pulls(owner, repo_name);
+        let comments = pr.list_comments(None).send().await?;
         log::debug!("comments: {:?}", comments);
         for comment in comments {
             log::debug!("comment: {:?}", comment);

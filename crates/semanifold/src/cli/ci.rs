@@ -2,7 +2,7 @@ use std::env;
 
 use anyhow::Context as _;
 use clap::Parser;
-use git2::{IndexAddOption, Repository};
+use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::Octocrab;
 use rust_i18n::t;
 use semanifold_resolver::context::Context;
@@ -11,6 +11,32 @@ use crate::cli::version;
 
 #[derive(Debug, Parser)]
 pub struct CI;
+
+fn build_callbacks(token: &str) -> RemoteCallbacks<'static> {
+    let mut callbacks = RemoteCallbacks::new();
+    let token = token.to_string();
+
+    callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+        if let Some(_) = username_from_url {
+            Cred::userpass_plaintext(&token, "")
+        } else {
+            Cred::userpass_plaintext("x-access-token", &token)
+        }
+    });
+
+    callbacks
+}
+
+fn force_push_release(repo: &Repository, token: &str, branch: &str) -> anyhow::Result<()> {
+    let callbacks = build_callbacks(token);
+    let mut push_opts = PushOptions::new();
+    push_opts.remote_callbacks(callbacks);
+
+    let mut remote = repo.find_remote("origin").context("find remote origin")?;
+    let ref_spec = format!("+refs/heads/{branch}:refs/heads/{branch}", branch = branch);
+    remote.push(&[&ref_spec], Some(&mut push_opts))?;
+    Ok(())
+}
 
 pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let Context {
@@ -59,8 +85,21 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
     index.write()?;
 
-    let mut remote = repo.find_remote("origin")?;
-    remote.push(&[&format!("refs/heads/{}", release_branch)], None)?;
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let sig = repo.signature()?;
+    let parent_commit = repo.head()?.peel_to_commit()?;
+    let commit_message = "chore(release): bump versions";
+    repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        commit_message,
+        &tree,
+        &[&parent_commit],
+    )?;
+
+    force_push_release(&repo, &env::var("GITHUB_TOKEN")?, release_branch)?;
 
     let _pr = octocrab
         .pulls(owner, repo_name)

@@ -10,7 +10,8 @@
     "semanifold",
     "semif",
     "Swatinem",
-    "thiserror"
+    "thiserror",
+    "userpass"
   ],
   "ignorePaths": [
     "Cargo.toml"

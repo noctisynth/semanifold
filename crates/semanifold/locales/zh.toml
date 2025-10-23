@@ -1,3 +1,6 @@
+[cli]
+not_initialized = "Semanifold 未初始化。请先运行 `semanifold init`。"
+
 [cli.commit]
 query_name = "提交的名称是什么？"
 query_packages = "要包含哪些包？"

@@ -90,7 +90,11 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
         BTreeMap::default()
     };
 
-    let config = config::Config { tags, packages };
+    let config = config::Config {
+        tags,
+        packages,
+        resolver: BTreeMap::new(),
+    };
 
     if !target.exists() {
         std::fs::create_dir_all(&target)?;

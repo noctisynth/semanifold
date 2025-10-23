@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, builder::styling};
 
 pub mod commit;
 pub mod init;
+pub mod publish;
 pub mod version;
 
 #[derive(Subcommand, Debug)]
@@ -12,6 +13,8 @@ pub(crate) enum Commands {
     Init(init::Init),
     #[command(about = "Bump version of packages")]
     Version(version::Version),
+    #[command(about = "Publish packages")]
+    Publish(publish::Publish),
 }
 
 fn get_styles() -> clap::builder::Styles {

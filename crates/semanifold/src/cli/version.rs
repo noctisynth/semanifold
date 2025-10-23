@@ -2,7 +2,7 @@ use std::cmp::max;
 
 use clap::Parser;
 use rust_i18n::t;
-use semanifold_resolver::{changeset::BumpLevel, context::Context, resolver};
+use semanifold_resolver::{changeset::BumpLevel, context::Context, resolver, utils};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -35,7 +35,8 @@ pub(crate) fn run(version: &Version, ctx: &Context) -> anyhow::Result<()> {
             });
         }
 
-        resolver.bump(&resolved_package, level, version.dry_run)?;
+        let bumped_version = utils::bump_version(&resolved_package.version, level)?;
+        resolver.bump(&resolved_package, &bumped_version, version.dry_run)?;
     }
 
     Ok(())

@@ -1,3 +1,6 @@
+[cli]
+not_initialized = "Semanifold is not initialized. Please run `semanifold init` first."
+
 [cli.commit]
 query_name = "What is the name of the commit?"
 query_packages = "Which packages to include?"

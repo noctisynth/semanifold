@@ -14,9 +14,5 @@ path = "crates/resolver"
 resolver = "rust"
 
 [resolver.rust]
-prepublish = [{ command = "cargo publish --dry-run" }]
-publish = [{ command = "cargo publish" }]
-
-[resolver.rust.postpublish]
-use = "semif:fetch"
-opts = { url = "https://crates.io/crates/{{package}}/{{version}}" }
+prepublish = [{ command = "cargo", args = ["publish", "--dry-run"] }]
+publish = [{ command = "cargo", args = ["publish"] }]

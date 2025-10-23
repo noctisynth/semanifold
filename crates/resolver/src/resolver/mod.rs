@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    changeset::{BumpLevel, Changeset},
-    config::PackageConfig,
+    changeset::Changeset,
+    config::{PackageConfig, ResolverConfig},
     error::ResolveError,
     utils,
 };
+use core::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod rust;
@@ -16,10 +17,18 @@ pub struct ResolvedPackage {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum ResolverType {
     Rust,
+}
+
+impl fmt::Display for ResolverType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ResolverType::Rust => write!(f, "rust"),
+        }
+    }
 }
 
 impl ResolverType {
@@ -39,7 +48,14 @@ pub trait Resolver {
     fn bump(
         &mut self,
         package: &ResolvedPackage,
-        level: BumpLevel,
+        version: &semver::Version,
+        dry_run: bool,
+    ) -> Result<(), ResolveError>;
+    /// Publish a package
+    fn publish(
+        &mut self,
+        package: &ResolvedPackage,
+        resolver_config: &ResolverConfig,
         dry_run: bool,
     ) -> Result<(), ResolveError>;
 }

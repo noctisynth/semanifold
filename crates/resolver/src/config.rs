@@ -15,9 +15,22 @@ pub struct PackageConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct PublishConfig {
+    pub command: String,
+    pub args: Option<Vec<String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ResolverConfig {
+    pub prepublish: Vec<PublishConfig>,
+    pub publish: Vec<PublishConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub tags: BTreeMap<String, String>,
     pub packages: BTreeMap<String, PackageConfig>,
+    pub resolver: BTreeMap<resolver::ResolverType, ResolverConfig>,
 }
 
 pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {

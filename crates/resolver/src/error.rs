@@ -14,4 +14,6 @@ pub enum ResolveError {
     InvalidVersion { version: String, reason: String },
     #[error("Failed to parse {path}: {reason}")]
     ParseError { path: PathBuf, reason: String },
+    #[error("Publish error for package {package}: {reason}")]
+    PublishError { package: String, reason: String },
 }

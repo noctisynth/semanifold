@@ -19,7 +19,6 @@ fn run() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
-    // TODO: refactor to context based
     log::debug!("Parsed CLI arguments: {:?}", &cli);
 
     let ctx = context::Context::create().unwrap_or_default();
@@ -30,6 +29,7 @@ fn run() -> anyhow::Result<()> {
         Some(Commands::Commit(commit)) => cli::commit::run(commit, &ctx)?,
         Some(Commands::Init(init)) => cli::init::run(init, &ctx)?,
         Some(Commands::Version(version)) => cli::version::run(version, &ctx)?,
+        Some(Commands::Publish(publish)) => cli::publish::run(publish, &ctx)?,
         None => {}
     }
 

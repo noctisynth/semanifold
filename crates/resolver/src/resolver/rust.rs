@@ -1,13 +1,14 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    changeset::BumpLevel,
-    config::PackageConfig,
+    config::{PackageConfig, ResolverConfig},
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
-    utils,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -119,10 +120,10 @@ impl Resolver for RustResolver {
     fn bump(
         &mut self,
         package: &ResolvedPackage,
-        level: BumpLevel,
+        version: &semver::Version,
         dry_run: bool,
     ) -> Result<(), ResolveError> {
-        let bumped_version = utils::bump_version(&package.version, level)?.to_string();
+        let bumped_version = version.to_string();
         let toml_str = std::fs::read_to_string(package.path.join("Cargo.toml"))?;
         let mut toml_doc =
             toml_str
@@ -150,6 +151,59 @@ impl Resolver for RustResolver {
                 bumped_version
             );
         }
+        Ok(())
+    }
+
+    fn publish(
+        &mut self,
+        package: &ResolvedPackage,
+        resolver_config: &ResolverConfig,
+        dry_run: bool,
+    ) -> Result<(), ResolveError> {
+        if dry_run {
+            log::info!(
+                "Dry run: Would publish {} to version {}",
+                package.name,
+                package.version
+            );
+            return Ok(());
+        }
+
+        log::info!("Running prepublish commands for {}", package.name);
+        for prepublish in &resolver_config.prepublish {
+            let args = prepublish.args.clone().unwrap_or_default();
+            log::info!("Running {} {}", prepublish.command, args.join(" "));
+            let output = Command::new(&prepublish.command)
+                .args(&args)
+                .current_dir(&package.path)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()?;
+            if !output.status.success() {
+                return Err(ResolveError::PublishError {
+                    package: package.name.clone(),
+                    reason: format!(
+                        "Prepublish command {} failed with status {:?} (code: {:?})",
+                        prepublish.command,
+                        output.status,
+                        output.status.code()
+                    ),
+                });
+            }
+        }
+
+        log::info!("Running publish commands for {}", package.name);
+        for publish in &resolver_config.publish {
+            let args = publish.args.clone().unwrap_or_default();
+            log::info!("Running {} {}", publish.command, args.join(" "));
+            Command::new(&publish.command)
+                .args(&args)
+                .current_dir(&package.path)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()?;
+        }
+
         Ok(())
     }
 }

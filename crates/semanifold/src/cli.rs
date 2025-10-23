@@ -4,6 +4,7 @@ pub mod ci;
 pub mod commit;
 pub mod init;
 pub mod publish;
+pub mod status;
 pub mod version;
 
 #[derive(Subcommand, Debug)]
@@ -18,6 +19,8 @@ pub(crate) enum Commands {
     Publish(publish::Publish),
     #[command(about = "Run CI tasks")]
     CI(ci::CI),
+    #[command(about = "Get status of semanifold changesets")]
+    Status(status::Status),
 }
 
 fn get_styles() -> clap::builder::Styles {

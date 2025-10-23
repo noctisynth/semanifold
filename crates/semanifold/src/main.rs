@@ -32,6 +32,7 @@ fn run() -> anyhow::Result<()> {
         Some(Commands::Version(version)) => cli::version::run(version, &ctx)?,
         Some(Commands::Publish(publish)) => cli::publish::run(publish, &ctx)?,
         Some(Commands::CI(ci)) => utils::run_async(cli::ci::run(ci, &ctx))?,
+        Some(Commands::Status(status)) => utils::run_async(cli::status::run(status, &ctx))?,
         None => {}
     }
 

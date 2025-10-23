@@ -1,10 +1,8 @@
-use std::{cmp::max, path::Path};
+use std::path::Path;
 
 use clap::Parser;
 use rust_i18n::t;
-use semanifold_resolver::{
-    changeset::BumpLevel, config::Config, context::Context, resolver, utils,
-};
+use semanifold_resolver::{config::Config, context::Context, resolver, utils};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -18,15 +16,7 @@ pub(crate) fn version(config: &Config, changeset_root: &Path, dry_run: bool) -> 
         let resolved_package = resolver.resolve(package_config)?;
 
         let changesets = resolver::get_changesets(changeset_root)?;
-        let mut level = BumpLevel::Patch;
-        for changeset in changesets {
-            changeset.packages.iter().for_each(|package| {
-                if &package.name == package_name {
-                    level = max(level, package.level);
-                    log::debug!("Bump level of {} to {:?}", package_name, level);
-                }
-            });
-        }
+        let level = utils::get_bump_level(&changesets, package_name);
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
         resolver.bump(&resolved_package, &bumped_version, dry_run)?;

@@ -9,7 +9,7 @@ use semanifold_resolver::{context::Context, resolver, utils};
 #[derive(Parser, Debug)]
 pub(crate) struct Status {
     /// Create GitHub pull request comments, only available for pull requests
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = true)]
     pub comment: bool,
 }
 

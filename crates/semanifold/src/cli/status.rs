@@ -76,37 +76,60 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     if status.comment && is_pull_request {
         let issues = octocrab.issues(owner, repo_name);
 
-        let comments = issues.list_comments(pr_number).send().await?;
+        let comments = issues.list_comments(pr_number).send().await?.take_items();
         let commits = octocrab
             .pulls(owner, repo_name)
             .pr_commits(pr_number)
             .send()
             .await?;
+        let last_commit = commits
+            .into_iter()
+            .last()
+            .ok_or(anyhow::anyhow!("No commits found"))?;
 
-        // let existing = comments
-        //     .into_iter()
-        //     .find(|c| c.user);
+        let existing = comments
+            .iter()
+            .find(|c| c.user.login == "github-actions[bot]");
+        log::debug!("existing: {:?}", existing);
 
-        log::debug!("commits: {:?}", commits);
-        log::debug!("comments: {:?}", comments);
-        for comment in comments {
+        for comment in &comments {
             log::debug!("comment: {:?}", comment);
         }
-        if let Err(e) = octocrab
-            .issues(owner, repo_name)
-            .create_comment(
-                pr_number,
-                format!(
-                    r#"## Workspace change through: [{}]
 
-                {} changesets found"#,
-                    commits.last.unwrap_or_default(),
-                    changesets.len()
-                ),
-            )
-            .await
-        {
-            log::warn!("Failed to create comment: {:?}", e);
+        if let Some(comment) = existing {
+            if let Err(e) = octocrab
+                .issues(owner, repo_name)
+                .update_comment(
+                    comment.id,
+                    format!(
+                        r#"## Workspace change through: [{}]
+
+{} changesets found"#,
+                        last_commit.sha,
+                        changesets.len()
+                    ),
+                )
+                .await
+            {
+                log::warn!("Failed to create comment: {:?}", e);
+            };
+        } else {
+            if let Err(e) = octocrab
+                .issues(owner, repo_name)
+                .create_comment(
+                    pr_number,
+                    format!(
+                        r#"## Workspace change through: [{}]
+
+{} changesets found"#,
+                        last_commit.sha,
+                        changesets.len()
+                    ),
+                )
+                .await
+            {
+                log::warn!("Failed to create comment: {:?}", e);
+            };
         };
     }
 

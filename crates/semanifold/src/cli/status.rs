@@ -92,7 +92,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             .find(|c| c.user.login == "github-actions[bot]");
 
         let comment_body = format!(
-            "## Workspace change through: `{}`\n\n
+            "## Workspace change through: {}\n\n
             {} changesets found\n",
             &last_commit.sha,
             changesets.len()

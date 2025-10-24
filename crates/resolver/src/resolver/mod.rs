@@ -62,6 +62,15 @@ pub trait Resolver {
     ) -> Result<(), ResolveError>;
 }
 
+pub fn get_repo_root() -> Result<PathBuf, ResolveError> {
+    let current_path = std::env::current_dir()?;
+    let repo_root =
+        utils::find_at_parent(".git", &current_path, None).ok_or(ResolveError::GitError {
+            message: "No git repository found (or any of the parent directories): .git".to_string(),
+        })?;
+    Ok(repo_root)
+}
+
 pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {
     let current_path = std::env::current_dir()?;
 

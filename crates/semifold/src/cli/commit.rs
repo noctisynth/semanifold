@@ -100,8 +100,8 @@ fn file_exists(root_path: &Path, filename: &str) -> bool {
 pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
     let Context {
         config: Some(config),
-        config_path: _,
         changeset_root: Some(changeset_root),
+        ..
     } = ctx
     else {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));

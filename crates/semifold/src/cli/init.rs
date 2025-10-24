@@ -32,7 +32,7 @@ pub(crate) struct Init {
 
 pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     if ctx.is_initialized() {
-        log::warn!("Semanifold is already initialized.");
+        log::warn!("Semifold is already initialized.");
         return Ok(());
     }
 

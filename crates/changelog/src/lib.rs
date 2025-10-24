@@ -47,7 +47,12 @@ pub async fn generate_changelog(
         .unwrap_or_default();
 
     for changeset in changesets {
-        let rel_path = changeset.root_path.join(format!("{}.md", &changeset.name));
+        let changeset_path = changeset.path.as_ref().unwrap();
+        let rel_path = pathdiff::diff_paths(changeset_path, ctx.repo_root.as_ref().unwrap())
+            .ok_or(ResolveError::InvalidChangeset {
+                path: changeset_path.to_path_buf(),
+                reason: "Changeset path is not under repo root".to_string(),
+            })?;
         let commit_info =
             utils::find_first_commit_for_path(repo, &rel_path).ok_or(ResolveError::GitError {
                 message: format!("Failed to find commit for path: {:?}", rel_path),

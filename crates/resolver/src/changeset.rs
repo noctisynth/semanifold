@@ -39,6 +39,7 @@ pub struct Changeset {
     pub packages: Vec<ChangePackage>,
     pub summary: String,
     pub root_path: PathBuf,
+    pub path: Option<PathBuf>,
 }
 
 impl Changeset {
@@ -48,6 +49,7 @@ impl Changeset {
             packages: Vec::new(),
             summary: String::new(),
             root_path: root_path.to_path_buf(),
+            path: None,
         }
     }
 
@@ -151,10 +153,11 @@ impl Changeset {
             packages,
             summary,
             root_path: path.parent().unwrap().to_path_buf(),
+            path: Some(path.to_path_buf()),
         })
     }
 
-    pub fn commit_to(&self, changeset_path: &Path) -> Result<(), ResolveError> {
+    pub fn commit_to(&mut self, changeset_path: &Path) -> Result<(), ResolveError> {
         log::debug!("Commit changeset: {self:?}");
 
         let file_path = changeset_path.join(format!("{}.md", self.name));
@@ -182,12 +185,15 @@ impl Changeset {
             })?;
 
         let content = format!("{fm}\n---\n\n{}\n", self.summary);
-        std::fs::write(file_path, content)?;
+        std::fs::write(&file_path, content)?;
+
+        self.path = Some(file_path);
+
         Ok(())
     }
 
-    pub fn commit(&self) -> Result<(), ResolveError> {
-        self.commit_to(&self.root_path)
+    pub fn commit(&mut self) -> Result<(), ResolveError> {
+        self.commit_to(&self.root_path.clone())
     }
 
     pub fn clean(&self) -> Result<(), ResolveError> {

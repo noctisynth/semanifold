@@ -24,6 +24,6 @@ jobs:
       - name: Build
         run: cargo build --workspace
       - name: Semif CI
-        run: cargo run --bin semanifold ci --debug
+        run: cargo run --bin semifold ci --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,12 +1,12 @@
 [package]
-name = "semanifold-resolver"
+name = "semifold-resolver"
 version = "0.1.0"
-edition = "2024"
-description = "Next-generation cross-language monorepo version and release management tool"
-license = "AGPL-3.0-only"
-documentation = "https://docs.rs/semanifold"
-homepage = "https://github.com/noctisynth/semanifold"
-repository = "https://github.com/noctisynth/semanifold"
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 anyhow = "1.0.99"

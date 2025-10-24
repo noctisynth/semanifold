@@ -5,7 +5,7 @@ use colored::Colorize;
 use inquire::{Autocomplete, MultiSelect, Text, autocompletion::Replacement};
 
 use rust_i18n::t;
-use semanifold_resolver::{changeset, context::Context};
+use semifold_resolver::{changeset, context::Context};
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {

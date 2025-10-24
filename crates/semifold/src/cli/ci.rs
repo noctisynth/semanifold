@@ -5,9 +5,9 @@ use clap::Parser;
 use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
-use semanifold_resolver::context::Context;
+use semifold_resolver::{context::Context, resolver};
 
-use crate::cli::version;
+use crate::cli::{publish, version};
 
 #[derive(Debug, Parser)]
 pub struct CI;
@@ -72,7 +72,13 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    version::version(config, changeset_root, false)?;
+    let changesets = resolver::get_changesets(changeset_root)?;
+    if changesets.is_empty() {
+        log::info!("No changesets found, will publish the current version.");
+        return publish::publish(config, false);
+    }
+
+    version::version(config, &changesets, false)?;
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;
@@ -104,8 +110,8 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     force_push_release(&repo, &env::var("GITHUB_TOKEN")?, release_branch)?;
 
-    let existing_prs = octocrab
-        .pulls(owner, repo_name)
+    let pulls = octocrab.pulls(owner, repo_name);
+    let existing_prs = pulls
         .list()
         .state(params::State::Open)
         .head(release_branch)
@@ -116,8 +122,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     if existing_prs.is_empty() {
         log::info!("No existing PR found, create a new one.");
-        octocrab
-            .pulls(owner, repo_name)
+        pulls
             .create("chore(release): bump versions", release_branch, base_branch)
             .body(
                 "# Releases\n\n\
@@ -128,8 +133,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     } else {
         let pr = existing_prs.first().unwrap();
         log::info!("Existing PR #{} found, skip creating a new one.", pr.number);
-        octocrab
-            .pulls(owner, repo_name)
+        pulls
             .update(pr.number)
             .title("chore(release): bump versions")
             .body(

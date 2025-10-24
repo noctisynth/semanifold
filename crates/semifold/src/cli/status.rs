@@ -4,7 +4,7 @@ use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semanifold_resolver::{context::Context, resolver, utils};
+use semifold_resolver::{context::Context, resolver, utils};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Status {

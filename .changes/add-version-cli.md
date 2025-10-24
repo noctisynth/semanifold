@@ -1,6 +1,6 @@
 ---
-semanifold: "patch:feat"
-semanifold-resolver: "patch:feat"
+semif: "patch:feat"
+semif-resolver: "patch:feat"
 ---
 
 Support `version` cli command

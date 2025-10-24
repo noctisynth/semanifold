@@ -1,7 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 use log::LevelFilter;
-use semanifold_resolver::context;
+use semifold_resolver::context;
 
 use crate::cli::{Cli, Commands};
 

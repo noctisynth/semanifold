@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use clap::Args;
 use inquire::{Confirm, Select};
-use semanifold_resolver::{
+use semifold_resolver::{
     config::{self, BranchesConfig, PackageConfig},
     context,
     error::ResolveError,

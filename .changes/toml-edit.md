@@ -1,5 +1,5 @@
 ---
-semanifold-resolver: "patch:feat"
+semifold-resolver: "patch:feat"
 ---
 
 Use `toml_edit` to replace `toml`

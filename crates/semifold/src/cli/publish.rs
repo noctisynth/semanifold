@@ -1,6 +1,6 @@
 use clap::Parser;
 use rust_i18n::t;
-use semanifold_resolver::{config::Config, context::Context};
+use semifold_resolver::{config::Config, context::Context};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {

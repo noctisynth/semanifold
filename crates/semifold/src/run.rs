@@ -1,17 +1,11 @@
 use clap::Parser;
-use colored::Colorize;
 use log::LevelFilter;
-use semanifold_resolver::context;
+use semifold_resolver::context;
 
 use crate::cli::{Cli, Commands};
+use crate::{cli, logger, utils};
 
-pub mod cli;
-pub mod logger;
-pub mod utils;
-
-rust_i18n::i18n!("locales", fallback = "en");
-
-fn run() -> anyhow::Result<()> {
+pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if cli.debug {
@@ -37,15 +31,4 @@ fn run() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn main() {
-    if let Some(locale) = sys_locale::get_locale() {
-        rust_i18n::set_locale(&locale);
-    }
-
-    if let Err(e) = run() {
-        log::error!("{}", e.to_string().red());
-        std::process::exit(1);
-    }
 }

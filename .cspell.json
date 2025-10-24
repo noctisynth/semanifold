@@ -7,13 +7,11 @@
     "postpublish",
     "rfind",
     "saphyr",
-    "semanifold",
     "semif",
+    "semifold",
     "Swatinem",
     "thiserror",
     "userpass"
   ],
-  "ignorePaths": [
-    "Cargo.toml"
-  ]
+  "ignorePaths": ["Cargo.toml"]
 }

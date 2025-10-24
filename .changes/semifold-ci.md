@@ -3,4 +3,4 @@ semifold: "patch:feat"
 semifold-resolver: "patch:feat"
 ---
 
-Support `version` cli command
+Support `ci` and `status` command

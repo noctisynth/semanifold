@@ -24,6 +24,6 @@ jobs:
       - name: Build
         run: cargo build --workspace
       - name: Status
-        run: cargo run --bin semanifold status --debug
+        run: cargo run --bin semifold status --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

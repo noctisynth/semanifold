@@ -9,11 +9,11 @@ fix = "Bug Fix"
 perf = "Performance Improvement"
 refactor = "Refactor"
 
-[packages.semanifold]
-path = "crates/semanifold"
+[packages.semifold]
+path = "crates/semifold"
 resolver = "rust"
 
-[packages.semanifold-resolver]
+[packages.semifold-resolver]
 path = "crates/resolver"
 resolver = "rust"
 

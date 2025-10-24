@@ -64,12 +64,13 @@ pub fn bump_version(version: &str, level: BumpLevel) -> Result<Version, ResolveE
             version.patch = 0;
         }
         BumpLevel::Patch => version.patch += 1,
+        BumpLevel::Unchanged => {}
     };
     Ok(version)
 }
 
 pub fn get_bump_level(changesets: &[Changeset], package_name: &str) -> BumpLevel {
-    let mut level = BumpLevel::Patch;
+    let mut level = BumpLevel::Unchanged;
     for changeset in changesets {
         changeset.packages.iter().for_each(|package| {
             if package.name == package_name {

@@ -9,9 +9,10 @@ use crate::error::ResolveError;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum BumpLevel {
-    Major = 2,
-    Minor = 1,
-    Patch = 0,
+    Major = 3,
+    Minor = 2,
+    Patch = 1,
+    Unchanged = 0,
 }
 
 impl fmt::Display for BumpLevel {
@@ -20,6 +21,7 @@ impl fmt::Display for BumpLevel {
             BumpLevel::Major => write!(f, "major"),
             BumpLevel::Minor => write!(f, "minor"),
             BumpLevel::Patch => write!(f, "patch"),
+            BumpLevel::Unchanged => write!(f, "unchanged"),
         }
     }
 }

@@ -16,7 +16,6 @@ pub(crate) struct Status {
 pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let Context {
         config: Some(config),
-        changeset_root: Some(changeset_root),
         ..
     } = ctx
     else {
@@ -26,7 +25,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let is_ci = ctx.is_ci();
     log::debug!("GitHub CI environment: {}", is_ci);
 
-    let changesets = resolver::get_changesets(changeset_root)?;
+    let changesets = resolver::get_changesets(ctx)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
 
     let mut bump_map = HashMap::new();

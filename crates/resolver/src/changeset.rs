@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use saphyr::{LoadableYamlNode, Mapping, Yaml, YamlEmitter};
 use serde::{Deserialize, Serialize};
 
-use crate::error::ResolveError;
+use crate::{context::Context, error::ResolveError};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
@@ -66,7 +66,7 @@ impl Changeset {
         self.summary = summary;
     }
 
-    pub fn from_file(path: &PathBuf) -> Result<Self, ResolveError> {
+    pub fn from_file(ctx: &Context, path: &PathBuf) -> Result<Self, ResolveError> {
         let changeset_str = std::fs::read_to_string(path)?;
         let separator = "---";
 
@@ -82,61 +82,61 @@ impl Changeset {
             path: path.to_path_buf(),
             reason: format!("Failed to parse changeset front matter: {e}"),
         })?;
-        let packages = fm
-            .first()
-            .and_then(|f| f.as_mapping())
-            .and_then(|m| {
-                let mut packages = Vec::new();
-                m.into_iter()
-                    .try_for_each(|(k, v)| {
-                        let name = k
-                            .as_str()
-                            .ok_or(ResolveError::InvalidChangeset {
-                                path: path.to_path_buf(),
-                                reason: format!("Failed to parse package name: {k:?}"),
-                            })?
-                            .to_string();
-                        let mark = v
-                            .as_str()
-                            .ok_or(ResolveError::InvalidChangeset {
-                                path: path.to_path_buf(),
-                                reason: format!("Failed to parse package mark: {v:?}"),
-                            })?
-                            .to_string();
-                        let mut mark = mark.split(':');
-                        let level = mark.next().ok_or(ResolveError::InvalidChangeset {
+        let packages_map = fm.first().and_then(|f| f.as_mapping());
+
+        let mut packages = Vec::new();
+        if let Some(map) = packages_map {
+            map.into_iter().try_for_each(|(k, v)| {
+                let name = k
+                    .as_str()
+                    .ok_or(ResolveError::InvalidChangeset {
+                        path: path.to_path_buf(),
+                        reason: format!("Failed to parse package name: {k:?}"),
+                    })?
+                    .to_string();
+                if !ctx.has_package(&name) {
+                    return Err(ResolveError::InvalidChangeset {
+                        path: path.to_path_buf(),
+                        reason: format!("Package {name} is not defined in config"),
+                    });
+                }
+
+                let mark = v
+                    .as_str()
+                    .ok_or(ResolveError::InvalidChangeset {
+                        path: path.to_path_buf(),
+                        reason: format!("Failed to parse package mark: {v:?}"),
+                    })?
+                    .to_string();
+                let mut mark = mark.split(':');
+                let level = mark.next().ok_or(ResolveError::InvalidChangeset {
+                    path: path.to_path_buf(),
+                    reason: format!("Failed to parse package mark: {v:?}"),
+                })?;
+                let tag = mark.next().ok_or(ResolveError::InvalidChangeset {
+                    path: path.to_path_buf(),
+                    reason: format!("Failed to parse package mark: {v:?}"),
+                })?;
+                let level = match level {
+                    "major" => BumpLevel::Major,
+                    "minor" => BumpLevel::Minor,
+                    "patch" => BumpLevel::Patch,
+                    _ => {
+                        return Err(ResolveError::InvalidChangeset {
                             path: path.to_path_buf(),
-                            reason: format!("Failed to parse package mark: {v:?}"),
-                        })?;
-                        let tag = mark.next().ok_or(ResolveError::InvalidChangeset {
-                            path: path.to_path_buf(),
-                            reason: format!("Failed to parse package mark: {v:?}"),
-                        })?;
-                        let level = match level {
-                            "major" => BumpLevel::Major,
-                            "minor" => BumpLevel::Minor,
-                            "patch" => BumpLevel::Patch,
-                            _ => {
-                                return Err(ResolveError::InvalidChangeset {
-                                    path: path.to_path_buf(),
-                                    reason: format!("Invalid bump level: {level}"),
-                                });
-                            }
-                        };
-                        packages.push(ChangePackage {
-                            name,
-                            level,
-                            tag: tag.to_string(),
+                            reason: format!("Invalid bump level: {level}"),
                         });
-                        Ok(())
-                    })
-                    .ok()?;
-                Some(packages)
-            })
-            .ok_or(ResolveError::InvalidChangeset {
-                path: path.to_path_buf(),
-                reason: "Failed to parse changeset front matter".to_string(),
+                    }
+                };
+                packages.push(ChangePackage {
+                    name,
+                    level,
+                    tag: tag.to_string(),
+                });
+                Ok(())
             })?;
+        }
+
         let summary = right_part[3..].trim().to_string();
 
         Ok(Self {

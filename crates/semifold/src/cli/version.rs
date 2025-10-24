@@ -29,14 +29,13 @@ pub(crate) fn version(
 pub(crate) fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     let Context {
         config: Some(config),
-        changeset_root: Some(changeset_root),
         ..
     } = ctx
     else {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
 
-    let changesets = resolver::get_changesets(changeset_root)?;
+    let changesets = resolver::get_changesets(ctx)?;
     version(config, &changesets, opts.dry_run)?;
 
     Ok(())

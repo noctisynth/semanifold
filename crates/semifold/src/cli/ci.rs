@@ -72,7 +72,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let changesets = resolver::get_changesets(changeset_root)?;
+    let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {
         log::info!("No changesets found, will publish the current version.");
         return publish::publish(config, false);

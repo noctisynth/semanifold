@@ -29,4 +29,11 @@ impl Context {
     pub fn is_ci(&self) -> bool {
         env::var("GITHUB_ACTIONS").is_ok()
     }
+
+    pub fn has_package(&self, package: &str) -> bool {
+        self.config
+            .as_ref()
+            .map(|c| c.packages.keys().any(|k| k == package))
+            .unwrap_or(false)
+    }
 }

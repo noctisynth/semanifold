@@ -1,6 +1,6 @@
 ---
-semif-resolver: "patch:feat"
-semif: "patch:feat"
+semifold-resolver: "patch:feat"
+semifold: "patch:feat"
 ---
 
 Support create and apply changeset

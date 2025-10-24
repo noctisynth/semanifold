@@ -17,6 +17,10 @@ resolver = "rust"
 path = "crates/resolver"
 resolver = "rust"
 
+[packages.semifold-changelog]
+path = "crates/changelog"
+resolver = "rust"
+
 [resolver.rust]
 prepublish = [{ command = "cargo", args = ["publish", "--dry-run"] }]
 publish = [{ command = "cargo", args = ["publish"] }]

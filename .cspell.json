@@ -4,7 +4,9 @@
     "dtolnay",
     "octocrab",
     "pathdiff",
+    "pathspec",
     "postpublish",
+    "revwalk",
     "rfind",
     "saphyr",
     "semif",
@@ -13,5 +15,7 @@
     "thiserror",
     "userpass"
   ],
-  "ignorePaths": ["Cargo.toml"]
+  "ignorePaths": [
+    "Cargo.toml"
+  ]
 }

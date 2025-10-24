@@ -1572,10 +1572,23 @@ dependencies = [
  "octocrab",
  "rust-i18n",
  "saphyr",
+ "semifold-changelog",
  "semifold-resolver",
  "sys-locale",
  "tokio",
  "toml_edit 0.23.7",
+]
+
+[[package]]
+name = "semifold-changelog"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "git2",
+ "octocrab",
+ "regex",
+ "semifold-resolver",
+ "tokio",
 ]
 
 [[package]]

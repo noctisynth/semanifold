@@ -1,10 +1,11 @@
-use std::env;
+use std::{collections::HashMap, env};
 
 use anyhow::Context as _;
 use clap::Parser;
 use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
+use semifold_changelog::generate_changelog;
 use semifold_resolver::{context::Context, resolver};
 
 use crate::cli::{publish, version};
@@ -78,6 +79,13 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return publish::publish(config, false);
     }
 
+    let mut changelogs_map = HashMap::new();
+    for package_name in config.packages.keys() {
+        let changelog =
+            generate_changelog(ctx, owner, repo_name, &repo, &changesets, package_name).await?;
+        changelogs_map.insert(package_name, changelog);
+    }
+
     version::version(config, &changesets, false)?;
 
     let head = repo.head()?;
@@ -120,14 +128,21 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         .await?
         .take_items();
 
+    let pr_title = "chore(release): bump versions";
+    let pr_body = format!(
+        "# Releases\n\n{}",
+        changelogs_map
+            .into_iter()
+            .map(|(name, changelog)| { format!("## {name}\n\n##{changelog}") })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    );
+
     if existing_prs.is_empty() {
         log::info!("No existing PR found, create a new one.");
         pulls
-            .create("chore(release): bump versions", release_branch, base_branch)
-            .body(
-                "# Releases\n\n\
-            Changelogs is still under development.\n",
-            )
+            .create(pr_title, release_branch, base_branch)
+            .body(pr_body)
             .send()
             .await?;
     } else {
@@ -135,11 +150,8 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         log::info!("Existing PR #{} found, skip creating a new one.", pr.number);
         pulls
             .update(pr.number)
-            .title("chore(release): bump versions")
-            .body(
-                "# Releases\n\n\
-            Changelogs is still under development.\n",
-            )
+            .title(pr_title)
+            .body(pr_body)
             .send()
             .await?;
     }

@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [[bin]]
 name = "smif"
-path = "src/main.rs"
+path = "src/smif.rs"
 
 [dependencies]
 anyhow = "1.0.99"

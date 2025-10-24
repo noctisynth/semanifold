@@ -16,4 +16,8 @@ pub enum ResolveError {
     ParseError { path: PathBuf, reason: String },
     #[error("Publish error for package {package}: {reason}")]
     PublishError { package: String, reason: String },
+    #[error("Git error: {message}")]
+    GitError { message: String },
+    #[error("GitHub error: {message}")]
+    GitHubError { message: String },
 }

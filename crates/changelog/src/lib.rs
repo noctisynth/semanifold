@@ -48,11 +48,16 @@ pub async fn generate_changelog(
 
     for changeset in changesets {
         let rel_path = changeset.root_path.join(format!("{}.md", &changeset.name));
-        let commit_info = utils::find_first_commit_for_path(repo, &rel_path).unwrap();
+        let commit_info =
+            utils::find_first_commit_for_path(repo, &rel_path).ok_or(ResolveError::GitError {
+                message: format!("Failed to find commit for path: {:?}", rel_path),
+            })?;
         let commit_hash = commit_info.oid.to_string();
         let pr_info = utils::query_pr_for_commit(owner, repo_name, &commit_info)
             .await
-            .unwrap();
+            .map_err(|e| ResolveError::GitHubError {
+                message: format!("Failed to query PR for commit: {:?}", e),
+            })?;
 
         let package = changeset.packages.iter().find(|p| p.name == package_name);
         if let Some(package) = package {

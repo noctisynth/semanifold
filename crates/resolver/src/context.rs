@@ -2,12 +2,19 @@ use std::{env, path::PathBuf};
 
 use crate::{config, error, resolver};
 
+#[derive(Debug)]
+pub struct RepoInfo {
+    pub owner: String,
+    pub repo_name: String,
+}
+
 #[derive(Default)]
 pub struct Context {
     pub config: Option<config::Config>,
     pub changeset_root: Option<PathBuf>,
     pub config_path: Option<PathBuf>,
     pub repo_root: Option<PathBuf>,
+    pub repo_info: Option<RepoInfo>,
 }
 
 impl Context {
@@ -18,12 +25,19 @@ impl Context {
         let repo_root = resolver::get_repo_root()
             .ok()
             .and_then(|path| path.parent().map(|p| p.to_path_buf()));
+        let repo_info = std::env::var("GITHUB_REPOSITORY").ok().and_then(|repo| {
+            repo.split_once('/').map(|(owner, repo_name)| RepoInfo {
+                owner: owner.to_string(),
+                repo_name: repo_name.to_string(),
+            })
+        });
 
         Ok(Self {
             config: Some(config),
             changeset_root: Some(changeset_root),
             config_path: Some(config_path),
             repo_root,
+            repo_info,
         })
     }
 

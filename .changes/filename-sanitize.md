@@ -2,4 +2,4 @@
 semifold: "patch:feat"
 ---
 
-Support Support changeset file name sanitize
+Support Support changeset file name sanitize.

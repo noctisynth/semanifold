@@ -1,11 +1,11 @@
-use std::{collections::HashMap, env};
+use std::env;
 
 use anyhow::Context as _;
 use clap::Parser;
 use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
-use semifold_changelog::generate_changelog;
+
 use semifold_resolver::{context::Context, resolver};
 
 use crate::cli::{publish, version};
@@ -42,7 +42,6 @@ fn force_push_release(repo: &Repository, token: &str, branch: &str) -> anyhow::R
 pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let Context {
         config: Some(config),
-        changeset_root: Some(changeset_root),
         ..
     } = ctx
     else {
@@ -58,7 +57,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     log::debug!("GITHUB_REF_NAME: {}", &ref_name);
 
-    let repo = Repository::open(changeset_root.parent().unwrap())?;
+    let repo = Repository::open(ctx.repo_root.as_ref().unwrap())?;
     let mut git_config = repo.config()?;
     git_config.set_str("user.name", "github-actions")?;
     git_config.set_str("user.email", "github-actions@users.noreply.github.com")?;
@@ -83,14 +82,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return publish::publish(config, false);
     }
 
-    let mut changelogs_map = HashMap::new();
-    for package_name in config.packages.keys() {
-        let changelog =
-            generate_changelog(ctx, owner, repo_name, &repo, &changesets, package_name).await?;
-        changelogs_map.insert(package_name, changelog);
-    }
-
-    version::version(config, &changesets, false)?;
+    let changelogs_map = version::version(ctx, &changesets, false).await?;
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;

@@ -8,18 +8,19 @@ pub mod utils;
 
 pub fn format_line(
     changeset: &changeset::Changeset,
-    owner: &str,
-    repo_name: &str,
+    repo_info: &Option<context::RepoInfo>,
     pr_info: &Option<PrInfo>,
     commit_hash: &str,
 ) -> String {
     let mut line = String::from("- ");
 
-    let commit_url = format!(
-        "https://github.com/{}/{}/commit/{}",
-        owner, repo_name, commit_hash
-    );
-    line.push_str(&format!(" [`{}`]({}): ", &commit_hash[..7], commit_url));
+    if let Some(repo_info) = repo_info.as_ref() {
+        let commit_url = format!(
+            "https://github.com/{}/{}/commit/{}",
+            repo_info.owner, repo_info.repo_name, commit_hash
+        );
+        line.push_str(&format!(" [`{}`]({}): ", &commit_hash[..7], commit_url));
+    }
     line.push_str(&changeset.summary);
 
     if let Some(pr_info) = pr_info.as_ref() {
@@ -39,11 +40,10 @@ pub fn format_line(
 
 pub async fn generate_changelog(
     ctx: &context::Context,
-    owner: &str,
-    repo_name: &str,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
     package_name: &str,
+    package_version: &str,
 ) -> Result<String, ResolveError> {
     let mut changes_map = HashMap::new();
 
@@ -65,11 +65,19 @@ pub async fn generate_changelog(
                 message: format!("Failed to find commit for path: {:?}", rel_path),
             })?;
         let commit_hash = commit_info.oid.to_string();
-        let pr_info = utils::query_pr_for_commit(owner, repo_name, &commit_info)
+        let pr_info = if let Some(repo_info) = ctx.repo_info.as_ref() {
+            utils::query_pr_for_commit(
+                repo_info.owner.as_str(),
+                repo_info.repo_name.as_str(),
+                &commit_info,
+            )
             .await
             .map_err(|e| ResolveError::GitHubError {
                 message: format!("Failed to query PR for commit: {:?}", e),
-            })?;
+            })?
+        } else {
+            None
+        };
 
         let package = changeset.packages.iter().find(|p| p.name == package_name);
         if let Some(package) = package {
@@ -78,17 +86,19 @@ pub async fn generate_changelog(
                 .or_insert_with(Vec::new)
                 .push(format_line(
                     changeset,
-                    owner,
-                    repo_name,
+                    &ctx.repo_info,
                     &pr_info,
                     &commit_hash,
                 ));
         }
     }
 
-    Ok(changes_map
+    let header = format!("## v{package_version}\n\n");
+    let body = changes_map
         .iter()
         .map(|(tag, lines)| format!("### {tag}\n\n{}", lines.join("\n")))
         .collect::<Vec<_>>()
-        .join("\n\n"))
+        .join("\n\n");
+
+    Ok(header + &body)
 }

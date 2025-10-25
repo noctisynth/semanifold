@@ -6,6 +6,8 @@ pub enum ResolveError {
     InvalidChangeset { path: PathBuf, reason: String },
     #[error("Invalid config {path}: {reason}")]
     InvalidConfig { path: PathBuf, reason: String },
+    #[error("Invalid changelog {path}: {reason}")]
+    InvalidChangelog { path: PathBuf, reason: String },
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("File or directory not found: {path}")]

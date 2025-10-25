@@ -2,4 +2,4 @@
 semifold-resolver: "patch:feat"
 ---
 
-Use `toml_edit` to replace `toml`
+Use `toml_edit` to replace `toml`.

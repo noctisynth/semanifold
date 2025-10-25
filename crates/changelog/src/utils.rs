@@ -132,7 +132,7 @@ pub async fn insert_changelog<P: AsRef<Path>>(
         new_content.push_str("\n\n");
         new_content.push_str(after.trim_end_matches('\n'));
     }
-    new_content.push_str("\n");
+    new_content.push('\n');
 
     tokio::fs::write(path, new_content).await?;
     Ok(())

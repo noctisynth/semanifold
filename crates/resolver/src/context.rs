@@ -15,7 +15,9 @@ impl Context {
         let changeset_root = resolver::get_changeset_path()?;
         let config_path = config::get_config_path(&changeset_root)?;
         let config = config::load_config(&config_path)?;
-        let repo_root = resolver::get_repo_root().ok();
+        let repo_root = resolver::get_repo_root()
+            .ok()
+            .and_then(|path| path.parent().map(|p| p.to_path_buf()));
 
         Ok(Self {
             config: Some(config),
@@ -40,7 +42,6 @@ impl Context {
     pub fn has_package(&self, package: &str) -> bool {
         self.config
             .as_ref()
-            .map(|c| c.packages.keys().any(|k| k == package))
-            .unwrap_or(false)
+            .is_some_and(|c| c.packages.contains_key(package))
     }
 }

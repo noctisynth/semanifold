@@ -8,12 +8,19 @@ pub mod utils;
 
 pub fn format_line(
     changeset: &changeset::Changeset,
+    owner: &str,
+    repo_name: &str,
     pr_info: &Option<PrInfo>,
     commit_hash: &str,
 ) -> String {
-    let mut line = format!("- {}", changeset.summary);
+    let mut line = String::from("- ");
 
-    line.push_str(&format!(" {commit_hash}"));
+    let commit_url = format!(
+        "https://github.com/{}/{}/commit/{}",
+        owner, repo_name, commit_hash
+    );
+    line.push_str(&format!(" [`{}`]({}): ", &commit_hash[..7], commit_url));
+    line.push_str(&changeset.summary);
 
     if let Some(pr_info) = pr_info.as_ref() {
         if let Some(url) = pr_info.url.as_ref() {
@@ -69,7 +76,13 @@ pub async fn generate_changelog(
             changes_map
                 .entry(tags.get(&package.tag).map_or("Changes", |v| v))
                 .or_insert_with(Vec::new)
-                .push(format_line(changeset, &pr_info, &commit_hash));
+                .push(format_line(
+                    changeset,
+                    owner,
+                    repo_name,
+                    &pr_info,
+                    &commit_hash,
+                ));
         }
     }
 

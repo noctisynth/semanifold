@@ -49,6 +49,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
 
+    if !ctx.is_ci() {
+        return Err(anyhow::anyhow!("Not running in CI environment"));
+    }
+
     let ref_name = env::var("GITHUB_REF_NAME").context("GITHUB_REF_NAME is not set")?;
     let github_repo = env::var("GITHUB_REPOSITORY").context("GITHUB_REPOSITORY is not set")?;
 
@@ -133,7 +137,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         "# Releases\n\n{}",
         changelogs_map
             .into_iter()
-            .map(|(name, changelog)| { format!("## {name}\n\n##{changelog}") })
+            .map(|(name, changelog)| { format!("## {name}\n\n{changelog}") })
             .collect::<Vec<_>>()
             .join("\n\n")
     );

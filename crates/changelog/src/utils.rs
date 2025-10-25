@@ -23,7 +23,11 @@ pub async fn query_pr_for_commit(
     repo: &str,
     commit_info: &CommitInfo,
 ) -> octocrab::Result<Option<PrInfo>> {
-    let octocrab = Octocrab::builder().build()?;
+    let octocrab = if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+        Octocrab::builder().personal_token(token).build()?
+    } else {
+        Octocrab::builder().build()?
+    };
 
     let prs = octocrab
         .repos(owner, repo)

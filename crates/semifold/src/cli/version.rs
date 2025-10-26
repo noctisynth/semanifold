@@ -4,7 +4,11 @@ use clap::Parser;
 use git2::Repository;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
-use semifold_resolver::{changeset::Changeset, context::Context, resolver, utils};
+use semifold_resolver::{
+    changeset::{BumpLevel, Changeset},
+    context::Context,
+    resolver, utils,
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -26,6 +30,12 @@ pub(crate) async fn version(
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(root, package_config)?;
         let level = utils::get_bump_level(changesets, package_name);
+
+        // Skip unchanged packages
+        if matches!(level, BumpLevel::Unchanged) {
+            log::debug!("{} is unchanged, skip", package_name);
+            continue;
+        }
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
         resolver.bump(&resolved_package, &bumped_version, dry_run)?;

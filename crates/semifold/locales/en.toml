@@ -2,6 +2,7 @@
 not_initialized = "Semifold is not initialized. Please run `semifold init` first."
 
 [cli.commit]
+warn_incomplete_select = "Not all selected packages are bumped, continue?"
 query_name = "What is the name of the commit?"
 query_packages = "Which packages to include?"
 query_tags = "Which tag should this change be under?"

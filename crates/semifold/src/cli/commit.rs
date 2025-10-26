@@ -2,7 +2,7 @@ use std::{fmt, path::Path};
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use inquire::{Autocomplete, MultiSelect, Text, autocompletion::Replacement};
+use inquire::{Autocomplete, Confirm, MultiSelect, Text, autocompletion::Replacement};
 
 use rust_i18n::t;
 use semifold_resolver::{changeset, context::Context};
@@ -151,8 +151,8 @@ pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
         .prompt()?;
 
     let mut changeset = changeset::Changeset::new(name.clone(), changeset_root);
-    let level_variants = Level::value_variants().to_vec();
-    for variant in level_variants.iter().rev() {
+    let level_variants = Level::value_variants().iter().rev();
+    for variant in level_variants {
         if packages.is_empty() {
             break;
         }
@@ -174,6 +174,15 @@ pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
         .prompt()?;
         changeset.add_packages(&selected_packages, variant.to_bump_level(), tag.clone());
         packages.retain(|p| !selected_packages.contains(p));
+    }
+
+    if !packages.is_empty() {
+        if !Confirm::new(&t!("cli.commit.warn_incomplete_select"))
+            .with_default(false)
+            .prompt()?
+        {
+            return Ok(());
+        }
     }
 
     let summary = if let Some(summary) = &commit.summary {

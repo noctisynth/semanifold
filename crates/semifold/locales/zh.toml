@@ -2,6 +2,7 @@
 not_initialized = "Semifold 未初始化。请先运行 `semifold init`。"
 
 [cli.commit]
+warn_incomplete_select = "未提升所有已选包，是否继续？"
 query_name = "提交的名称是什么？"
 query_packages = "要包含哪些包？"
 query_tags = "此更改应属于哪个标签？"

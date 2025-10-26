@@ -24,6 +24,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
     let is_ci = ctx.is_ci();
     log::debug!("GitHub CI environment: {}", is_ci);
+    let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
 
     let changesets = resolver::get_changesets(ctx)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
@@ -32,7 +33,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     for (package_name, package_config) in &config.packages {
         let level = utils::get_bump_level(&changesets, package_name);
         let mut resolver = package_config.resolver.get_resolver();
-        let resolved_package = resolver.resolve(package_config)?;
+        let resolved_package = resolver.resolve(&root, package_config)?;
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
 
         bump_map.insert(

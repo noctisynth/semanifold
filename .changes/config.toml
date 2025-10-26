@@ -3,24 +3,31 @@ base = "main"
 release = "release"
 
 [tags]
-chore = "Chore"
-feat = "New Feature"
-fix = "Bug Fix"
-perf = "Performance Improvement"
-refactor = "Refactor"
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
 
 [packages.semifold]
 path = "crates/semifold"
-resolver = "rust"
-
-[packages.semifold-resolver]
-path = "crates/resolver"
 resolver = "rust"
 
 [packages.semifold-changelog]
 path = "crates/changelog"
 resolver = "rust"
 
-[resolver.rust]
-prepublish = [{ command = "cargo", args = ["publish", "--dry-run"] }]
-publish = [{ command = "cargo", args = ["publish"] }]
+[packages.semifold-resolver]
+path = "crates/resolver"
+resolver = "rust"
+
+[[resolver.rust.prepublish]]
+command = "cargo"
+args = [
+    "publish",
+    "--dry-run",
+]
+
+[[resolver.rust.publish]]
+command = "cargo"
+args = ["publish"]

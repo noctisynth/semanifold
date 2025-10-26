@@ -1,5 +1,5 @@
 [cli]
-not_initialized = "Semanifold 未初始化。请先运行 `semanifold init`。"
+not_initialized = "Semifold 未初始化。请先运行 `semifold init`。"
 
 [cli.commit]
 query_name = "提交的名称是什么？"
@@ -11,3 +11,14 @@ empty_name = "提交名称不能为空"
 commit_exists = "名为 %{name} 的提交已存在"
 warn_no_packages = "未选择任何包"
 empty_summary = "摘要不能为空"
+
+[cli.init]
+already_initialized = "Semifold 已经初始化，如果要重新初始化，请使用 `--force` 选项。"
+not_repo_root = "当前目录不是仓库根目录。"
+continue = "是否继续？"
+aborted = "已中止。"
+target = "要将更改存储在哪个目录中？"
+resolvers = "要使用哪些工作区解析器？"
+tags = "是否添加默认标签到配置？"
+base_branch = "要使用的基础分支？"
+release_branch = "要使用的发布分支？"

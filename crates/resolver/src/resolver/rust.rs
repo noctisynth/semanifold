@@ -31,8 +31,12 @@ struct CargoToml {
 pub struct RustResolver;
 
 impl Resolver for RustResolver {
-    fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError> {
-        let toml_path = pkg_config.path.join("Cargo.toml");
+    fn resolve(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<ResolvedPackage, ResolveError> {
+        let toml_path = root.join(&pkg_config.path).join("Cargo.toml");
         if !toml_path.exists() {
             return Err(ResolveError::FileOrDirNotFound {
                 path: toml_path.clone(),
@@ -78,10 +82,13 @@ impl Resolver for RustResolver {
                 log::warn!("Failed to resolve package in {}", root.display());
                 return Ok(vec![]);
             }
-            let package = self.resolve(&PackageConfig {
-                path: root.to_path_buf(),
-                resolver: ResolverType::Rust,
-            })?;
+            let package = self.resolve(
+                root,
+                &PackageConfig {
+                    path: root.to_path_buf(),
+                    resolver: ResolverType::Rust,
+                },
+            )?;
             return Ok(vec![package]);
         }
 
@@ -107,10 +114,13 @@ impl Resolver for RustResolver {
             .into_iter()
             .map(|path| {
                 let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path);
-                self.resolve(&PackageConfig {
-                    path: rel_path.to_path_buf(),
-                    resolver: ResolverType::Rust,
-                })
+                self.resolve(
+                    root,
+                    &PackageConfig {
+                        path: rel_path.to_path_buf(),
+                        resolver: ResolverType::Rust,
+                    },
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
 

@@ -43,7 +43,11 @@ impl ResolverType {
 
 pub trait Resolver {
     /// Resolve a package
-    fn resolve(&mut self, pkg_config: &PackageConfig) -> Result<ResolvedPackage, ResolveError>;
+    fn resolve(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<ResolvedPackage, ResolveError>;
     /// Resolve all packages
     fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError>;
     /// Bump version

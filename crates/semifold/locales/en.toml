@@ -1,5 +1,5 @@
 [cli]
-not_initialized = "Semanifold is not initialized. Please run `semanifold init` first."
+not_initialized = "Semifold is not initialized. Please run `semifold init` first."
 
 [cli.commit]
 query_name = "What is the name of the commit?"
@@ -11,3 +11,14 @@ empty_name = "Commit name cannot be empty"
 commit_exists = "Commit with name %{name} already exists"
 warn_no_packages = "No packages selected"
 empty_summary = "Summary cannot be empty"
+
+[cli.init]
+already_initialized = "Semifold is already initialized. If you want to re-initialize, please use the `--force` option."
+not_repo_root = "Current directory is not the root of the repository."
+continue = "Continue?"
+aborted = "Aborted."
+target = "What is the target directory?"
+resolvers = "Which workspace resolvers to use?"
+tags = "Add default tags to config?"
+base_branch = "What is the base branch?"
+release_branch = "What is the release branch?"

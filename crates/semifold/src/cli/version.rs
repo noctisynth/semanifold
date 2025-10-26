@@ -18,12 +18,13 @@ pub(crate) async fn version(
     dry_run: bool,
 ) -> anyhow::Result<HashMap<String, String>> {
     let config = ctx.config.as_ref().unwrap();
-    let repo = Repository::open(ctx.repo_root.as_ref().unwrap())?;
+    let root = ctx.repo_root.as_ref().unwrap();
+    let repo = Repository::open(root)?;
     let mut changelogs_map = HashMap::new();
 
     for (package_name, package_config) in &config.packages {
         let mut resolver = package_config.resolver.get_resolver();
-        let resolved_package = resolver.resolve(package_config)?;
+        let resolved_package = resolver.resolve(root, package_config)?;
         let level = utils::get_bump_level(changesets, package_name);
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;

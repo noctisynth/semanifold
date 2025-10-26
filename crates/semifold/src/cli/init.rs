@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use clap::Args;
-use inquire::{Confirm, Select};
+use clap::{Args, ValueEnum};
+use inquire::{Confirm, MultiSelect, Select, Text};
+use rust_i18n::t;
 use semifold_resolver::{
-    config::{self, BranchesConfig, PackageConfig},
+    config::{self, BranchesConfig, PackageConfig, PublishConfig, ResolverConfig},
     context,
     error::ResolveError,
-    resolver::{self, Resolver},
+    resolver::{self, Resolver, ResolverType as ResolverTypeEnum},
 };
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -14,10 +15,18 @@ pub(crate) enum ResolverType {
     Rust,
 }
 
+impl From<ResolverType> for resolver::ResolverType {
+    fn from(value: ResolverType) -> Self {
+        match value {
+            ResolverType::Rust => resolver::ResolverType::Rust,
+        }
+    }
+}
+
 impl std::fmt::Display for ResolverType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResolverType::Rust => write!(f, "rust"),
+            ResolverType::Rust => write!(f, "Rust"),
         }
     }
 }
@@ -26,34 +35,70 @@ impl std::fmt::Display for ResolverType {
 pub(crate) struct Init {
     #[arg(short, long, default_value = ".changes")]
     pub target: Option<PathBuf>,
-    #[arg(short, long, default_value = "rust")]
+    #[arg(short, long)]
     pub resolvers: Vec<ResolverType>,
+    #[arg(short, long, default_value_t = false)]
+    pub force: bool,
+    #[arg(long)]
+    pub base_branch: Option<String>,
+    #[arg(long)]
+    pub release_branch: Option<String>,
 }
 
 pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
-    if ctx.is_initialized() {
-        log::warn!("Semifold is already initialized.");
+    if ctx.is_initialized() && !init.force {
+        log::warn!("{}", t!("cli.init.already_initialized"));
         return Ok(());
     }
 
     const AVAILABLE_TARGETS: [&str; 2] = [".changes", ".changesets"];
 
-    let current_dir = std::env::current_dir()?;
+    let mut target_dir = std::env::current_dir()?;
+    if ctx.repo_root.is_some() && ctx.repo_root.as_ref().unwrap() != &target_dir {
+        log::warn!("{}", t!("cli.init.not_repo_root"));
+        if !Confirm::new(&t!("cli.init.continue"))
+            .with_default(false)
+            .prompt()?
+        {
+            log::warn!("{}", t!("cli.init.aborted"));
+            return Ok(());
+        }
+        target_dir = ctx.repo_root.as_ref().unwrap().to_path_buf();
+    }
+
     let target = if let Some(target) = &init.target {
-        current_dir.join(target)
+        target_dir.join(target)
     } else {
-        let target =
-            Select::new("What is the target directory?", AVAILABLE_TARGETS.to_vec()).prompt()?;
-        current_dir.join(target)
+        let target = Select::new(&t!("cli.init.target"), AVAILABLE_TARGETS.to_vec()).prompt()?;
+        target_dir.join(target)
     };
 
     log::debug!("target: {}", target.display());
 
     let resolvers = if init.resolvers.is_empty() {
-        vec![ResolverType::Rust]
+        MultiSelect::new(
+            &t!("cli.init.resolvers"),
+            ResolverType::value_variants().to_vec(),
+        )
+        .prompt()?
     } else {
         init.resolvers.clone()
     };
+    let resolvers_config = BTreeMap::from_iter(resolvers.iter().map(|r| match r {
+        ResolverType::Rust => (
+            ResolverTypeEnum::Rust,
+            ResolverConfig {
+                prepublish: vec![PublishConfig {
+                    command: "cargo".to_string(),
+                    args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
+                }],
+                publish: vec![PublishConfig {
+                    command: "cargo".to_string(),
+                    args: vec!["publish".to_string()].into(),
+                }],
+            },
+        ),
+    }));
 
     log::debug!("resolvers: {resolvers:?}");
 
@@ -62,7 +107,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
         .try_fold(BTreeMap::new(), |mut acc, name| match name {
             ResolverType::Rust => {
                 let mut resolver = resolver::rust::RustResolver;
-                let packages = resolver.resolve_all(&current_dir)?;
+                let packages = resolver.resolve_all(&target_dir)?;
                 packages.into_iter().for_each(|pkg| {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
@@ -75,29 +120,45 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
 
     log::debug!("packages: {packages:?}");
 
-    let tags = if Confirm::new("Add default tags to config?")
+    let tags = if Confirm::new(&t!("cli.init.tags"))
         .with_default(true)
         .prompt()?
     {
         BTreeMap::from_iter([
-            ("chore".to_string(), "Chore".to_string()),
-            ("feat".to_string(), "New Feature".to_string()),
-            ("fix".to_string(), "Bug Fix".to_string()),
-            ("perf".to_string(), "Performance Improvement".to_string()),
-            ("refactor".to_string(), "Refactor".to_string()),
+            ("chore".to_string(), "Chores".to_string()),
+            ("feat".to_string(), "New Features".to_string()),
+            ("fix".to_string(), "Bug Fixes".to_string()),
+            ("perf".to_string(), "Performance Improvements".to_string()),
+            ("refactor".to_string(), "Refactors".to_string()),
         ])
     } else {
         BTreeMap::default()
     };
 
+    let base_branch = if let Some(base_branch) = &init.base_branch {
+        base_branch.clone()
+    } else {
+        Text::new(&t!("cli.init.base_branch"))
+            .with_default("main")
+            .prompt()?
+    };
+
+    let release_branch = if let Some(release_branch) = &init.release_branch {
+        release_branch.clone()
+    } else {
+        Text::new(&t!("cli.init.release_branch"))
+            .with_default("release")
+            .prompt()?
+    };
+
     let config = config::Config {
         branches: BranchesConfig {
-            base: "main".to_string(),
-            release: "release".to_string(),
+            base: base_branch,
+            release: release_branch,
         },
         tags,
         packages,
-        resolver: BTreeMap::new(),
+        resolver: resolvers_config,
     };
 
     if !target.exists() {

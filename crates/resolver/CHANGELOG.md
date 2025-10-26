@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+### Bug Fixes
+
+- [`5e1b994`](https://github.com/noctisynth/semifold/commit/5e1b994178fa662b630d700559cc888892b44813): Fix path of resolved package is relative path.
+
 ## v0.1.1
 
 ### Refactors

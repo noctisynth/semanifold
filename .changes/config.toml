@@ -21,6 +21,12 @@ resolver = "rust"
 path = "crates/resolver"
 resolver = "rust"
 
+[resolver.rust.pre-check]
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+
+[resolver.rust.pre-check.extra_headers]
+User-Agent = "Semifold 0.1.2"
+
 [[resolver.rust.prepublish]]
 command = "cargo"
 args = [

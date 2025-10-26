@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 pub mod rust;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ResolvedPackage {
     pub name: String,
     pub version: String,
@@ -61,6 +61,7 @@ pub trait Resolver {
     /// Sort packages by their dependencies
     fn sort_packages(
         &mut self,
+        root: &Path,
         packages: &mut Vec<(String, PackageConfig)>,
     ) -> Result<(), ResolveError>;
     /// Publish a package

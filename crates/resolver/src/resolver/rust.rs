@@ -171,18 +171,20 @@ impl Resolver for RustResolver {
 
     fn sort_packages(
         &mut self,
+        root: &Path,
         packages: &mut Vec<(String, PackageConfig)>,
     ) -> Result<(), ResolveError> {
         let cached_packages = packages
             .iter()
             .filter(|(_, cfg)| cfg.resolver == ResolverType::Rust)
             .try_fold(HashMap::new(), |mut acc, (name, cfg)| {
-                let cargo_toml: CargoToml =
-                    toml_edit::de::from_str(&std::fs::read_to_string(cfg.path.join("Cargo.toml"))?)
-                        .map_err(|e| ResolveError::ParseError {
-                            path: cfg.path.join("Cargo.toml"),
-                            reason: e.to_string(),
-                        })?;
+                let cargo_toml: CargoToml = toml_edit::de::from_str(&std::fs::read_to_string(
+                    root.join(&cfg.path).join("Cargo.toml"),
+                )?)
+                .map_err(|e| ResolveError::ParseError {
+                    path: cfg.path.join("Cargo.toml"),
+                    reason: e.to_string(),
+                })?;
                 acc.insert(name.clone(), cargo_toml);
                 Ok::<_, ResolveError>(acc)
             })?;

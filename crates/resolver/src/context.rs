@@ -19,9 +19,17 @@ pub struct Context {
 
 impl Context {
     pub fn create() -> Result<Self, error::ResolveError> {
-        let changeset_root = resolver::get_changeset_path()?;
-        let config_path = config::get_config_path(&changeset_root)?;
-        let config = config::load_config(&config_path)?;
+        let changeset_root = resolver::get_changeset_path().ok();
+        let config_path = if let Some(changeset_root) = &changeset_root {
+            config::get_config_path(changeset_root).ok()
+        } else {
+            None
+        };
+        let config = if let Some(config_path) = &config_path {
+            Some(config::load_config(config_path)?)
+        } else {
+            None
+        };
         let repo_root = resolver::get_repo_root()
             .ok()
             .and_then(|path| path.parent().map(|p| p.to_path_buf()));
@@ -33,9 +41,9 @@ impl Context {
         });
 
         Ok(Self {
-            config: Some(config),
-            changeset_root: Some(changeset_root),
-            config_path: Some(config_path),
+            config,
+            changeset_root,
+            config_path,
             repo_root,
             repo_info,
         })

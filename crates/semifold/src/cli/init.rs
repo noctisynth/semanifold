@@ -4,7 +4,7 @@ use clap::{Args, ValueEnum};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_resolver::{
-    config::{self, BranchesConfig, PackageConfig, PublishConfig, ResolverConfig},
+    config::{self, BranchesConfig, PackageConfig, PreCheckConfig, PublishConfig, ResolverConfig},
     context,
     error::ResolveError,
     resolver::{self, Resolver, ResolverType as ResolverTypeEnum},
@@ -88,20 +88,30 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     } else {
         init.resolvers.clone()
     };
-    let resolvers_config = BTreeMap::from_iter(resolvers.iter().map(|r| match r {
-        ResolverType::Rust => (
-            ResolverTypeEnum::Rust,
-            ResolverConfig {
-                prepublish: vec![PublishConfig {
-                    command: "cargo".to_string(),
-                    args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
-                }],
-                publish: vec![PublishConfig {
-                    command: "cargo".to_string(),
-                    args: vec!["publish".to_string()].into(),
-                }],
-            },
-        ),
+    let resolvers_config = BTreeMap::from_iter(resolvers.iter().map(|r| {
+        match r {
+            ResolverType::Rust => (
+                ResolverTypeEnum::Rust,
+                ResolverConfig {
+                    pre_check: PreCheckConfig {
+                        url:
+                            "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+                                .to_string(),
+                        extra_headers: Some(BTreeMap::from_iter([
+                            ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
+                        ])),
+                    },
+                    prepublish: vec![PublishConfig {
+                        command: "cargo".to_string(),
+                        args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
+                    }],
+                    publish: vec![PublishConfig {
+                        command: "cargo".to_string(),
+                        args: vec!["publish".to_string()].into(),
+                    }],
+                },
+            ),
+        }
     }));
 
     log::debug!("resolvers: {resolvers:?}");

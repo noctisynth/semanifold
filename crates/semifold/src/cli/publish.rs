@@ -1,5 +1,11 @@
+use std::collections::BTreeMap;
+
 use clap::Parser;
 use colored::Colorize;
+use reqwest::{
+    StatusCode,
+    header::{HeaderMap, HeaderName, HeaderValue},
+};
 use rust_i18n::t;
 
 use semifold_changelog::read_latest_changelog;
@@ -96,20 +102,16 @@ pub(crate) async fn publish(
         Vec::new()
     };
 
+    let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
     let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
     for resolver in config.resolver.keys() {
         resolver
             .get_resolver()
-            .sort_packages(&mut sorted_packages)?;
+            .sort_packages(&root, &mut sorted_packages)?;
     }
     log::debug!("Sorted packages: {:?}", &sorted_packages);
 
-    let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
     for (package_name, package) in &sorted_packages {
-        let mut resolver = package.resolver.get_resolver();
-        let resolved_package = resolver.resolve(&root, package)?;
-        log::debug!("Resolved package: {}", &resolved_package.name);
-
         let resolver_config = config
             .resolver
             .get(&package.resolver)
@@ -118,6 +120,42 @@ pub(crate) async fn publish(
                 &package.resolver
             ))?;
         log::debug!("Resolver config: {:?}", &resolver_config);
+
+        let mut resolver = package.resolver.get_resolver();
+        let resolved_package = resolver.resolve(&root, package)?;
+        log::debug!("Resolved package: {}", &resolved_package.name);
+
+        let url = minijinja::render!(
+            &resolver_config.pre_check.url,
+            package => &resolved_package,
+        );
+        log::debug!("Pre-check URL: {}", &url);
+        let client = reqwest::Client::new();
+        let headers = resolver_config
+            .pre_check
+            .extra_headers
+            .as_ref()
+            .unwrap_or(&BTreeMap::new())
+            .iter()
+            .try_fold(HeaderMap::new(), |mut acc, (key, value)| {
+                let header_name = HeaderName::from_bytes(key.as_bytes())
+                    .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
+                let header_value = HeaderValue::from_str(value)
+                    .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
+                acc.insert(header_name, header_value);
+                Ok::<_, anyhow::Error>(acc)
+            })?;
+        let resp = client.get(url).headers(headers).send().await?;
+        log::debug!("Pre-check response: {:?}", &resp);
+        if resp.status() == StatusCode::OK {
+            log::warn!(
+                "Pre-check passed for {} {}, skip publish",
+                &package_name.cyan(),
+                &format!("v{}", resolved_package.version).green()
+            );
+            continue;
+        }
+
         resolver.publish(&resolved_package, resolver_config, dry_run)?;
 
         if should_create_github_release {

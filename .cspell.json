@@ -2,10 +2,12 @@
   "words": [
     "clippy",
     "dtolnay",
+    "minijinja",
     "octocrab",
     "pathdiff",
     "pathspec",
     "postpublish",
+    "reqwest",
     "revwalk",
     "rfind",
     "saphyr",

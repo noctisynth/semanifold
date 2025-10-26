@@ -16,7 +16,7 @@ pub fn run() -> anyhow::Result<()> {
 
     log::debug!("Parsed CLI arguments: {:?}", &cli);
 
-    let ctx = context::Context::create().unwrap_or_default();
+    let ctx = context::Context::create()?;
 
     log::debug!("Loaded config: {:?}", &ctx.config);
 

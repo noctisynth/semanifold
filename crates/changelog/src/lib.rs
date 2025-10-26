@@ -20,7 +20,7 @@ pub fn format_line(
             "https://github.com/{}/{}/commit/{}",
             repo_info.owner, repo_info.repo_name, commit_hash
         );
-        line.push_str(&format!(" [`{}`]({}): ", &commit_hash[..7], commit_url));
+        line.push_str(&format!("[`{}`]({}): ", &commit_hash[..7], commit_url));
     }
     line.push_str(&changeset.summary);
 

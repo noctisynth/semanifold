@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use semifold_resolver::{changeset, context, error::ResolveError};
 
 use crate::utils::PrInfo;
 
+pub mod types;
 pub mod utils;
 
 pub fn format_line(
@@ -101,4 +102,53 @@ pub async fn generate_changelog(
         .join("\n\n");
 
     Ok(header + &body)
+}
+
+pub async fn read_latest_changelog<P: AsRef<Path>>(
+    path: P,
+) -> Result<types::Changelog, ResolveError> {
+    let content = tokio::fs::read_to_string(path.as_ref()).await?;
+
+    let mut lines = content.lines();
+
+    if lines.next().map(|l| l.trim()) != Some("# Changelog") {
+        return Err(ResolveError::InvalidChangelog {
+            path: path.as_ref().to_path_buf(),
+            reason: "Invalid changelog: missing `# Changelog` header".to_string(),
+        });
+    }
+
+    let mut version: Option<String> = None;
+    let mut body = String::new();
+    let mut in_latest = false;
+
+    for line in content.lines().skip(1) {
+        let trimmed = line.trim();
+
+        if version.is_none() {
+            if let Some(rest) = trimmed.strip_prefix("## ") {
+                version = Some(rest.to_string());
+                in_latest = true;
+
+                body.push_str(line);
+                body.push('\n');
+                continue;
+            }
+        } else if in_latest && trimmed.starts_with("## ") {
+            break;
+        } else if in_latest {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+
+    let version = version.ok_or(ResolveError::InvalidChangelog {
+        path: path.as_ref().to_path_buf(),
+        reason: "No version header found".to_string(),
+    })?;
+
+    Ok(types::Changelog {
+        version,
+        body: body.trim().to_string(),
+    })
 }

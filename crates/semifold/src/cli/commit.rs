@@ -176,13 +176,12 @@ pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
         packages.retain(|p| !selected_packages.contains(p));
     }
 
-    if !packages.is_empty() {
-        if !Confirm::new(&t!("cli.commit.warn_incomplete_select"))
+    if !packages.is_empty()
+        && !Confirm::new(&t!("cli.commit.warn_incomplete_select"))
             .with_default(false)
             .prompt()?
-        {
-            return Ok(());
-        }
+    {
+        return Ok(());
     }
 
     let summary = if let Some(summary) = &commit.summary {

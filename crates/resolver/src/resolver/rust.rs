@@ -87,7 +87,7 @@ impl Resolver for RustResolver {
             let package = self.resolve(
                 root,
                 &PackageConfig {
-                    path: root.to_path_buf(),
+                    path: ".".into(),
                     resolver: ResolverType::Rust,
                 },
             )?;
@@ -97,7 +97,7 @@ impl Resolver for RustResolver {
         let members = cargo_toml.workspace.unwrap().members.iter().try_fold(
             Vec::new(),
             |mut members, member| {
-                let pattern = root.join(member).to_string_lossy().into_owned();
+                let pattern = format!("{}/{}", root.display(), member);
                 let paths = glob::glob(&pattern)
                     .map_err(|e| ResolveError::ParseError {
                         path: cargo_toml_path.clone(),

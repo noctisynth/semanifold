@@ -31,6 +31,10 @@ impl std::fmt::Display for ResolverType {
     }
 }
 
+#[derive(rust_embed::Embed)]
+#[folder = "assets"]
+pub(crate) struct CIAsset;
+
 #[derive(Debug, Args)]
 pub(crate) struct Init {
     #[arg(short, long, default_value = ".changes")]
@@ -161,11 +165,30 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
         resolver: resolvers_config,
     };
 
+    let write_ci = Confirm::new(&t!("cli.init.write_ci"))
+        .with_default(true)
+        .prompt()?;
+
     if !target.exists() {
         std::fs::create_dir_all(&target)?;
     }
-
     config::save_config(&target.join("config.toml"), &config)?;
+    if write_ci {
+        if !target_dir.join(".github").exists() {
+            std::fs::create_dir_all(target_dir.join(".github"))?;
+        }
+        let ci_asset = CIAsset::get("semifold-ci.yaml").unwrap();
+        let status_ci_asset = CIAsset::get("status.yaml").unwrap();
+
+        std::fs::write(
+            target_dir.join(".github/workflows/semifold-ci.yaml"),
+            ci_asset.data,
+        )?;
+        std::fs::write(
+            target_dir.join(".github/workflows/status.yaml"),
+            status_ci_asset.data,
+        )?;
+    }
 
     Ok(())
 }

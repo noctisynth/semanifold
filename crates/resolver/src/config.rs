@@ -14,7 +14,7 @@ pub struct BranchesConfig {
     pub release: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PackageConfig {
     pub path: PathBuf,
     pub resolver: resolver::ResolverType,

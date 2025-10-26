@@ -57,6 +57,11 @@ pub trait Resolver {
         version: &semver::Version,
         dry_run: bool,
     ) -> Result<(), ResolveError>;
+    /// Sort packages by their dependencies
+    fn sort_packages(
+        &mut self,
+        packages: &mut Vec<(String, PackageConfig)>,
+    ) -> Result<(), ResolveError>;
     /// Publish a package
     fn publish(
         &mut self,

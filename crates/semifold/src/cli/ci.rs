@@ -79,7 +79,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {
         log::info!("No changesets found, will publish the current version.");
-        return publish::publish(ctx, false);
+        return publish::publish(ctx, true, false).await;
     }
 
     let changelogs_map = version::version(ctx, &changesets, false).await?;

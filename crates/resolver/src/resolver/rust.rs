@@ -1,4 +1,5 @@
 use std::{
+    collections::{BTreeMap, HashMap},
     path::Path,
     process::{Command, Stdio},
 };
@@ -26,6 +27,7 @@ struct CargoWorkspace {
 struct CargoToml {
     pub package: Option<CargoPackage>,
     pub workspace: Option<CargoWorkspace>,
+    pub dependencies: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 pub struct RustResolver;
@@ -161,6 +163,55 @@ impl Resolver for RustResolver {
                 bumped_version
             );
         }
+        Ok(())
+    }
+
+    fn sort_packages(
+        &mut self,
+        packages: &mut Vec<(String, PackageConfig)>,
+    ) -> Result<(), ResolveError> {
+        let cached_packages = packages
+            .iter()
+            .filter(|(_, cfg)| cfg.resolver == ResolverType::Rust)
+            .try_fold(HashMap::new(), |mut acc, (name, cfg)| {
+                let cargo_toml: CargoToml =
+                    toml_edit::de::from_str(&std::fs::read_to_string(cfg.path.join("Cargo.toml"))?)
+                        .map_err(|e| ResolveError::ParseError {
+                            path: cfg.path.join("Cargo.toml"),
+                            reason: e.to_string(),
+                        })?;
+                acc.insert(name.clone(), cargo_toml);
+                Ok::<_, ResolveError>(acc)
+            })?;
+
+        packages.sort_by(
+            |(a, a_cfg), (b, b_cfg)| match (a_cfg.resolver, b_cfg.resolver) {
+                (ResolverType::Rust, ResolverType::Rust) => {
+                    let a_deps = cached_packages
+                        .get(a)
+                        .unwrap()
+                        .dependencies
+                        .as_ref()
+                        .unwrap();
+                    let b_deps = cached_packages
+                        .get(b)
+                        .unwrap()
+                        .dependencies
+                        .as_ref()
+                        .unwrap();
+                    if a_deps.contains_key(b) {
+                        std::cmp::Ordering::Greater
+                    } else if b_deps.contains_key(a) {
+                        std::cmp::Ordering::Less
+                    } else {
+                        std::cmp::Ordering::Equal
+                    }
+                }
+                #[allow(unreachable_patterns)]
+                _ => std::cmp::Ordering::Equal,
+            },
+        );
+
         Ok(())
     }
 

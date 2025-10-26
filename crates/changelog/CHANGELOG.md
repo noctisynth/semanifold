@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+### Bug Fixes
+
+- [`d994409`](https://github.com/noctisynth/semifold/commit/d99440975a113c984131983c5a6e148e481d2c9b): Fix format of commit hashes in changelog.
+
 ## v0.1.1
 
 ### New Features

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.2
+
+### New Features
+
+- [`5386984`](https://github.com/noctisynth/semifold/commit/538698464bba9f459b38aaa4cb414112716a2e2d): Add GitHub release title.
+
+### Bug Fixes
+
+- [`c4952cf`](https://github.com/noctisynth/semifold/commit/c4952cff31ed999e44210ffe8dddfcd65f9a526a): Ask user for whether continue due to incomplete selection.
+- [`2448ba4`](https://github.com/noctisynth/semifold/commit/2448ba4e59db85c912314d5bfab31784e945980d): Skip unchanged packages when generating changelogs.
+- [`5e1b994`](https://github.com/noctisynth/semifold/commit/5e1b994178fa662b630d700559cc888892b44813): Fix path of resolved package is relative path.
+
 ## v0.1.1
 
 ### Bug Fixes

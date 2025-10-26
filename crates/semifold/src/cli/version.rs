@@ -27,6 +27,7 @@ pub(crate) async fn version(
     let mut changelogs_map = HashMap::new();
 
     for (package_name, package_config) in &config.packages {
+        log::debug!("Processing package: {}", package_name);
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(root, package_config)?;
         let level = utils::get_bump_level(changesets, package_name);
@@ -38,7 +39,7 @@ pub(crate) async fn version(
         }
 
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
-        resolver.bump(&resolved_package, &bumped_version, dry_run)?;
+        resolver.bump(root, &resolved_package, &bumped_version, dry_run)?;
 
         let changelog = generate_changelog(
             ctx,
@@ -53,7 +54,11 @@ pub(crate) async fn version(
         log::debug!("changelog for {}:\n{}", package_name, changelog);
 
         if !dry_run {
-            insert_changelog(package_config.path.join("CHANGELOG.md"), &changelog).await?;
+            insert_changelog(
+                root.join(&package_config.path).join("CHANGELOG.md"),
+                &changelog,
+            )
+            .await?;
         }
     }
 

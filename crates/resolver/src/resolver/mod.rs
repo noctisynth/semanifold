@@ -53,6 +53,7 @@ pub trait Resolver {
     /// Bump version
     fn bump(
         &mut self,
+        root: &Path,
         package: &ResolvedPackage,
         version: &semver::Version,
         dry_run: bool,
@@ -103,6 +104,7 @@ pub fn get_changesets(ctx: &Context) -> Result<Vec<Changeset>, ResolveError> {
             .into_iter()
             .try_fold(&mut changesets, |changesets, path| {
                 changesets.push(Changeset::from_file(ctx, &path)?);
+                log::debug!("Loaded changeset at: {}", &path.display());
                 Ok::<_, ResolveError>(changesets)
             })?;
         Ok(changesets)

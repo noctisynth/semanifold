@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.3
+
+### New Features
+
+- [`66da4e2`](https://github.com/noctisynth/semifold/commit/66da4e2d6c26f8abe710f6a231b623127f3be090): Support pre-check config before publishing packages.
+- [`3a031ee`](https://github.com/noctisynth/semifold/commit/3a031ee7001923932f1ed6853bfd26e7fd431318): Embed semifold GitHub Actions workflow files.
+
+### Bug Fixes
+
+- [`3a031ee`](https://github.com/noctisynth/semifold/commit/3a031ee7001923932f1ed6853bfd26e7fd431318): Fix resolved project path of single crate project.
+
 ## v0.1.2
 
 ### New Features

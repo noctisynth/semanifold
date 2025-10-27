@@ -10,6 +10,7 @@ use crate::{
 use core::fmt;
 use std::path::{Path, PathBuf};
 
+pub mod nodejs;
 pub mod rust;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -23,12 +24,14 @@ pub struct ResolvedPackage {
 #[serde(rename_all = "snake_case")]
 pub enum ResolverType {
     Rust,
+    Nodejs,
 }
 
 impl fmt::Display for ResolverType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ResolverType::Rust => write!(f, "rust"),
+            ResolverType::Nodejs => write!(f, "nodejs"),
         }
     }
 }
@@ -37,6 +40,7 @@ impl ResolverType {
     pub fn get_resolver(self) -> Box<dyn Resolver> {
         match self {
             ResolverType::Rust => Box::new(rust::RustResolver),
+            ResolverType::Nodejs => Box::new(nodejs::NodejsResolver),
         }
     }
 }

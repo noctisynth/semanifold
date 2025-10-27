@@ -212,7 +212,6 @@ impl Resolver for RustResolver {
                         std::cmp::Ordering::Equal
                     }
                 }
-                #[allow(unreachable_patterns)]
                 _ => std::cmp::Ordering::Equal,
             },
         );

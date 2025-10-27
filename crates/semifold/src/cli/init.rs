@@ -13,12 +13,14 @@ use semifold_resolver::{
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum ResolverType {
     Rust,
+    Nodejs,
 }
 
 impl From<ResolverType> for resolver::ResolverType {
     fn from(value: ResolverType) -> Self {
         match value {
             ResolverType::Rust => resolver::ResolverType::Rust,
+            ResolverType::Nodejs => resolver::ResolverType::Nodejs,
         }
     }
 }
@@ -27,6 +29,7 @@ impl std::fmt::Display for ResolverType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ResolverType::Rust => write!(f, "Rust"),
+            ResolverType::Nodejs => write!(f, "Nodejs"),
         }
     }
 }
@@ -97,9 +100,9 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         url:
                             "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
                                 .to_string(),
-                        extra_headers: Some(BTreeMap::from_iter([
+                        extra_headers: BTreeMap::from_iter([
                             ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
-                        ])),
+                        ]),
                     },
                     prepublish: vec![PublishConfig {
                         command: "cargo".to_string(),
@@ -107,6 +110,25 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     }],
                     publish: vec![PublishConfig {
                         command: "cargo".to_string(),
+                        args: vec!["publish".to_string()].into(),
+                    }],
+                },
+            ),
+            ResolverType::Nodejs => (
+                ResolverTypeEnum::Nodejs,
+                ResolverConfig {
+                    pre_check: PreCheckConfig {
+                        url:
+                            "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+                                .to_string(),
+                        extra_headers: BTreeMap::new(),
+                    },
+                    prepublish: vec![PublishConfig {
+                        command: "npm".to_string(),
+                        args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
+                    }],
+                    publish: vec![PublishConfig {
+                        command: "npm".to_string(),
                         args: vec!["publish".to_string()].into(),
                     }],
                 },
@@ -126,6 +148,17 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Rust,
+                    });
+                });
+                Ok::<_, ResolveError>(acc)
+            }
+            ResolverType::Nodejs => {
+                let mut resolver = resolver::nodejs::NodejsResolver;
+                let packages = resolver.resolve_all(&target_dir)?;
+                packages.into_iter().for_each(|pkg| {
+                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
+                        path: pkg.path.clone(),
+                        resolver: resolver::ResolverType::Nodejs,
                     });
                 });
                 Ok::<_, ResolveError>(acc)

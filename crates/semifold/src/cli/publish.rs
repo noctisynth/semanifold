@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use clap::Parser;
 use colored::Colorize;
 use reqwest::{
@@ -131,20 +129,17 @@ pub(crate) async fn publish(
         );
         log::debug!("Pre-check URL: {}", &url);
         let client = reqwest::Client::new();
-        let headers = resolver_config
-            .pre_check
-            .extra_headers
-            .as_ref()
-            .unwrap_or(&BTreeMap::new())
-            .iter()
-            .try_fold(HeaderMap::new(), |mut acc, (key, value)| {
+        let headers = resolver_config.pre_check.extra_headers.iter().try_fold(
+            HeaderMap::new(),
+            |mut acc, (key, value)| {
                 let header_name = HeaderName::from_bytes(key.as_bytes())
                     .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
                 let header_value = HeaderValue::from_str(value)
                     .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
                 acc.insert(header_name, header_value);
                 Ok::<_, anyhow::Error>(acc)
-            })?;
+            },
+        )?;
         let resp = client.get(url).headers(headers).send().await?;
         log::debug!("Pre-check response: {:?}", &resp);
         if resp.status() == StatusCode::OK {

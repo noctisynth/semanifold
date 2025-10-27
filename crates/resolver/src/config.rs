@@ -29,7 +29,8 @@ pub struct PublishConfig {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PreCheckConfig {
     pub url: String,
-    pub extra_headers: Option<BTreeMap<String, String>>,
+    #[serde(default, rename = "extra-headers")]
+    pub extra_headers: BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

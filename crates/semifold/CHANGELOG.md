@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.4
+
+### New Features
+
+- [`a6229ae`](https://github.com/noctisynth/semifold/commit/a6229ae83fe10204bc5475320b15bc5e9edf66e7): Add help messages for package selection.
+- [`cdc749c`](https://github.com/noctisynth/semifold/commit/cdc749cab0e8e1f390f13f521b7be4041b663740): Support Nodejs workspace resolve and version bumps.
+
 ## v0.1.3
 
 ### New Features

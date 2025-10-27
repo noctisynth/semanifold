@@ -104,10 +104,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                             ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
                         ]),
                     },
-                    prepublish: vec![PublishConfig {
-                        command: "cargo".to_string(),
-                        args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
-                    }],
+                    prepublish: vec![],
                     publish: vec![PublishConfig {
                         command: "cargo".to_string(),
                         args: vec!["publish".to_string()].into(),
@@ -123,10 +120,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                                 .to_string(),
                         extra_headers: BTreeMap::new(),
                     },
-                    prepublish: vec![PublishConfig {
-                        command: "npm".to_string(),
-                        args: vec!["publish".to_string(), "--dry-run".to_string()].into(),
-                    }],
+                    prepublish: vec![],
                     publish: vec![PublishConfig {
                         command: "npm".to_string(),
                         args: vec!["publish".to_string()].into(),

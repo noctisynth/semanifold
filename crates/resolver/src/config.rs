@@ -22,7 +22,9 @@ pub struct PackageConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishConfig {
+    /// Executable command to run.
     pub command: String,
+    /// Arguments to pass to the command.
     pub args: Option<Vec<String>>,
 }
 
@@ -39,11 +41,14 @@ pub struct PreCheckConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResolverConfig {
+    /// Pre-check configuration.
     #[serde(rename = "pre-check")]
     pub pre_check: PreCheckConfig,
-    #[serde(default)]
+    /// Commands to run before publish.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prepublish: Vec<PublishConfig>,
-    #[serde(default)]
+    /// Commands to run for publish.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub publish: Vec<PublishConfig>,
 }
 

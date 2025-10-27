@@ -3,6 +3,7 @@
     "clippy",
     "dtolnay",
     "minijinja",
+    "napi",
     "octocrab",
     "pathdiff",
     "pathspec",
@@ -13,6 +14,7 @@
     "saphyr",
     "semif",
     "semifold",
+    "smif",
     "Swatinem",
     "thiserror",
     "userpass"

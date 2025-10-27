@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.5
+
+### New Features
+
+- [`ee97bad`](https://github.com/noctisynth/semifold/commit/ee97bad45819d73f59f30d36ce0b50b1b4b61e78): Allow default publish fields in config.
+- [`0171573`](https://github.com/noctisynth/semifold/commit/0171573c15463971538c85c801227145e4648e7d): Optimize empty config fields default serialization.
+
 ## v0.1.4
 
 ### New Features

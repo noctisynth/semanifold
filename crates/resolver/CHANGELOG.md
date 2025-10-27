@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4
+
+### New Features
+
+- [`4bf1183`](https://github.com/noctisynth/semifold/commit/4bf11839b609bd6610423ede224fc89923fde079): Support Nodejs workspace resolve and version bumps.
+
 ## v0.1.3
 
 ### Bug Fixes

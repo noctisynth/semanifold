@@ -48,17 +48,6 @@ struct HatchVersion {
     pub path: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct SetupCfg {
-    pub metadata: Option<SetupMetadata>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct SetupMetadata {
-    pub name: Option<String>,
-    pub version: Option<String>,
-}
-
 pub struct PythonResolver;
 
 impl PythonResolver {

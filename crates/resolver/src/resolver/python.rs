@@ -137,11 +137,10 @@ impl PythonResolver {
                     if let Some(val) = rest.trim().strip_prefix('=') {
                         name = Some(val.trim().to_string());
                     }
-                } else if let Some(rest) = trimmed.strip_prefix("version") {
-                    if let Some(val) = rest.trim().strip_prefix('=') {
+                } else if let Some(rest) = trimmed.strip_prefix("version")
+                    && let Some(val) = rest.trim().strip_prefix('=') {
                         version = Some(val.trim().to_string());
                     }
-                }
             }
         }
 
@@ -174,22 +173,18 @@ impl PythonResolver {
                 reason: e.to_string(),
             })?;
 
-        if let Some(project) = doc.get_mut("project") {
-            if let Some(project_table) = project.as_table_mut() {
+        if let Some(project) = doc.get_mut("project")
+            && let Some(project_table) = project.as_table_mut() {
                 project_table.insert("version", toml_edit::value(version));
             }
-        }
 
         // tool.poetry.version
-        if let Some(tool) = doc.get_mut("tool") {
-            if let Some(tool_table) = tool.as_table_mut() {
-                if let Some(poetry) = tool_table.get_mut("poetry") {
-                    if let Some(poetry_table) = poetry.as_table_mut() {
+        if let Some(tool) = doc.get_mut("tool")
+            && let Some(tool_table) = tool.as_table_mut()
+                && let Some(poetry) = tool_table.get_mut("poetry")
+                    && let Some(poetry_table) = poetry.as_table_mut() {
                         poetry_table.insert("version", toml_edit::value(version));
                     }
-                }
-            }
-        }
 
         std::fs::write(&pyproject_path, doc.to_string())?;
         Ok(())
@@ -312,8 +307,8 @@ impl PythonResolver {
         let mut deps = Vec::new();
 
         // PEP 621 Dependencies
-        if let Some(project) = pyproject.project {
-            if let Some(dependencies) = project.dependencies {
+        if let Some(project) = pyproject.project
+            && let Some(dependencies) = project.dependencies {
                 for dep in dependencies {
                     // "requests>=2.0.0" -> "requests"
                     if let Some(name) = dep.split(&['>', '<', '=', '~', '!'][..]).next() {
@@ -321,20 +316,17 @@ impl PythonResolver {
                     }
                 }
             }
-        }
 
         // Poetry Dependencies
-        if let Some(tool) = pyproject.tool {
-            if let Some(poetry) = tool.poetry {
-                if let Some(dependencies) = poetry.dependencies {
+        if let Some(tool) = pyproject.tool
+            && let Some(poetry) = tool.poetry
+                && let Some(dependencies) = poetry.dependencies {
                     for (name, _) in dependencies {
                         if name != "python" {
                             deps.push(name);
                         }
                     }
                 }
-            }
-        }
 
         Ok(deps)
     }
@@ -482,8 +474,8 @@ impl Resolver for PythonResolver {
             });
 
         packages.sort_by(|(a, a_cfg), (b, b_cfg)| {
-            if a_cfg.resolver == ResolverType::Python && b_cfg.resolver == ResolverType::Python {
-                if let (Some(a_deps), Some(b_deps)) = (cached_deps.get(a), cached_deps.get(b)) {
+            if a_cfg.resolver == ResolverType::Python && b_cfg.resolver == ResolverType::Python
+                && let (Some(a_deps), Some(b_deps)) = (cached_deps.get(a), cached_deps.get(b)) {
                     if a_deps.iter().any(|dep| dep == b) {
                         return std::cmp::Ordering::Greater;
                     }
@@ -491,7 +483,6 @@ impl Resolver for PythonResolver {
                         return std::cmp::Ordering::Less;
                     }
                 }
-            }
             std::cmp::Ordering::Equal
         });
 

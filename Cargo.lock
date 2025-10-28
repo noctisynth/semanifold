@@ -1869,7 +1869,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1906,9 +1906,8 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
- "anyhow",
  "glob",
  "log",
  "pathdiff",

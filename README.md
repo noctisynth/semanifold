@@ -60,6 +60,14 @@ Languages supported:
 - [ ] Java
 - [ ] Kotlin
 
+## 🧠 Inspiration
+
+Semifold was inspired by the great work from the following projects:
+
+[Changesets](https://github.com/changesets/changesets) — a simple and elegant changeset-based versioning workflow, mainly focused on JavaScript and npm monorepos.
+
+[Covector](https://github.com/jbolda/covector/) — a flexible multi-target release manager designed to support more complex ecosystems.
+
 ## 📄 License
 
 Semifold is licensed under the AGPL-3.0 License.

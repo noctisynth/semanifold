@@ -14,6 +14,7 @@ use semifold_resolver::{
 pub(crate) enum ResolverType {
     Rust,
     Nodejs,
+    Python,
 }
 
 impl From<ResolverType> for resolver::ResolverType {
@@ -21,6 +22,7 @@ impl From<ResolverType> for resolver::ResolverType {
         match value {
             ResolverType::Rust => resolver::ResolverType::Rust,
             ResolverType::Nodejs => resolver::ResolverType::Nodejs,
+            ResolverType::Python => resolver::ResolverType::Python,
         }
     }
 }
@@ -30,6 +32,7 @@ impl std::fmt::Display for ResolverType {
         match self {
             ResolverType::Rust => write!(f, "Rust"),
             ResolverType::Nodejs => write!(f, "Nodejs"),
+            ResolverType::Python => write!(f, "Python"),
         }
     }
 }
@@ -127,6 +130,21 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     }],
                 },
             ),
+            ResolverType::Python => (
+                ResolverTypeEnum::Python,
+                ResolverConfig {
+                    pre_check: PreCheckConfig {
+                        url:
+                            "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+                                .to_string(),
+                        extra_headers: BTreeMap::from_iter([
+                            ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
+                        ]),
+                    },
+                    prepublish: vec![],
+                    publish: vec![],
+                },
+            ),
         }
     }));
 
@@ -153,6 +171,17 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Nodejs,
+                    });
+                });
+                Ok::<_, ResolveError>(acc)
+            }
+            ResolverType::Python => {
+                let mut resolver = resolver::python::PythonResolver;
+                let packages = resolver.resolve_all(&target_dir)?;
+                packages.into_iter().for_each(|pkg| {
+                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
+                        path: pkg.path.clone(),
+                        resolver: resolver::ResolverType::Python,
                     });
                 });
                 Ok::<_, ResolveError>(acc)

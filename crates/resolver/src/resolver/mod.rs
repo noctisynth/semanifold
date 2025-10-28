@@ -11,6 +11,7 @@ use core::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod nodejs;
+pub mod python;
 pub mod rust;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,6 +26,7 @@ pub struct ResolvedPackage {
 pub enum ResolverType {
     Rust,
     Nodejs,
+    Python,
 }
 
 impl fmt::Display for ResolverType {
@@ -32,6 +34,7 @@ impl fmt::Display for ResolverType {
         match self {
             ResolverType::Rust => write!(f, "rust"),
             ResolverType::Nodejs => write!(f, "nodejs"),
+            ResolverType::Python => write!(f, "python"),
         }
     }
 }
@@ -41,6 +44,7 @@ impl ResolverType {
         match self {
             ResolverType::Rust => Box::new(rust::RustResolver),
             ResolverType::Nodejs => Box::new(nodejs::NodejsResolver),
+            ResolverType::Python => Box::new(python::PythonResolver),
         }
     }
 }

@@ -4,7 +4,7 @@ use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semifold_resolver::{context::Context, resolver, utils};
+use semifold_resolver::{changeset::BumpLevel, context::Context, resolver, utils};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Status {
@@ -29,9 +29,21 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let changesets = resolver::get_changesets(ctx)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
 
+    println!(
+        "{}\n",
+        t!(
+            "cli.status.changesets",
+            count = changesets.len().to_string().bold()
+        )
+    );
+
     let mut bump_map = HashMap::new();
     for (package_name, package_config) in &config.packages {
         let level = utils::get_bump_level(&changesets, package_name);
+        if matches!(level, BumpLevel::Unchanged) {
+            continue;
+        }
+
         let mut resolver = package_config.resolver.get_resolver();
         let resolved_package = resolver.resolve(&root, package_config)?;
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
@@ -44,13 +56,20 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
                 bumped_version.clone(),
             ),
         );
+    }
 
-        println!(
-            "{:name_width$} {} → {}",
-            package_name.cyan(),
-            resolved_package.version.yellow(),
-            bumped_version.to_string().green()
-        );
+    if bump_map.is_empty() {
+        println!("{}", t!("cli.status.no_packages"));
+    } else {
+        println!("{}", t!("cli.status.packages"));
+        for (package_name, (_, resolved_version, bumped_version)) in &bump_map {
+            println!(
+                "{:name_width$} {} → {}",
+                package_name.cyan().bold(),
+                resolved_version.yellow(),
+                bumped_version.to_string().green()
+            );
+        }
     }
 
     if !is_ci {

@@ -27,3 +27,8 @@ tags = "是否添加默认标签到配置？"
 base_branch = "要使用的基础分支？"
 release_branch = "要使用的发布分支？"
 write_ci = "是否写入 GitHub Actions 工作流？"
+
+[cli.status]
+changesets = "共找到 %{count} 个变更集"
+packages = "以下包将被提升："
+no_packages = "没有包需要提升"

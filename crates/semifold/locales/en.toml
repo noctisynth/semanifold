@@ -27,3 +27,8 @@ tags = "Add default tags to config?"
 base_branch = "What is the base branch?"
 release_branch = "What is the release branch?"
 write_ci = "Write GitHub Actions workflows?"
+
+[cli.status]
+changesets = "%{count} changesets found"
+packages = "The following packages will be bumped:"
+no_packages = "No packages to bump"

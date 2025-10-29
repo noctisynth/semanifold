@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.7
+
+### New Features
+
+- [`979e7de`](https://github.com/noctisynth/semifold/commit/979e7def35be9c1dd527822ab129f534eacec6ef): Support trigger post version commands after versioning.
+
 ## v0.1.6
 
 ### New Features

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.9
+
+### Bug Fixes
+
+- [`6aa9bdf`](https://github.com/noctisynth/semifold/commit/6aa9bdfed57c03ca00bd39d4327409d8ac5087fc): Post version commands should run after all versioning tasks done.
+- [`b95d9a5`](https://github.com/noctisynth/semifold/commit/b95d9a5714bb7bd0d4e66a688b0edeb51a34b812): Post version commands run for every package.
+
 ## v0.1.8
 
 ### Bug Fixes

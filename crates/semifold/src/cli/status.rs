@@ -20,8 +20,16 @@ pub(crate) struct Repository {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Branch {
+    #[serde(rename = "ref")]
+    pub ref_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct PullRequest {
     pub number: u64,
+    pub head: Branch,
+    pub base: Branch,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -108,25 +116,18 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
     let event: GitHubEvent = serde_json::from_str(&event_data)?;
 
-    // let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
-    //     "GITHUB_REPOSITORY is not in the format owner/repo"
-    // ))?;
     let owner = &event.repository.owner.login;
     let repo_name = &event.repository.name;
-    // let pr_number = ref_name
-    //     .split_once('/')
-    //     .ok_or_else(|| anyhow::anyhow!("GITHUB_REF_NAME is not in the format <pr_number>/merge"))?
-    //     .0
-    //     .parse::<u64>()?;
     let pr_number = event.pull_request.number;
+    let head_ref = event.pull_request.head.ref_name;
+    let base_ref = event.pull_request.base.ref_name;
 
     let octocrab = Octocrab::builder()
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;
 
-    // let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
-    // log::debug!("is_pull_request: {}", is_pull_request);
-    if status.comment {
+    let is_matched = base_ref == config.branches.base && head_ref != config.branches.base;
+    if status.comment && is_matched {
         let issues = octocrab.issues(owner, repo_name);
 
         let comments = issues.list_comments(pr_number).send().await?.take_items();

@@ -22,7 +22,6 @@ pub(crate) struct Repository {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct PullRequest {
     pub number: u64,
-    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

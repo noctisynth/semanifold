@@ -11,11 +11,13 @@ pub fn format_line(
     changeset: &changeset::Changeset,
     repo_info: &Option<context::RepoInfo>,
     pr_info: &Option<PrInfo>,
-    commit_hash: &str,
+    commit_hash: &Option<String>,
 ) -> String {
     let mut line = String::from("- ");
 
-    if let Some(repo_info) = repo_info.as_ref() {
+    if let Some(repo_info) = repo_info.as_ref()
+        && let Some(commit_hash) = commit_hash
+    {
         let commit_url = format!(
             "https://github.com/{}/{}/commit/{}",
             repo_info.owner, repo_info.repo_name, commit_hash
@@ -61,12 +63,11 @@ pub async fn generate_changelog(
                 path: changeset_path.to_path_buf(),
                 reason: "Changeset path is not under repo root".to_string(),
             })?;
-        let commit_info =
-            utils::find_first_commit_for_path(repo, &rel_path).ok_or(ResolveError::GitError {
-                message: format!("Failed to find commit for path: {:?}", rel_path),
-            })?;
-        let commit_hash = commit_info.oid.to_string();
-        let pr_info = if let Some(repo_info) = ctx.repo_info.as_ref() {
+        let commit_info = utils::find_first_commit_for_path(repo, &rel_path);
+        let commit_hash = commit_info.as_ref().map(|c| c.oid.to_string());
+        let pr_info = if let Some(repo_info) = ctx.repo_info.as_ref()
+            && let Some(commit_info) = commit_info.as_ref()
+        {
             utils::query_pr_for_commit(
                 repo_info.owner.as_str(),
                 repo_info.repo_name.as_str(),

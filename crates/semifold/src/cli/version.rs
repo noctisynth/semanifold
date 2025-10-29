@@ -1,6 +1,10 @@
-use std::{collections::HashMap, process::Command};
+use std::{
+    collections::HashMap,
+    process::{Command, Stdio},
+};
 
 use clap::Parser;
+use colored::Colorize;
 use git2::Repository;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
@@ -34,7 +38,7 @@ pub(crate) async fn version(
 
         // Skip unchanged packages
         if matches!(level, BumpLevel::Unchanged) {
-            log::debug!("{} is unchanged, skip", package_name);
+            log::warn!("{} is unchanged, skip versioning", package_name.cyan());
             continue;
         }
 
@@ -65,7 +69,7 @@ pub(crate) async fn version(
                 for command in &resolver_config.post_version {
                     Command::new(&command.command)
                         .args(&command.args.clone().unwrap_or_default())
-                        .arg(&bumped_version.to_string())
+                        .stdout(Stdio::inherit())
                         .status()?;
                 }
             } else {

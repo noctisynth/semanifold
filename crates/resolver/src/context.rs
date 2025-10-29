@@ -86,4 +86,11 @@ impl Context {
             .as_ref()
             .and_then(|c| c.resolver.get(&resolver_type))
     }
+
+    pub fn get_resolvers(&self) -> Vec<resolver::ResolverType> {
+        self.config
+            .as_ref()
+            .map(|c| c.resolver.keys().cloned().collect())
+            .unwrap_or_default()
+    }
 }

@@ -20,6 +20,27 @@ pub(crate) struct Version {
     dry_run: bool,
 }
 
+pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
+    let resolvers = ctx.get_resolvers();
+    for resolver_type in resolvers {
+        let resolver_config = ctx.get_resolver_config(resolver_type);
+        if let Some(resolver_config) = resolver_config {
+            for command in &resolver_config.post_version {
+                Command::new(&command.command)
+                    .args(command.args.clone().unwrap_or_default())
+                    .stdout(Stdio::inherit())
+                    .status()?;
+            }
+        } else {
+            log::warn!(
+                "Failed to run post version command for resolver: {}",
+                resolver_type
+            );
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn version(
     ctx: &Context,
     changesets: &[Changeset],
@@ -63,21 +84,6 @@ pub(crate) async fn version(
                 &changelog,
             )
             .await?;
-
-            let resolver_config = ctx.get_resolver_config(package_config.resolver);
-            if let Some(resolver_config) = resolver_config {
-                for command in &resolver_config.post_version {
-                    Command::new(&command.command)
-                        .args(&command.args.clone().unwrap_or_default())
-                        .stdout(Stdio::inherit())
-                        .status()?;
-                }
-            } else {
-                log::warn!(
-                    "Failed to get resolver config for {}",
-                    package_config.resolver
-                );
-            }
         }
     }
 
@@ -99,6 +105,7 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     }
 
     version(ctx, &changesets, opts.dry_run).await?;
+    post_version(ctx)?;
 
     Ok(())
 }

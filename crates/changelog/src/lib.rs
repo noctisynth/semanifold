@@ -71,7 +71,7 @@ pub async fn generate_changelog(
             utils::query_pr_for_commit(
                 repo_info.owner.as_str(),
                 repo_info.repo_name.as_str(),
-                &commit_info,
+                commit_info,
             )
             .await
             .map_err(|e| ResolveError::GitHubError {

@@ -20,8 +20,9 @@ pub struct PackageConfig {
     pub resolver: resolver::ResolverType,
 }
 
+/// Configuration for a command to run.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PublishConfig {
+pub struct CommandConfig {
     /// Executable command to run.
     pub command: String,
     /// Arguments to pass to the command.
@@ -46,10 +47,17 @@ pub struct ResolverConfig {
     pub pre_check: PreCheckConfig,
     /// Commands to run before publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub prepublish: Vec<PublishConfig>,
+    pub prepublish: Vec<CommandConfig>,
     /// Commands to run for publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub publish: Vec<PublishConfig>,
+    pub publish: Vec<CommandConfig>,
+    /// Commands to run after versioning.
+    #[serde(
+        default,
+        rename = "post-version",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub post_version: Vec<CommandConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

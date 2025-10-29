@@ -76,7 +76,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             continue;
         }
 
-        let mut resolver = package_config.resolver.get_resolver();
+        let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(&root, package_config)?;
         let bumped_version = utils::bump_version(&resolved_package.version, level)?;
 

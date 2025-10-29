@@ -103,8 +103,7 @@ pub(crate) async fn publish(
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
     let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
     for resolver in config.resolver.keys() {
-        resolver
-            .get_resolver()
+        ctx.create_resolver(*resolver)
             .sort_packages(&root, &mut sorted_packages)?;
     }
     log::debug!("Sorted packages: {:?}", &sorted_packages);
@@ -119,7 +118,7 @@ pub(crate) async fn publish(
             ))?;
         log::debug!("Resolver config: {:?}", &resolver_config);
 
-        let mut resolver = package.resolver.get_resolver();
+        let mut resolver = ctx.create_resolver(package.resolver);
         let resolved_package = resolver.resolve(&root, package)?;
         log::debug!("Resolved package: {}", &resolved_package.name);
 

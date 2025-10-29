@@ -39,16 +39,6 @@ impl fmt::Display for ResolverType {
     }
 }
 
-impl ResolverType {
-    pub fn get_resolver(self) -> Box<dyn Resolver> {
-        match self {
-            ResolverType::Rust => Box::new(rust::RustResolver),
-            ResolverType::Nodejs => Box::new(nodejs::NodejsResolver),
-            ResolverType::Python => Box::new(python::PythonResolver),
-        }
-    }
-}
-
 pub trait Resolver {
     /// Resolve a package
     fn resolve(

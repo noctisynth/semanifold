@@ -66,4 +66,24 @@ impl Context {
             .as_ref()
             .is_some_and(|c| c.packages.contains_key(package))
     }
+
+    pub fn create_resolver(
+        &self,
+        resolver_type: resolver::ResolverType,
+    ) -> Box<dyn resolver::Resolver> {
+        match resolver_type {
+            resolver::ResolverType::Rust => Box::new(resolver::rust::RustResolver),
+            resolver::ResolverType::Nodejs => Box::new(resolver::nodejs::NodejsResolver),
+            resolver::ResolverType::Python => Box::new(resolver::python::PythonResolver),
+        }
+    }
+
+    pub fn get_resolver_config(
+        &self,
+        resolver_type: resolver::ResolverType,
+    ) -> Option<&config::ResolverConfig> {
+        self.config
+            .as_ref()
+            .and_then(|c| c.resolver.get(&resolver_type))
+    }
 }

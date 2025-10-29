@@ -4,7 +4,7 @@ use clap::{Args, ValueEnum};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_resolver::{
-    config::{self, BranchesConfig, PackageConfig, PreCheckConfig, PublishConfig, ResolverConfig},
+    config::{self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ResolverConfig},
     context,
     error::ResolveError,
     resolver::{self, Resolver, ResolverType as ResolverTypeEnum},
@@ -108,9 +108,13 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         ]),
                     },
                     prepublish: vec![],
-                    publish: vec![PublishConfig {
+                    publish: vec![CommandConfig {
                         command: "cargo".to_string(),
                         args: vec!["publish".to_string()].into(),
+                    }],
+                    post_version: vec![CommandConfig {
+                        command: "cargo".to_string(),
+                        args: vec!["check".to_string()].into(),
                     }],
                 },
             ),
@@ -124,10 +128,11 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         extra_headers: BTreeMap::new(),
                     },
                     prepublish: vec![],
-                    publish: vec![PublishConfig {
+                    publish: vec![CommandConfig {
                         command: "npm".to_string(),
                         args: vec!["publish".to_string()].into(),
                     }],
+                    post_version: vec![]
                 },
             ),
             ResolverType::Python => (
@@ -143,6 +148,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     },
                     prepublish: vec![],
                     publish: vec![],
+                    post_version: vec![]
                 },
             ),
         }

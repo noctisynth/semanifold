@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, process::Command};
 
 use clap::Parser;
 use git2::Repository;
@@ -28,7 +28,7 @@ pub(crate) async fn version(
 
     for (package_name, package_config) in &config.packages {
         log::debug!("Processing package: {}", package_name);
-        let mut resolver = package_config.resolver.get_resolver();
+        let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(root, package_config)?;
         let level = utils::get_bump_level(changesets, package_name);
 
@@ -59,6 +59,21 @@ pub(crate) async fn version(
                 &changelog,
             )
             .await?;
+
+            let resolver_config = ctx.get_resolver_config(package_config.resolver);
+            if let Some(resolver_config) = resolver_config {
+                for command in &resolver_config.post_version {
+                    Command::new(&command.command)
+                        .args(&command.args.clone().unwrap_or_default())
+                        .arg(&bumped_version.to_string())
+                        .status()?;
+                }
+            } else {
+                log::warn!(
+                    "Failed to get resolver config for {}",
+                    package_config.resolver
+                );
+            }
         }
     }
 

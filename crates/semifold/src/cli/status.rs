@@ -85,6 +85,10 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     log::debug!("GITHUB_HEAD_REF: {}", &head_ref);
     log::debug!("GITHUB_BASE_REF: {}", &base_ref);
     log::debug!("GITHUB_REPOSITORY: {}", &github_repo);
+    let path = env::var("GITHUB_EVENT_PATH").expect("no GITHUB_EVENT_PATH");
+    let data = tokio::fs::read_to_string(&path).await?;
+    log::debug!("GITHUB_EVENT_PATH: {}", &path);
+    log::debug!("GITHUB_EVENT_PATH data: {}", &data);
 
     let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
         "GITHUB_REPOSITORY is not in the format owner/repo"

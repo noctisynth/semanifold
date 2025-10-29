@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4
+
+### New Features
+
+- [`450054a`](https://github.com/noctisynth/semifold/commit/450054ad8b496e1634553589d15815b0d8c8048a): add Python support to resolver ([#17](https://github.com/noctisynth/semifold/pull/17) by @HsiangNianian)
+
 ## v0.1.3
 
 ### New Features

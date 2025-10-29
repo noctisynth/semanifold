@@ -60,7 +60,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let repo = Repository::open(ctx.repo_root.as_ref().unwrap())?;
     let mut git_config = repo.config()?;
     git_config.set_str("user.name", "github-actions[bot]")?;
-    git_config.set_str("user.email", "github-actions@users.noreply.github.com")?;
+    git_config.set_str("user.email", "github-actions[bot]@users.noreply.github.com")?;
 
     let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
         "GITHUB_REPOSITORY is not in the format owner/repo"

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.7
+
+### New Features
+
+- [`979e7de`](https://github.com/noctisynth/semifold/commit/979e7def35be9c1dd527822ab129f534eacec6ef): Support trigger post version commands after versioning.
+
+### Bug Fixes
+
+- [`353f7ee`](https://github.com/noctisynth/semifold/commit/353f7ee50dc81ca9a6f2e67383a9b5178ed5834f): Fix email of CI git config committer.
+- [`979e7de`](https://github.com/noctisynth/semifold/commit/979e7def35be9c1dd527822ab129f534eacec6ef): Fix Git username config, use `github-actions[bot]` instead.
+
 ## v0.1.6
 
 ### Bug Fixes

@@ -10,6 +10,7 @@ use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
 use semifold_resolver::{
     changeset::{BumpLevel, Changeset},
+    config::ResolverConfig,
     context::Context,
     resolver, utils,
 };
@@ -21,11 +22,11 @@ pub(crate) struct Version {
 }
 
 pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
-    let resolvers = ctx.get_resolvers();
-    for resolver_type in resolvers {
-        let resolver_config = ctx.get_resolver_config(resolver_type);
-        if let Some(resolver_config) = resolver_config {
-            for command in &resolver_config.post_version {
+    let packages = ctx.get_packages();
+    for (package_name, package_config) in packages {
+        let resolver_config = ctx.get_resolver_config(package_config.resolver);
+        if let Some(ResolverConfig { post_version, .. }) = &resolver_config {
+            for command in post_version {
                 Command::new(&command.command)
                     .args(command.args.clone().unwrap_or_default())
                     .stdout(Stdio::inherit())
@@ -33,8 +34,8 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
             }
         } else {
             log::warn!(
-                "Failed to run post version command for resolver: {}",
-                resolver_type
+                "Failed to get post version commands for package: {}",
+                package_name
             );
         }
     }

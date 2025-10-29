@@ -93,4 +93,11 @@ impl Context {
             .map(|c| c.resolver.keys().cloned().collect())
             .unwrap_or_default()
     }
+
+    pub fn get_packages(&self) -> Vec<(&String, &config::PackageConfig)> {
+        self.config
+            .as_ref()
+            .map(|c| c.packages.iter().collect())
+            .unwrap_or_default()
+    }
 }

@@ -66,9 +66,8 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         "GITHUB_REPOSITORY is not in the format owner/repo"
     ))?;
 
-    let octocrab = Octocrab::builder()
-        .personal_token(env::var("GITHUB_TOKEN")?)
-        .build()?;
+    let github_token = env::var("GITHUB_TOKEN").context("GITHUB_TOKEN is not set")?;
+    let octocrab = Octocrab::builder().personal_token(&*github_token).build()?;
 
     let is_base_branch = ref_name == config.branches.base;
     if !is_base_branch {
@@ -112,13 +111,14 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         &[&parent_commit],
     )?;
 
-    force_push_release(&repo, &env::var("GITHUB_TOKEN")?, release_branch)?;
+    force_push_release(&repo, &github_token, release_branch)?;
 
+    let head = format!("{}:{}", owner, release_branch);
     let pulls = octocrab.pulls(owner, repo_name);
     let existing_prs = pulls
         .list()
         .state(params::State::Open)
-        .head(release_branch)
+        .head(head)
         .base(base_branch)
         .send()
         .await?

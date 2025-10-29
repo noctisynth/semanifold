@@ -1886,6 +1886,8 @@ dependencies = [
  "saphyr",
  "semifold-changelog",
  "semifold-resolver",
+ "serde",
+ "serde_json",
  "sys-locale",
  "tokio",
  "toml_edit 0.23.7",

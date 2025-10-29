@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
       - name: Setup Rust

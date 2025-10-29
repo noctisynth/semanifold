@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.6
+
+### Bug Fixes
+
+- [`baa3816`](https://github.com/noctisynth/semifold/commit/baa3816ad6e4312912d368fda83d848b83db20c3): Fix env issue due to actions triggered by `pull_request_target`. ([#19](https://github.com/noctisynth/semifold/pull/19) by @fu050409)
+- [`6a82ae3`](https://github.com/noctisynth/semifold/commit/6a82ae3792e0983f4ecd792aaee169d052f8af54): Fix filter pull requests using GitHub API.
+
+### New Features
+
+- [`9674279`](https://github.com/noctisynth/semifold/commit/96742792d4fc8604651feb212dd3f578c2635c16): Optimize status command output message.
+- [`450054a`](https://github.com/noctisynth/semifold/commit/450054ad8b496e1634553589d15815b0d8c8048a): add Python support to resolver ([#17](https://github.com/noctisynth/semifold/pull/17) by @HsiangNianian)
+
 ## v0.1.5
 
 ### New Features

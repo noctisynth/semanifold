@@ -1,10 +1,8 @@
-name: Status
+name: Semifold Status
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
     branches: [main]
-  # pull_request_target:
-  #   types: [opened, synchronize, reopened, ready_for_review]
-  #   branches: [main]
 
 permissions:
   contents: write
@@ -28,7 +26,7 @@ jobs:
           components: clippy, rustfmt
       - name: Build
         run: cargo build --workspace
-      - name: Status
+      - name: Semifold Status
         run: cargo run --bin semifold status --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   status:
-    name: Semifold CI
+    name: Version or Publish
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -122,6 +122,12 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let head_ref = event.pull_request.head.ref_name;
     let base_ref = event.pull_request.base.ref_name;
 
+    log::debug!("owner: {}", owner);
+    log::debug!("repo_name: {}", repo_name);
+    log::debug!("pr_number: {}", pr_number);
+    log::debug!("head_ref: {}", head_ref);
+    log::debug!("base_ref: {}", base_ref);
+
     let octocrab = Octocrab::builder()
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;

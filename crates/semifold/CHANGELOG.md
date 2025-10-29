@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.8
+
+### Bug Fixes
+
+- [`08b8a47`](https://github.com/noctisynth/semifold/commit/08b8a470f84fdaa2b32b8392b1b4652478023d4f): Fix auto added args for post version commands.
+
+### New Features
+
+- [`08b8a47`](https://github.com/noctisynth/semifold/commit/08b8a470f84fdaa2b32b8392b1b4652478023d4f): Support local versioning.
+
 ## v0.1.7
 
 ### New Features

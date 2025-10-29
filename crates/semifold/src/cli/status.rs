@@ -1,10 +1,35 @@
 use std::{collections::HashMap, env};
 
+use anyhow::Context as _;
 use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
 use semifold_resolver::{changeset::BumpLevel, context::Context, resolver, utils};
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct RepoOwner {
+    pub login: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct Repository {
+    pub name: String,
+    pub owner: RepoOwner,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct PullRequest {
+    pub number: u64,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct GitHubEvent {
+    pub repository: Repository,
+    pub pull_request: PullRequest,
+}
 
 #[derive(Parser, Debug)]
 pub(crate) struct Status {
@@ -76,36 +101,33 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let base_ref = env::var("GITHUB_BASE_REF").unwrap_or_default();
-    let head_ref = env::var("GITHUB_HEAD_REF").unwrap_or_default();
-    let ref_name = env::var("GITHUB_REF_NAME").unwrap_or_default();
-    let github_repo = env::var("GITHUB_REPOSITORY")?;
+    let path = env::var("GITHUB_EVENT_PATH").context("no GITHUB_EVENT_PATH")?;
+    let event_data = tokio::fs::read_to_string(&path).await?;
 
-    log::debug!("GITHUB_REF_NAME: {}", &ref_name);
-    log::debug!("GITHUB_HEAD_REF: {}", &head_ref);
-    log::debug!("GITHUB_BASE_REF: {}", &base_ref);
-    log::debug!("GITHUB_REPOSITORY: {}", &github_repo);
-    let path = env::var("GITHUB_EVENT_PATH").expect("no GITHUB_EVENT_PATH");
-    let data = tokio::fs::read_to_string(&path).await?;
     log::debug!("GITHUB_EVENT_PATH: {}", &path);
-    log::debug!("GITHUB_EVENT_PATH data: {}", &data);
+    log::debug!("GITHUB_EVENT_PATH data: {}", &event_data);
 
-    let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
-        "GITHUB_REPOSITORY is not in the format owner/repo"
-    ))?;
-    let pr_number = ref_name
-        .split_once('/')
-        .ok_or_else(|| anyhow::anyhow!("GITHUB_REF_NAME is not in the format <pr_number>/merge"))?
-        .0
-        .parse::<u64>()?;
+    let event: GitHubEvent = serde_json::from_str(&event_data)?;
+
+    // let (owner, repo_name) = github_repo.split_once('/').ok_or(anyhow::anyhow!(
+    //     "GITHUB_REPOSITORY is not in the format owner/repo"
+    // ))?;
+    let owner = &event.repository.owner.login;
+    let repo_name = &event.repository.name;
+    // let pr_number = ref_name
+    //     .split_once('/')
+    //     .ok_or_else(|| anyhow::anyhow!("GITHUB_REF_NAME is not in the format <pr_number>/merge"))?
+    //     .0
+    //     .parse::<u64>()?;
+    let pr_number = event.pull_request.number;
 
     let octocrab = Octocrab::builder()
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;
 
-    let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
-    log::debug!("is_pull_request: {}", is_pull_request);
-    if status.comment && is_pull_request {
+    // let is_pull_request = base_ref == config.branches.base && head_ref != config.branches.base;
+    // log::debug!("is_pull_request: {}", is_pull_request);
+    if status.comment {
         let issues = octocrab.issues(owner, repo_name);
 
         let comments = issues.list_comments(pr_number).send().await?.take_items();

@@ -90,6 +90,7 @@ pub(crate) async fn version(
 
     if !dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
+        post_version(ctx)?;
     }
     Ok(changelogs_map)
 }
@@ -106,7 +107,6 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     }
 
     version(ctx, &changesets, opts.dry_run).await?;
-    post_version(ctx)?;
 
     Ok(())
 }

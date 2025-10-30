@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.10
+
+### New Features
+
+- [`235d5f0`](https://github.com/noctisynth/semifold/commit/235d5f0e94b09094abb87caacd93bda46875121a): Support customize standard outputs for `stdout` and `stderr`.
+
+### Bug Fixes
+
+- [`717539f`](https://github.com/noctisynth/semifold/commit/717539f37698d4a8383e21311730bcfa611885e9): Run post version commands in ci environments.
+
 ## v0.1.9
 
 ### Bug Fixes

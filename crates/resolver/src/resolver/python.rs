@@ -302,9 +302,9 @@ impl PythonResolver {
         ];
 
         for file_path in &version_file_paths {
-            if file_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(file_path) {
-                    if let Some(version) = self.extract_version_from_content(&content) {
+            if file_path.exists()
+                && let Ok(content) = std::fs::read_to_string(file_path)
+                    && let Some(version) = self.extract_version_from_content(&content) {
                         log::debug!(
                             "Extracted version '{}' from {}",
                             version,
@@ -312,41 +312,37 @@ impl PythonResolver {
                         );
                         return Ok(version);
                     }
-                }
-            }
         }
 
         // 尝试从 Cargo.toml 获取版本（用于 maturin/PyO3 项目）
         let cargo_toml_path = root.join(pkg_path).join("Cargo.toml");
         if cargo_toml_path.exists() {
             log::debug!("Found Cargo.toml, attempting to extract version for maturin/PyO3 project");
-            if let Ok(cargo_str) = std::fs::read_to_string(&cargo_toml_path) {
-                if let Ok(cargo_toml) = toml_edit::de::from_str::<CargoToml>(&cargo_str) {
-                    if let Some(version) = cargo_toml.package.and_then(|p| p.version) {
+            if let Ok(cargo_str) = std::fs::read_to_string(&cargo_toml_path)
+                && let Ok(cargo_toml) = toml_edit::de::from_str::<CargoToml>(&cargo_str)
+                    && let Some(version) = cargo_toml.package.and_then(|p| p.version) {
                         log::debug!(
                             "Extracted version '{}' from Cargo.toml for maturin/PyO3 project",
                             version
                         );
                         return Ok(version);
                     }
-                }
-            }
         }
 
         // 尝试从 Hatch 配置中获取 version.path
         let pyproject_path = root.join(pkg_path).join("pyproject.toml");
-        if pyproject_path.exists() {
-            if let Ok(pyproject_str) = std::fs::read_to_string(&pyproject_path) {
-                if let Ok(pyproject) = toml_edit::de::from_str::<PyProjectToml>(&pyproject_str) {
-                    if let Some(tool) = pyproject.tool
+        if pyproject_path.exists()
+            && let Ok(pyproject_str) = std::fs::read_to_string(&pyproject_path)
+                && let Ok(pyproject) = toml_edit::de::from_str::<PyProjectToml>(&pyproject_str)
+                    && let Some(tool) = pyproject.tool
                         && let Some(hatch) = tool.hatch
                         && let Some(version_config) = hatch.version
                         && let Some(version_path) = version_config.path
                     {
                         let hatch_version_file = root.join(pkg_path).join(version_path);
-                        if hatch_version_file.exists() {
-                            if let Ok(content) = std::fs::read_to_string(&hatch_version_file) {
-                                if let Some(version) = self.extract_version_from_content(&content) {
+                        if hatch_version_file.exists()
+                            && let Ok(content) = std::fs::read_to_string(&hatch_version_file)
+                                && let Some(version) = self.extract_version_from_content(&content) {
                                     log::debug!(
                                         "Extracted version '{}' from Hatch version.path: {}",
                                         version,
@@ -354,12 +350,7 @@ impl PythonResolver {
                                     );
                                     return Ok(version);
                                 }
-                            }
-                        }
                     }
-                }
-            }
-        }
 
         Err(ResolveError::InvalidConfig {
             path: root.join(pkg_path).to_path_buf(),

@@ -4,7 +4,7 @@ use std::{
 };
 
 use saphyr::LoadableYamlNode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ResolverConfig},
@@ -13,7 +13,7 @@ use crate::{
     utils,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PackageJson {
     pub name: String,
@@ -22,6 +22,7 @@ struct PackageJson {
     pub dependencies: Option<BTreeMap<String, String>>,
     pub dev_dependencies: Option<BTreeMap<String, String>>,
     pub peer_dependencies: Option<BTreeMap<String, String>>,
+    pub private: Option<bool>,
 }
 
 pub struct NodejsResolver;
@@ -49,6 +50,7 @@ impl Resolver for NodejsResolver {
             name: package_json.name,
             version: package_json.version,
             path: pkg_config.path.clone(),
+            private: package_json.private.unwrap_or(false),
         };
         Ok(package)
     }
@@ -244,10 +246,17 @@ impl Resolver for NodejsResolver {
         dry_run: bool,
     ) -> Result<(), ResolveError> {
         if dry_run {
-            log::info!(
-                "Dry run: Would publish {} to version {}",
+            log::warn!(
+                "Skip publish {} {} due to dry run",
                 package.name,
-                package.version
+                format!("v{}", package.version)
+            );
+            return Ok(());
+        } else if package.private {
+            log::warn!(
+                "Skip publish {} {} due to private flag",
+                package.name,
+                format!("v{}", package.version)
             );
             return Ok(());
         }

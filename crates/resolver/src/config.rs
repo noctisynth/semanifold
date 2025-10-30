@@ -29,6 +29,12 @@ pub enum StdioType {
     Null,
 }
 
+impl StdioType {
+    pub fn is_inherit(&self) -> bool {
+        matches!(self, Self::Inherit)
+    }
+}
+
 impl From<StdioType> for std::process::Stdio {
     fn from(value: StdioType) -> Self {
         match value {
@@ -54,10 +60,10 @@ pub struct CommandConfig {
     )]
     pub extra_env: BTreeMap<String, String>,
     /// Type of standard output to use.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StdioType::is_inherit")]
     pub stdout: StdioType,
     /// Type of standard error to use.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "StdioType::is_inherit")]
     pub stderr: StdioType,
 }
 

@@ -19,6 +19,8 @@ pub struct ResolvedPackage {
     pub name: String,
     pub version: String,
     pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub private: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

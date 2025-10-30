@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ResolverConfig},
@@ -12,18 +12,19 @@ use crate::{
     utils,
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct CargoPackage {
     pub name: String,
     pub version: String,
+    pub publish: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct CargoWorkspace {
     pub members: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 struct CargoToml {
     pub package: Option<CargoPackage>,
     pub workspace: Option<CargoWorkspace>,
@@ -58,6 +59,7 @@ impl Resolver for RustResolver {
             name: cargo_pkg_config.name,
             version: cargo_pkg_config.version,
             path: pkg_config.path.clone(),
+            private: cargo_pkg_config.publish.unwrap_or(false),
         };
         Ok(package)
     }
@@ -226,10 +228,17 @@ impl Resolver for RustResolver {
         dry_run: bool,
     ) -> Result<(), ResolveError> {
         if dry_run {
-            log::info!(
-                "Dry run: Would publish {} to version {}",
+            log::warn!(
+                "Skip publish {} {} due to dry run",
                 package.name,
-                package.version
+                format!("v{}", package.version)
+            );
+            return Ok(());
+        } else if package.private {
+            log::warn!(
+                "Skip publish {} {} due to private flag",
+                package.name,
+                format!("v{}", package.version)
             );
             return Ok(());
         }

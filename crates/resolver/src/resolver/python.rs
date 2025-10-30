@@ -101,6 +101,7 @@ impl PythonResolver {
             name,
             version,
             path: pkg_path.to_path_buf(),
+            private: false,
         })
     }
 
@@ -155,6 +156,7 @@ impl PythonResolver {
             name,
             version,
             path: pkg_path.to_path_buf(),
+            private: false,
         })
     }
 
@@ -503,10 +505,17 @@ impl Resolver for PythonResolver {
         dry_run: bool,
     ) -> Result<(), ResolveError> {
         if dry_run {
-            log::info!(
-                "Dry run: Would publish {} to version {}",
+            log::warn!(
+                "Skip publish {} {} due to dry run",
                 package.name,
-                package.version
+                format!("v{}", package.version)
+            );
+            return Ok(());
+        } else if package.private {
+            log::warn!(
+                "Skip publish {} {} due to private flag",
+                package.name,
+                format!("v{}", package.version)
             );
             return Ok(());
         }

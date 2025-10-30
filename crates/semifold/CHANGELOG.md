@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.11
+
+### New Features
+
+- [`bbe6419`](https://github.com/noctisynth/semifold/commit/bbe6419bba673fc0e8a1ab7957d62fd0956b27ed): Skip publish private packages.
+
+### Performance Improvements
+
+- [`25e643d`](https://github.com/noctisynth/semifold/commit/25e643d3c636c409350ec3214ff148558ee486dc): Use `generate-lockfile --offline` instead of `check` to improve post performance.
+
 ## v0.1.10
 
 ### New Features

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.10
+
+### New Features
+
+- [`bbe6419`](https://github.com/noctisynth/semifold/commit/bbe6419bba673fc0e8a1ab7957d62fd0956b27ed): Skip publish private packages.
+
 ## v0.1.9
 
 ### New Features

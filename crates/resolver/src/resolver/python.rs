@@ -22,6 +22,7 @@ struct PyProjectToml {
 struct ProjectMetadata {
     pub name: String,
     pub version: Option<String>,
+    pub dynamic: Option<Vec<String>>,
     pub dependencies: Option<Vec<String>>,
 }
 
@@ -48,6 +49,18 @@ struct HatchVersion {
     pub path: Option<String>,
 }
 
+/// Cargo.toml 结构（用于 maturin/PyO3 项目）
+#[derive(Serialize, Deserialize, Debug)]
+struct CargoToml {
+    pub package: Option<CargoPackage>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CargoPackage {
+    pub name: Option<String>,
+    pub version: Option<String>,
+}
+
 pub struct PythonResolver;
 
 impl PythonResolver {
@@ -72,8 +85,29 @@ impl PythonResolver {
 
         let (name, version) = if let Some(project) = pyproject.project {
             // PEP 621 标准格式
-            let name = project.name;
-            let version = project.version.unwrap_or_else(|| "0.0.0".to_string());
+            let name = project.name.clone();
+
+            let is_version_dynamic = project
+                .dynamic
+                .as_ref()
+                .map(|d| d.iter().any(|field| field == "version"))
+                .unwrap_or(false);
+
+            let version = if is_version_dynamic {
+                // version 是动态的，尝试从其他地方获取
+                log::debug!(
+                    "Version is declared as dynamic in {}, attempting to extract from source files",
+                    pyproject_path.display()
+                );
+                self.extract_version_from_source(root, pkg_path, &name)
+                    .unwrap_or_else(|e| {
+                        log::warn!("Failed to extract dynamic version: {}, using default", e);
+                        "0.0.0".to_string()
+                    })
+            } else {
+                project.version.unwrap_or_else(|| "0.0.0".to_string())
+            };
+
             (name, version)
         } else if let Some(tool) = pyproject.tool {
             if let Some(poetry) = tool.poetry {
@@ -192,7 +226,191 @@ impl PythonResolver {
         }
 
         std::fs::write(&pyproject_path, doc.to_string())?;
+
+        // 如果存在 Cargo.toml（maturin/PyO3 项目），也更新它
+        self.update_cargo_version(root, pkg_path, version)?;
+
         Ok(())
+    }
+
+    /// 更新 Cargo.toml 中的版本号（用于 maturin/PyO3 项目）
+    fn update_cargo_version(
+        &self,
+        root: &Path,
+        pkg_path: &Path,
+        version: &str,
+    ) -> Result<(), ResolveError> {
+        let cargo_path = root.join(pkg_path).join("Cargo.toml");
+
+        // 如果没有 Cargo.toml，不是错误，直接返回
+        if !cargo_path.exists() {
+            return Ok(());
+        }
+
+        log::debug!("Found Cargo.toml, updating version for maturin/PyO3 project");
+
+        let cargo_str = std::fs::read_to_string(&cargo_path)?;
+        let mut doc =
+            cargo_str
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|e| ResolveError::ParseError {
+                    path: cargo_path.clone(),
+                    reason: e.to_string(),
+                })?;
+
+        if let Some(package) = doc.get_mut("package")
+            && let Some(package_table) = package.as_table_mut()
+        {
+            package_table.insert("version", toml_edit::value(version));
+            std::fs::write(&cargo_path, doc.to_string())?;
+            log::info!("Updated version in Cargo.toml to {}", version);
+        }
+
+        Ok(())
+    }
+
+    /// 从源文件中提取动态版本号
+    /// 当 pyproject.toml 中声明 `dynamic = ["version"]` 时使用
+    ///
+    /// 尝试从以下位置提取版本号（按优先级）：
+    /// 1. `<package>/__init__.py` 中的 `__version__`
+    /// 2. `src/<package>/__init__.py` 中的 `__version__`
+    /// 3. `<package>/__version__.py` 中的 `__version__`
+    /// 4. `src/<package>/__version__.py` 中的 `__version__`
+    /// 5. `Cargo.toml` 中的 version（用于 maturin/PyO3 项目）
+    /// 6. Hatch 配置中的 version.path
+    fn extract_version_from_source(
+        &self,
+        root: &Path,
+        pkg_path: &Path,
+        package_name: &str,
+    ) -> Result<String, ResolveError> {
+        // 尝试从常见位置提取 __version__
+        let version_file_paths = vec![
+            root.join(pkg_path).join(package_name).join("__init__.py"),
+            root.join(pkg_path)
+                .join("src")
+                .join(package_name)
+                .join("__init__.py"),
+            root.join(pkg_path)
+                .join(package_name)
+                .join("__version__.py"),
+            root.join(pkg_path)
+                .join("src")
+                .join(package_name)
+                .join("__version__.py"),
+        ];
+
+        for file_path in &version_file_paths {
+            if file_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    if let Some(version) = self.extract_version_from_content(&content) {
+                        log::debug!(
+                            "Extracted version '{}' from {}",
+                            version,
+                            file_path.display()
+                        );
+                        return Ok(version);
+                    }
+                }
+            }
+        }
+
+        // 尝试从 Cargo.toml 获取版本（用于 maturin/PyO3 项目）
+        let cargo_toml_path = root.join(pkg_path).join("Cargo.toml");
+        if cargo_toml_path.exists() {
+            log::debug!("Found Cargo.toml, attempting to extract version for maturin/PyO3 project");
+            if let Ok(cargo_str) = std::fs::read_to_string(&cargo_toml_path) {
+                if let Ok(cargo_toml) = toml_edit::de::from_str::<CargoToml>(&cargo_str) {
+                    if let Some(version) = cargo_toml.package.and_then(|p| p.version) {
+                        log::debug!(
+                            "Extracted version '{}' from Cargo.toml for maturin/PyO3 project",
+                            version
+                        );
+                        return Ok(version);
+                    }
+                }
+            }
+        }
+
+        // 尝试从 Hatch 配置中获取 version.path
+        let pyproject_path = root.join(pkg_path).join("pyproject.toml");
+        if pyproject_path.exists() {
+            if let Ok(pyproject_str) = std::fs::read_to_string(&pyproject_path) {
+                if let Ok(pyproject) = toml_edit::de::from_str::<PyProjectToml>(&pyproject_str) {
+                    if let Some(tool) = pyproject.tool
+                        && let Some(hatch) = tool.hatch
+                        && let Some(version_config) = hatch.version
+                        && let Some(version_path) = version_config.path
+                    {
+                        let hatch_version_file = root.join(pkg_path).join(version_path);
+                        if hatch_version_file.exists() {
+                            if let Ok(content) = std::fs::read_to_string(&hatch_version_file) {
+                                if let Some(version) = self.extract_version_from_content(&content) {
+                                    log::debug!(
+                                        "Extracted version '{}' from Hatch version.path: {}",
+                                        version,
+                                        hatch_version_file.display()
+                                    );
+                                    return Ok(version);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(ResolveError::InvalidConfig {
+            path: root.join(pkg_path).to_path_buf(),
+            reason: format!(
+                "Could not extract version from source files for package '{}'. \
+                 Version is declared as dynamic but no __version__ found in common locations \
+                 (checked: __init__.py, __version__.py, Cargo.toml, Hatch version.path).",
+                package_name
+            ),
+        })
+    }
+
+    /// 从文件内容中提取 __version__ 值
+    /// 支持的格式：
+    /// - `__version__ = "1.0.0"`
+    /// - `__version__ = '1.0.0'`
+    /// - `__version__: str = "1.0.0"`
+    fn extract_version_from_content(&self, content: &str) -> Option<String> {
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("__version__") {
+                // 排除动态获取的情况
+                if trimmed.contains("version(")
+                    || trimmed.contains("get_version()")
+                    || trimmed.contains("importlib")
+                    || trimmed.contains("pkg_resources")
+                {
+                    continue;
+                }
+
+                // 提取静态版本号
+                if let Some(pos) = trimmed.find('=') {
+                    let value_part = trimmed[pos + 1..].trim();
+
+                    // 处理单引号或双引号
+                    if let Some(version) = value_part
+                        .strip_prefix('"')
+                        .and_then(|s| s.strip_suffix('"'))
+                    {
+                        return Some(version.to_string());
+                    }
+                    if let Some(version) = value_part
+                        .strip_prefix('\'')
+                        .and_then(|s| s.strip_suffix('\''))
+                    {
+                        return Some(version.to_string());
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// 更新 `__init__.py` 中的 `__version__`

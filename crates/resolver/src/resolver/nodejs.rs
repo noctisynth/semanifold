@@ -249,14 +249,14 @@ impl Resolver for NodejsResolver {
             log::warn!(
                 "Skip publish {} {} due to dry run",
                 package.name,
-                format!("v{}", package.version)
+                format_args!("v{}", package.version)
             );
             return Ok(());
         } else if package.private {
             log::warn!(
                 "Skip publish {} {} due to private flag",
                 package.name,
-                format!("v{}", package.version)
+                format_args!("v{}", package.version)
             );
             return Ok(());
         }

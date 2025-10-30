@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9
+
+### New Features
+
+- [`235d5f0`](https://github.com/noctisynth/semifold/commit/235d5f0e94b09094abb87caacd93bda46875121a): Support customize standard outputs for `stdout` and `stderr`.
+
 ## v0.1.8
 
 ### Bug Fixes

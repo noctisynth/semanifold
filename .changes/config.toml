@@ -35,5 +35,5 @@ args = ["publish"]
 command = "cargo"
 args = [
     "generate-lockfile",
-    "--locked",
+    "--offline",
 ]

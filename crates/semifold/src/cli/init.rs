@@ -117,7 +117,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     }],
                     post_version: vec![CommandConfig {
                         command: "cargo".to_string(),
-                        args: vec!["generate-lockfile".to_string(), "--locked".to_string()].into(),
+                        args: vec!["generate-lockfile".to_string(), "--offline".to_string()].into(),
                         extra_env: BTreeMap::new(),
                         stdout: config::StdioType::Inherit,
                         stderr: config::StdioType::Inherit,

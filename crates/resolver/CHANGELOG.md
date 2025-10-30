@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.11
+
+### New Features
+
+- [`943a27c`](https://github.com/noctisynth/semifold/commit/943a27c26cfdb048b94f9c2e10ac12c6b3705392): Support upload GitHub release assets.
+
 ## v0.1.10
 
 ### New Features

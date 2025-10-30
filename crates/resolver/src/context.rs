@@ -111,19 +111,24 @@ impl Context {
         self.config.as_ref().unwrap().packages.get(package_config)
     }
 
-    pub fn get_assets(&self, package_name: &str) -> Vec<AssetConfig> {
-        if let Some(pkg_cfg) = self.get_package_config(package_name) {
-            let pkg_root = &pkg_cfg.path;
+    pub fn get_assets(&self, package_name: &str) -> Result<Vec<AssetConfig>, error::ResolveError> {
+        let repo_root = self
+            .repo_root
+            .as_ref()
+            .ok_or(error::ResolveError::GitError {
+                message: "Git repository is not initialized".to_string(),
+            })?;
+        let assets = if let Some(pkg_cfg) = self.get_package_config(package_name) {
             pkg_cfg
                 .assets
                 .iter()
                 .map(|p| match p {
                     Asset::Asset(asset_config) => AssetConfig {
-                        path: pkg_root.join(&asset_config.path),
+                        path: repo_root.join(&asset_config.path),
                         name: asset_config.name.clone(),
                     },
                     Asset::String(path) => AssetConfig {
-                        path: pkg_root.join(path),
+                        path: repo_root.join(path),
                         name: Path::new(path)
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
@@ -133,6 +138,7 @@ impl Context {
                 .collect()
         } else {
             Vec::new()
-        }
+        };
+        Ok(assets)
     }
 }

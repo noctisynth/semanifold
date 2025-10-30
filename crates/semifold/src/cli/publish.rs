@@ -150,7 +150,7 @@ pub(crate) async fn publish(
                     continue;
                 };
 
-                let assets = ctx.get_assets(package_name);
+                let assets = ctx.get_assets(package_name)?;
                 for asset in assets {
                     log::info!(
                         "Uploading asset: {} from {}",

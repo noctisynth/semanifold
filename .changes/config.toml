@@ -12,6 +12,7 @@ refactor = "Refactors"
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
+assets = ["target/release/semifold"]
 
 [packages.semifold-changelog]
 path = "crates/changelog"
@@ -27,13 +28,14 @@ url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 [resolver.rust.pre-check.extra-headers]
 User-Agent = "Semifold 0.1.10"
 
+[[resolver.rust.prepublish]]
+command = "cargo"
+args = ["build", "--release"]
+
 [[resolver.rust.publish]]
 command = "cargo"
 args = ["publish"]
 
 [[resolver.rust.post-version]]
 command = "cargo"
-args = [
-    "generate-lockfile",
-    "--offline",
-]
+args = ["generate-lockfile"]

@@ -1,6 +1,12 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
-use crate::{config, error, resolver};
+use crate::{
+    config::{self, Asset, AssetConfig},
+    error, resolver,
+};
 
 #[derive(Debug)]
 pub struct RepoInfo {
@@ -99,5 +105,34 @@ impl Context {
             .as_ref()
             .map(|c| c.packages.iter().collect())
             .unwrap_or_default()
+    }
+
+    pub fn get_package_config(&self, package_config: &str) -> Option<&config::PackageConfig> {
+        self.config.as_ref().unwrap().packages.get(package_config)
+    }
+
+    pub fn get_assets(&self, package_name: &str) -> Vec<AssetConfig> {
+        if let Some(pkg_cfg) = self.get_package_config(package_name) {
+            let pkg_root = &pkg_cfg.path;
+            pkg_cfg
+                .assets
+                .iter()
+                .map(|p| match p {
+                    Asset::Asset(asset_config) => AssetConfig {
+                        path: pkg_root.join(&asset_config.path),
+                        name: asset_config.name.clone(),
+                    },
+                    Asset::String(path) => AssetConfig {
+                        path: pkg_root.join(path),
+                        name: Path::new(path)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| path.clone()),
+                    },
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 }

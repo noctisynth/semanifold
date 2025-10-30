@@ -1,3 +1,6 @@
+use std::{fs, io::Read};
+
+use bytes::Bytes;
 use clap::Parser;
 use colored::Colorize;
 use reqwest::{
@@ -24,8 +27,7 @@ pub(crate) async fn create_github_release(
     octocrab: &octocrab::Octocrab,
     package_name: &str,
     package_config: &PackageConfig,
-    releases: &[octocrab::models::repos::Release],
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Option<octocrab::models::repos::Release>> {
     let Some(repo_info) = &ctx.repo_info else {
         return Err(anyhow::anyhow!("Repo info not found"));
     };
@@ -36,7 +38,7 @@ pub(crate) async fn create_github_release(
             "Changelog file not found for package {}, skip create GitHub release",
             &package_name.cyan()
         );
-        return Ok(());
+        return Ok(None);
     }
 
     let changelog = read_latest_changelog(&changelog_path).await?;
@@ -46,12 +48,7 @@ pub(crate) async fn create_github_release(
     log::debug!("Tag name: {}", &tag_name);
     log::debug!("Changelog for {}:\n\n{}", &package_name, &changelog.body);
 
-    if releases.iter().any(|release| release.tag_name == tag_name) {
-        log::warn!("Release {} already exists", &tag_name);
-        return Ok(());
-    }
-
-    octocrab
+    let release = octocrab
         .repos(&repo_info.owner, &repo_info.repo_name)
         .releases()
         .create(&tag_name)
@@ -60,7 +57,7 @@ pub(crate) async fn create_github_release(
         .send()
         .await?;
 
-    Ok(())
+    Ok(Some(release))
 }
 
 pub(crate) async fn publish(
@@ -84,20 +81,8 @@ pub(crate) async fn publish(
     } else {
         octocrab::Octocrab::default()
     };
-    let releases = if should_create_github_release {
-        let Some(repo_info) = &ctx.repo_info else {
-            return Err(anyhow::anyhow!("Git repository is not initialized"));
-        };
-
-        octocrab
-            .repos(&repo_info.owner, &repo_info.repo_name)
-            .releases()
-            .list()
-            .send()
-            .await?
-            .take_items()
-    } else {
-        Vec::new()
+    let Some(repo_info) = &ctx.repo_info else {
+        return Err(anyhow::anyhow!("Git repository is not initialized"));
     };
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
@@ -154,12 +139,48 @@ pub(crate) async fn publish(
 
         if should_create_github_release {
             if !dry_run {
-                create_github_release(ctx, &octocrab, package_name, package, &releases).await?;
+                let Some(release) =
+                    create_github_release(ctx, &octocrab, package_name, package).await?
+                else {
+                    log::warn!(
+                        "Failed to create GitHub release for {} {}",
+                        &package_name.cyan(),
+                        &format!("v{}", resolved_package.version).green()
+                    );
+                    continue;
+                };
+
+                let assets = ctx.get_assets(package_name);
+                for asset in assets {
+                    log::info!(
+                        "Uploading asset: {} from {}",
+                        &asset.name,
+                        &asset.path.display()
+                    );
+                    if asset.path.exists() {
+                        let mut file = fs::File::open(&asset.path)?;
+                        let mut bytes = Vec::new();
+                        file.read_to_end(&mut bytes)?;
+                        let bytes = Bytes::from(bytes);
+                        octocrab
+                            .repos(&repo_info.owner, &repo_info.repo_name)
+                            .releases()
+                            .upload_asset(release.id.0, &asset.name, bytes)
+                            .send()
+                            .await?;
+                    } else {
+                        log::warn!("Asset {} not found, skip upload", &asset.path.display());
+                    }
+                }
             } else {
                 log::warn!(
-                    "Dry run, not creating GitHub release for {} {}",
+                    "Skipped creating GitHub release for {} {} due to dry run",
                     &package_name.cyan(),
                     &format!("v{}", resolved_package.version).green()
+                );
+                log::warn!(
+                    "Skipped uploading assets: {:?}",
+                    &ctx.get_assets(package_name)
                 );
             }
         }

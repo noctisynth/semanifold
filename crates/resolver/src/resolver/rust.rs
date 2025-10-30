@@ -91,6 +91,7 @@ impl Resolver for RustResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Rust,
+                    assets: vec![],
                 },
             )?;
             return Ok(vec![package]);
@@ -123,6 +124,7 @@ impl Resolver for RustResolver {
                     &PackageConfig {
                         path: rel_path.to_path_buf(),
                         resolver: ResolverType::Rust,
+                        assets: vec![],
                     },
                 )
             })

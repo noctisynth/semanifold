@@ -368,6 +368,7 @@ impl Resolver for PythonResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Python,
+                    assets: vec![],
                 },
             ) {
                 Ok(package) => packages.push(package),
@@ -389,6 +390,7 @@ impl Resolver for PythonResolver {
                             &PackageConfig {
                                 path: rel_path,
                                 resolver: ResolverType::Python,
+                                assets: vec![],
                             },
                         ) {
                             Ok(package) => packages.push(package),

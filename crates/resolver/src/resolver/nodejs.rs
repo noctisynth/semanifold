@@ -103,6 +103,7 @@ impl Resolver for NodejsResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Nodejs,
+                    assets: vec![],
                 },
             )?;
             return Ok(vec![package]);
@@ -129,6 +130,7 @@ impl Resolver for NodejsResolver {
                         &PackageConfig {
                             path: rel_path,
                             resolver: ResolverType::Nodejs,
+                            assets: vec![],
                         },
                     ) {
                         Ok(package) => packages.push(package),

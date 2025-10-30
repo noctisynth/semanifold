@@ -14,10 +14,26 @@ pub struct BranchesConfig {
     pub release: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AssetConfig {
+    pub path: PathBuf,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(untagged)]
+pub enum Asset {
+    Asset(AssetConfig),
+    String(String),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PackageConfig {
     pub path: PathBuf,
     pub resolver: resolver::ResolverType,
+    /// Assets to publish.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assets: Vec<Asset>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]

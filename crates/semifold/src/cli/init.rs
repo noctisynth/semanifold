@@ -175,6 +175,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Rust,
+                        assets: vec![],
                     });
                 });
                 Ok::<_, ResolveError>(acc)
@@ -186,6 +187,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Nodejs,
+                        assets: vec![],
                     });
                 });
                 Ok::<_, ResolveError>(acc)
@@ -197,6 +199,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Python,
+                        assets: vec![],
                     });
                 });
                 Ok::<_, ResolveError>(acc)

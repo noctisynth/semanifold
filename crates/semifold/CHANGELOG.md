@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.13
+
+### Bug Fixes
+
+- [`ca8ad93`](https://github.com/noctisynth/semifold/commit/ca8ad93e48e2c87b5267d1769e5ae6b2f7d156d4): Assets should relative to repository root path instead of package root.
+
 ## v0.1.12
 
 ### New Features

@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    process::{Command, Stdio},
-};
+use std::collections::HashMap;
 
 use clap::Parser;
 use colored::Colorize;
@@ -27,10 +24,7 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
         let resolver_config = ctx.get_resolver_config(package_config.resolver);
         if let Some(ResolverConfig { post_version, .. }) = &resolver_config {
             for command in post_version {
-                Command::new(&command.command)
-                    .args(command.args.clone().unwrap_or_default())
-                    .stdout(Stdio::inherit())
-                    .status()?;
+                utils::run_command(command, &package_config.path)?;
             }
         } else {
             log::warn!(

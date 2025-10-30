@@ -9,6 +9,7 @@
     "pathdiff",
     "pathspec",
     "postpublish",
+    "pyproject",
     "reqwest",
     "revwalk",
     "rfind",

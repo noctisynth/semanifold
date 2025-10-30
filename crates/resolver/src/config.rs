@@ -20,6 +20,25 @@ pub struct PackageConfig {
     pub resolver: resolver::ResolverType,
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum StdioType {
+    #[default]
+    Inherit,
+    Pipe,
+    Null,
+}
+
+impl From<StdioType> for std::process::Stdio {
+    fn from(value: StdioType) -> Self {
+        match value {
+            StdioType::Inherit => Self::inherit(),
+            StdioType::Pipe => Self::piped(),
+            StdioType::Null => Self::null(),
+        }
+    }
+}
+
 /// Configuration for a command to run.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandConfig {
@@ -27,6 +46,19 @@ pub struct CommandConfig {
     pub command: String,
     /// Arguments to pass to the command.
     pub args: Option<Vec<String>>,
+    /// Environment variables to set before running the command.
+    #[serde(
+        default,
+        rename = "extra-env",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub extra_env: BTreeMap<String, String>,
+    /// Type of standard output to use.
+    #[serde(default)]
+    pub stdout: StdioType,
+    /// Type of standard error to use.
+    #[serde(default)]
+    pub stderr: StdioType,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

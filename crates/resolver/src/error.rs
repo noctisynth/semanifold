@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::ExitStatus};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -16,8 +16,12 @@ pub enum ResolveError {
     InvalidVersion { version: String, reason: String },
     #[error("Failed to parse {path}: {reason}")]
     ParseError { path: PathBuf, reason: String },
-    #[error("Publish error for package {package}: {reason}")]
-    PublishError { package: String, reason: String },
+    #[error("Command {command} failed: {status} (code {code:?})")]
+    CommandError {
+        command: String,
+        status: ExitStatus,
+        code: Option<i32>,
+    },
     #[error("Git error: {message}")]
     GitError { message: String },
     #[error("GitHub error: {message}")]

@@ -7,6 +7,7 @@ use semver::Version;
 
 use crate::{
     changeset::{BumpLevel, Changeset},
+    config::CommandConfig,
     error::ResolveError,
 };
 
@@ -79,4 +80,25 @@ pub fn get_bump_level(changesets: &[Changeset], package_name: &str) -> BumpLevel
         });
     }
     level
+}
+
+pub fn run_command(command: &CommandConfig, cwd: &Path) -> Result<(), ResolveError> {
+    let mut cmd = std::process::Command::new(&command.command);
+    if let Some(args) = &command.args {
+        cmd.args(args);
+    }
+    cmd.current_dir(cwd);
+    cmd.envs(&command.extra_env);
+    cmd.stdout(command.stdout);
+    cmd.stderr(command.stderr);
+    let status = cmd.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ResolveError::CommandError {
+            command: command.command.clone(),
+            status,
+            code: status.code(),
+        })
+    }
 }

@@ -111,10 +111,16 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     publish: vec![CommandConfig {
                         command: "cargo".to_string(),
                         args: vec!["publish".to_string()].into(),
+                        extra_env: BTreeMap::new(),
+                        stdout: config::StdioType::Inherit,
+                        stderr: config::StdioType::Inherit,
                     }],
                     post_version: vec![CommandConfig {
                         command: "cargo".to_string(),
                         args: vec!["check".to_string()].into(),
+                        extra_env: BTreeMap::new(),
+                        stdout: config::StdioType::Inherit,
+                        stderr: config::StdioType::Inherit,
                     }],
                 },
             ),
@@ -131,6 +137,9 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     publish: vec![CommandConfig {
                         command: "npm".to_string(),
                         args: vec!["publish".to_string()].into(),
+                        extra_env: BTreeMap::new(),
+                        stdout: config::StdioType::Inherit, 
+                        stderr: config::StdioType::Inherit,
                     }],
                     post_version: vec![]
                 },

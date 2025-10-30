@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
-    process::{Command, Stdio},
 };
 
 use saphyr::LoadableYamlNode;
@@ -11,6 +10,7 @@ use crate::{
     config::{PackageConfig, ResolverConfig},
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
+    utils,
 };
 
 #[derive(Serialize, Deserialize)]
@@ -256,35 +256,14 @@ impl Resolver for NodejsResolver {
         for prepublish in &resolver_config.prepublish {
             let args = prepublish.args.clone().unwrap_or_default();
             log::info!("Running {} {}", prepublish.command, args.join(" "));
-            let output = Command::new(&prepublish.command)
-                .args(&args)
-                .current_dir(&package.path)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output()?;
-            if !output.status.success() {
-                return Err(ResolveError::PublishError {
-                    package: package.name.clone(),
-                    reason: format!(
-                        "Prepublish command {} failed with status {:?} (code: {:?})",
-                        prepublish.command,
-                        output.status,
-                        output.status.code()
-                    ),
-                });
-            }
+            utils::run_command(prepublish, &package.path)?;
         }
 
         log::info!("Running publish commands for {}", package.name);
         for publish in &resolver_config.publish {
             let args = publish.args.clone().unwrap_or_default();
             log::info!("Running {} {}", publish.command, args.join(" "));
-            Command::new(&publish.command)
-                .args(&args)
-                .current_dir(&package.path)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output()?;
+            utils::run_command(publish, &package.path)?;
         }
 
         Ok(())

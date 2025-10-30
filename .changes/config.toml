@@ -33,4 +33,7 @@ args = ["publish"]
 
 [[resolver.rust.post-version]]
 command = "cargo"
-args = ["check"]
+args = [
+    "generate-lockfile",
+    "--locked",
+]

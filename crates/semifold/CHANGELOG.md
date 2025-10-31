@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.14
+
+### Chores
+
+- [`dccb0d2`](https://github.com/noctisynth/semifold/commit/dccb0d2312ea31e340a67ab2f6552a3918ce887a): Add readme and authors fields to `Cargo.toml`.
+
 ## v0.1.13
 
 ### Bug Fixes

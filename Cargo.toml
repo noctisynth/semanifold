@@ -9,3 +9,5 @@ license = "AGPL-3.0-only"
 documentation = "https://docs.rs/semifold"
 homepage = "https://github.com/noctisynth/semifold"
 repository = "https://github.com/noctisynth/semifold"
+authors = ["苏向夜 <fu050409@163.com>"]
+readme = "README.md"

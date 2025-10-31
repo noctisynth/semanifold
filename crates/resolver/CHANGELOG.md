@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.13
+
+### Chores
+
+- [`dccb0d2`](https://github.com/noctisynth/semifold/commit/dccb0d2312ea31e340a67ab2f6552a3918ce887a): Add readme and authors fields to `Cargo.toml`.
+
+### New Features
+
+- [`1ab8df9`](https://github.com/noctisynth/semifold/commit/1ab8df941408a707ec2ac0ca3c152257b8df7517): enhance dynamic version extraction for Python projects ([#29](https://github.com/noctisynth/semifold/pull/29) by @HsiangNianian)
+
 ## v0.1.12
 
 ### Bug Fixes

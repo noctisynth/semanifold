@@ -3,6 +3,7 @@
     "clippy",
     "Covector",
     "dtolnay",
+    "endraw",
     "minijinja",
     "napi",
     "octocrab",

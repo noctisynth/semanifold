@@ -241,7 +241,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
 
     let config = config::Config {
         branches: BranchesConfig {
-            base: base_branch,
+            base: base_branch.clone(),
             release: release_branch,
         },
         tags,
@@ -261,16 +261,19 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
         if !target_dir.join(".github").exists() {
             std::fs::create_dir_all(target_dir.join(".github"))?;
         }
-        let ci_asset = CIAsset::get("semifold-ci.yaml").unwrap();
-        let status_ci_asset = CIAsset::get("status.yaml").unwrap();
+        let ci_asset = CIAsset::get("semifold-ci.yaml.jinja").unwrap();
+        let status_ci_asset = CIAsset::get("semifold-status.yaml.jinja").unwrap();
+
+        let ci_str = String::from_utf8_lossy(&ci_asset.data).to_string();
+        let status_ci_str = String::from_utf8_lossy(&status_ci_asset.data).to_string();
 
         std::fs::write(
             target_dir.join(".github/workflows/semifold-ci.yaml"),
-            ci_asset.data,
+            minijinja::render!(&ci_str, base_branch => &base_branch),
         )?;
         std::fs::write(
-            target_dir.join(".github/workflows/status.yaml"),
-            status_ci_asset.data,
+            target_dir.join(".github/workflows/semifold-status.yaml"),
+            minijinja::render!(&status_ci_str, base_branch => &base_branch),
         )?;
     }
 

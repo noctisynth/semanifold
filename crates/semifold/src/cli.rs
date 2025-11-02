@@ -11,7 +11,7 @@ pub mod version;
 pub(crate) enum Commands {
     #[command(about = "Commit a new change", visible_alias = "add")]
     Commit(commit::Commit),
-    #[command(about = "Initialize semanifold changesets config")]
+    #[command(about = "Initialize semifold changesets config")]
     Init(init::Init),
     #[command(about = "Bump version of packages")]
     Version(version::Version),
@@ -19,7 +19,7 @@ pub(crate) enum Commands {
     Publish(publish::Publish),
     #[command(about = "Run CI tasks")]
     CI(ci::CI),
-    #[command(about = "Get status of semanifold changesets")]
+    #[command(about = "Get status of semifold changesets")]
     Status(status::Status),
 }
 

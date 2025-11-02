@@ -25,7 +25,7 @@ jobs:
           components: clippy, rustfmt
       - name: Build
         run: cargo build --workspace
-      - name: Semif CI
+      - name: Semifold CI
         run: cargo run --bin semifold ci --debug
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

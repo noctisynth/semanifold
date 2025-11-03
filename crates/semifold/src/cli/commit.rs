@@ -176,6 +176,12 @@ pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
             Level::Minor => t!("cli.commit.help_minor"),
             Level::Major => t!("cli.commit.help_major"),
         })
+        .with_default(if matches!(variant, Level::Patch) {
+            let default_packages = (0..packages.len()).collect::<Vec<_>>();
+            default_packages.leak()
+        } else {
+            &[]
+        })
         .prompt()?;
         changeset.add_packages(&selected_packages, variant.to_bump_level(), tag.clone());
         packages.retain(|p| !selected_packages.contains(p));

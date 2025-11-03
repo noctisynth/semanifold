@@ -113,7 +113,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         &[&parent_commit],
     )?;
 
-    force_push_release(&repo, &github_token, release_branch)?;
+    force_push_release(repo, &github_token, release_branch)?;
 
     let head = format!("{}:{}", owner, release_branch);
     let pulls = octocrab.pulls(owner, repo_name);

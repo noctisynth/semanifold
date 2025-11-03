@@ -66,7 +66,7 @@ pub(crate) async fn version(
 
         let changelog = generate_changelog(
             ctx,
-            &repo,
+            repo,
             changesets,
             package_name,
             &bumped_version.to_string(),

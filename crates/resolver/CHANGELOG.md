@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.14
+
+### Bug Fixes
+
+- [`eb80fa8`](https://github.com/noctisynth/semifold/commit/eb80fa8ad0cf07b522f6e0f95a55371893788424): Fix current Git repository status check.
+
+### New Features
+
+- [`4774f04`](https://github.com/noctisynth/semifold/commit/4774f04580338ebda64da61b7e6eb24bbdc67d6b): Check if Git repository is dirty or clean before versioning packages.
+
 ## v0.1.13
 
 ### Chores

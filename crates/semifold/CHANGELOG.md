@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.15
+
+### Bug Fixes
+
+- [`c791e93`](https://github.com/noctisynth/semifold/commit/c791e9320694354c34aac2e1f2ad0ec4b596ee1a): Fix remaining issues of project renaming.
+- [`3a031ee`](https://github.com/noctisynth/semifold/commit/3a031ee7001923932f1ed6853bfd26e7fd431318): Fix delivered template GitHub Actions workflow files.
+
+### New Features
+
+- [`1e55e71`](https://github.com/noctisynth/semifold/commit/1e55e7132c7e7bc1ef375a15c273405845e404be): Select all packages by default if variant is `patch`.
+- [`4774f04`](https://github.com/noctisynth/semifold/commit/4774f04580338ebda64da61b7e6eb24bbdc67d6b): Check if Git repository is dirty or clean before versioning packages.
+
 ## v0.1.14
 
 ### Chores

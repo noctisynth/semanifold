@@ -75,7 +75,7 @@ impl Context {
         self.git_repo
             .as_ref()
             .and_then(|r| r.statuses(None).ok())
-            .map(|s| s.is_empty())
+            .map(|s| s.iter().all(|s| s.status() == git2::Status::CURRENT))
             .unwrap_or(false)
     }
 

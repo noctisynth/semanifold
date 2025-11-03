@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use colored::Colorize;
-use git2::Repository;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
 use semifold_resolver::{
@@ -14,6 +13,8 @@ use semifold_resolver::{
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
+    #[clap(long, help = "Allow versioning packages with dirty git repositories")]
+    allow_dirty: bool,
     #[clap(long, help = "Print the version bumps without applying them")]
     dry_run: bool,
 }
@@ -43,7 +44,9 @@ pub(crate) async fn version(
 ) -> anyhow::Result<HashMap<String, String>> {
     let config = ctx.config.as_ref().unwrap();
     let root = ctx.repo_root.as_ref().unwrap();
-    let repo = Repository::open(root)?;
+    let Some(repo) = ctx.git_repo.as_ref() else {
+        return Err(anyhow::anyhow!("Failed to open Git repository"));
+    };
     let mut changelogs_map = HashMap::new();
 
     for (package_name, package_config) in &config.packages {
@@ -93,6 +96,10 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     if !ctx.is_initialized() {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
+
+    if !opts.allow_dirty && !ctx.is_git_repo_clean() {
+        return Err(anyhow::anyhow!(t!("cli.dirty_repo")));
+    }
 
     let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {

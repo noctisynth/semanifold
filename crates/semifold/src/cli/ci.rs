@@ -57,7 +57,9 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     log::debug!("GITHUB_REF_NAME: {}", &ref_name);
 
-    let repo = Repository::open(ctx.repo_root.as_ref().unwrap())?;
+    let Some(repo) = ctx.git_repo.as_ref() else {
+        return Err(anyhow::anyhow!("Git repository is not initialized"));
+    };
     let mut git_config = repo.config()?;
     git_config.set_str("user.name", "github-actions[bot]")?;
     git_config.set_str("user.email", "github-actions[bot]@users.noreply.github.com")?;

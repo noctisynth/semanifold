@@ -3,10 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    config::{self, Asset, AssetConfig},
-    error, resolver,
-};
+use crate::{config, error, resolver};
 
 #[derive(Debug)]
 pub struct RepoInfo {
@@ -21,6 +18,7 @@ pub struct Context {
     pub config_path: Option<PathBuf>,
     pub repo_root: Option<PathBuf>,
     pub repo_info: Option<RepoInfo>,
+    pub git_repo: Option<git2::Repository>,
 }
 
 impl Context {
@@ -45,6 +43,11 @@ impl Context {
                 repo_name: repo_name.to_string(),
             })
         });
+        let git_repo = if let Some(repo_root) = &repo_root {
+            git2::Repository::open(repo_root).ok()
+        } else {
+            None
+        };
 
         Ok(Self {
             config,
@@ -52,6 +55,7 @@ impl Context {
             config_path,
             repo_root,
             repo_info,
+            git_repo,
         })
     }
 
@@ -65,6 +69,14 @@ impl Context {
 
     pub fn is_git_repo(&self) -> bool {
         self.repo_root.is_some()
+    }
+
+    pub fn is_git_repo_clean(&self) -> bool {
+        self.git_repo
+            .as_ref()
+            .and_then(|r| r.statuses(None).ok())
+            .map(|s| s.is_empty())
+            .unwrap_or(false)
     }
 
     pub fn has_package(&self, package: &str) -> bool {
@@ -111,7 +123,10 @@ impl Context {
         self.config.as_ref().unwrap().packages.get(package_config)
     }
 
-    pub fn get_assets(&self, package_name: &str) -> Result<Vec<AssetConfig>, error::ResolveError> {
+    pub fn get_assets(
+        &self,
+        package_name: &str,
+    ) -> Result<Vec<config::AssetConfig>, error::ResolveError> {
         let repo_root = self
             .repo_root
             .as_ref()
@@ -123,11 +138,11 @@ impl Context {
                 .assets
                 .iter()
                 .map(|p| match p {
-                    Asset::Asset(asset_config) => AssetConfig {
+                    config::Asset::Asset(asset_config) => config::AssetConfig {
                         path: repo_root.join(&asset_config.path),
                         name: asset_config.name.clone(),
                     },
-                    Asset::String(path) => AssetConfig {
+                    config::Asset::String(path) => config::AssetConfig {
                         path: repo_root.join(path),
                         name: Path::new(path)
                             .file_name()

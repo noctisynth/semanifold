@@ -1,5 +1,6 @@
 [cli]
 not_initialized = "Semifold is not initialized. Please run `semifold init` first."
+dirty_repo = "Git repository is dirty. Please commit or stash your changes first, or use `--allow-dirty` option."
 
 [cli.commit]
 warn_incomplete_select = "Not all selected packages are bumped, continue?"

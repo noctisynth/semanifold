@@ -11,6 +11,7 @@ readme.workspace = true
 authors.workspace = true
 
 [dependencies]
+git2 = "0.20.2"
 glob = "0.3.3"
 log = "0.4.27"
 pathdiff = "0.2.3"

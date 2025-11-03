@@ -1,5 +1,6 @@
 [cli]
 not_initialized = "Semifold 未初始化。请先运行 `semifold init`。"
+dirty_repo = "Git 仓库不干净。请先提交或暂存您的更改，或使用 `--allow-dirty` 选项。"
 
 [cli.commit]
 warn_incomplete_select = "未提升所有已选包，是否继续？"

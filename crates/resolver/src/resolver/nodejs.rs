@@ -7,7 +7,7 @@ use saphyr::LoadableYamlNode;
 use serde::Deserialize;
 
 use crate::{
-    config::{PackageConfig, ResolverConfig},
+    config::{PackageConfig, ResolverConfig, VersionMode},
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -103,6 +103,7 @@ impl Resolver for NodejsResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Nodejs,
+                    version_mode: VersionMode::Semantic,
                     assets: vec![],
                 },
             )?;
@@ -130,6 +131,7 @@ impl Resolver for NodejsResolver {
                         &PackageConfig {
                             path: rel_path,
                             resolver: ResolverType::Nodejs,
+                            version_mode: VersionMode::Semantic,
                             assets: vec![],
                         },
                     ) {

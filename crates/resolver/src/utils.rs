@@ -7,7 +7,7 @@ use semver::Version;
 
 use crate::{
     changeset::{BumpLevel, Changeset},
-    config::CommandConfig,
+    config::{CommandConfig, VersionMode},
     error::ResolveError,
 };
 
@@ -48,25 +48,67 @@ pub fn list_files<F: Fn(&Path) -> bool>(
     Ok(files)
 }
 
-pub fn bump_version(version: &str, level: BumpLevel) -> Result<Version, ResolveError> {
+fn bump_prerelease(version: &mut Version, tag: &str) -> Result<(), ResolveError> {
+    if version.pre.is_empty() {
+        version.pre = semver::Prerelease::new(&format!("{tag}.0"))?;
+    } else {
+        let pre = version.pre.clone();
+        let mut parts = pre.as_str().split('.').collect::<Vec<_>>();
+        if let Some(idx) = parts.iter().position(|&s| s == tag) {
+            if let Some(pre_patch) = parts.get(idx + 1) {
+                let pre_patch =
+                    pre_patch
+                        .parse::<u64>()
+                        .map_err(|e| ResolveError::InvalidVersion {
+                            version: version.to_string(),
+                            reason: e.to_string(),
+                        })?;
+                parts[idx + 1] = format!("{}", pre_patch + 1).leak();
+            } else {
+                parts.insert(idx + 1, "1");
+            }
+        } else {
+            parts = vec![tag, "0"];
+        }
+        version.pre = semver::Prerelease::new(&parts.join("."))?;
+    }
+    Ok(())
+}
+
+pub fn bump_version(
+    version: &str,
+    level: BumpLevel,
+    mode: &VersionMode,
+) -> Result<Version, ResolveError> {
     let mut version =
         semver::Version::parse(version).map_err(|e| ResolveError::InvalidVersion {
             version: version.to_string(),
             reason: e.to_string(),
         })?;
-    match level {
-        BumpLevel::Major => {
-            version.major += 1;
-            version.minor = 0;
-            version.patch = 0;
+    match mode {
+        VersionMode::Semantic => match level {
+            BumpLevel::Major => {
+                version.major += 1;
+                version.minor = 0;
+                version.patch = 0;
+            }
+            BumpLevel::Minor => {
+                version.minor += 1;
+                version.patch = 0;
+            }
+            BumpLevel::Patch => version.patch += 1,
+            BumpLevel::Unchanged => {}
+        },
+        VersionMode::PreRelease { tag } => {
+            if tag.is_empty() {
+                return Err(ResolveError::PreReleaseTagInvalid {
+                    tag: tag.to_string(),
+                    message: "Pre-release tag is empty".to_string(),
+                });
+            }
+            bump_prerelease(&mut version, tag)?;
         }
-        BumpLevel::Minor => {
-            version.minor += 1;
-            version.patch = 0;
-        }
-        BumpLevel::Patch => version.patch += 1,
-        BumpLevel::Unchanged => {}
-    };
+    }
     Ok(version)
 }
 

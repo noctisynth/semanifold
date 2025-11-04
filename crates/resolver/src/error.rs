@@ -26,4 +26,8 @@ pub enum ResolveError {
     GitError { message: String },
     #[error("GitHub error: {message}")]
     GitHubError { message: String },
+    #[error("Pre-release tag {tag} is invalid: {message}")]
+    PreReleaseTagInvalid { tag: String, message: String },
+    #[error("Semver error: {0}")]
+    SemverError(#[from] semver::Error),
 }

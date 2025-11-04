@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{PackageConfig, ResolverConfig},
+    config::{PackageConfig, ResolverConfig, VersionMode},
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -580,6 +580,7 @@ impl Resolver for PythonResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Python,
+                    version_mode: VersionMode::Semantic,
                     assets: vec![],
                 },
             ) {
@@ -602,6 +603,7 @@ impl Resolver for PythonResolver {
                             &PackageConfig {
                                 path: rel_path,
                                 resolver: ResolverType::Python,
+                                version_mode: VersionMode::Semantic,
                                 assets: vec![],
                             },
                         ) {

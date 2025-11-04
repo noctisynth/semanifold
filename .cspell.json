@@ -4,6 +4,7 @@
     "Covector",
     "dtolnay",
     "endraw",
+    "maturin",
     "minijinja",
     "napi",
     "octocrab",

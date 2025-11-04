@@ -78,7 +78,11 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(&root, package_config)?;
-        let bumped_version = utils::bump_version(&resolved_package.version, level)?;
+        let bumped_version = utils::bump_version(
+            &resolved_package.version,
+            level,
+            &package_config.version_mode,
+        )?;
 
         bump_map.insert(
             package_name,

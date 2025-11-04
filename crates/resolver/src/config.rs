@@ -27,10 +27,38 @@ pub enum Asset {
     String(String),
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionMode {
+    /// Semantic versioning mode.
+    #[default]
+    Semantic,
+    /// Pre-release versioning mode.
+    PreRelease {
+        /// Pre-release tag.
+        tag: String,
+    },
+}
+
+impl VersionMode {
+    pub fn is_semantic(&self) -> bool {
+        matches!(self, Self::Semantic)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PackageConfig {
+    /// Path to the package root directory.
     pub path: PathBuf,
+    /// Resolver type to use.
     pub resolver: resolver::ResolverType,
+    /// Versioning mode to use.
+    #[serde(
+        default,
+        rename = "version-mode",
+        skip_serializing_if = "VersionMode::is_semantic"
+    )]
+    pub version_mode: VersionMode,
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
@@ -116,9 +144,13 @@ pub struct ResolverConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
+    /// Branch configuration.
     pub branches: BranchesConfig,
+    /// Tag configuration.
     pub tags: BTreeMap<String, String>,
+    /// Package configuration.
     pub packages: BTreeMap<String, PackageConfig>,
+    /// Resolver configuration.
     pub resolver: BTreeMap<resolver::ResolverType, ResolverConfig>,
 }
 

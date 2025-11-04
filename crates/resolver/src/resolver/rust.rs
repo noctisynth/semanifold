@@ -6,7 +6,7 @@ use std::{
 use serde::Deserialize;
 
 use crate::{
-    config::{PackageConfig, ResolverConfig},
+    config::{PackageConfig, ResolverConfig, VersionMode},
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -91,6 +91,7 @@ impl Resolver for RustResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Rust,
+                    version_mode: VersionMode::Semantic,
                     assets: vec![],
                 },
             )?;
@@ -124,6 +125,7 @@ impl Resolver for RustResolver {
                     &PackageConfig {
                         path: rel_path.to_path_buf(),
                         resolver: ResolverType::Rust,
+                        version_mode: VersionMode::Semantic,
                         assets: vec![],
                     },
                 )

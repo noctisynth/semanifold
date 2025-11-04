@@ -61,7 +61,11 @@ pub(crate) async fn version(
             continue;
         }
 
-        let bumped_version = utils::bump_version(&resolved_package.version, level)?;
+        let bumped_version = utils::bump_version(
+            &resolved_package.version,
+            level,
+            &package_config.version_mode,
+        )?;
         resolver.bump(root, &resolved_package, &bumped_version, dry_run)?;
 
         let changelog = generate_changelog(

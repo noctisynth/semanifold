@@ -4,7 +4,10 @@ use clap::{Args, ValueEnum};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_resolver::{
-    config::{self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ResolverConfig},
+    config::{
+        self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ResolverConfig,
+        VersionMode,
+    },
     context,
     error::ResolveError,
     resolver::{self, Resolver, ResolverType as ResolverTypeEnum},
@@ -175,6 +178,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Rust,
+                        version_mode: VersionMode::Semantic,
                         assets: vec![],
                     });
                 });
@@ -187,6 +191,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Nodejs,
+                        version_mode: VersionMode::Semantic,
                         assets: vec![],
                     });
                 });
@@ -199,6 +204,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Python,
+                        version_mode: VersionMode::Semantic,
                         assets: vec![],
                     });
                 });

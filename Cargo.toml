@@ -11,3 +11,10 @@ homepage = "https://github.com/noctisynth/semifold"
 repository = "https://github.com/noctisynth/semifold"
 authors = ["苏向夜 <fu050409@163.com>"]
 readme = "README.md"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 0
+panic = 'abort'

@@ -17,4 +17,3 @@ octocrab = "0.47.0"
 pathdiff = "0.2.3"
 regex = "1.12.2"
 semifold-resolver = { version = "0.1.0", path = "../resolver" }
-tokio = { version = "1.48.0", features = ["full"] }

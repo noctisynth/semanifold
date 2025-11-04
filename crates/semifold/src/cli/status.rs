@@ -113,7 +113,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     }
 
     let path = env::var("GITHUB_EVENT_PATH").context("no GITHUB_EVENT_PATH")?;
-    let event_data = tokio::fs::read_to_string(&path).await?;
+    let event_data = std::fs::read_to_string(&path)?;
 
     log::debug!("GITHUB_EVENT_PATH: {}", &path);
     log::debug!("GITHUB_EVENT_PATH data: {}", &event_data);

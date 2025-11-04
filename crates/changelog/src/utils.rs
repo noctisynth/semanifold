@@ -108,7 +108,7 @@ pub async fn insert_changelog<P: AsRef<Path>>(
     let header = "# Changelog";
 
     let content = if path.exists() {
-        tokio::fs::read_to_string(path).await?
+        std::fs::read_to_string(path)?
     } else {
         format!("{header}\n\n")
     };
@@ -134,6 +134,6 @@ pub async fn insert_changelog<P: AsRef<Path>>(
     }
     new_content.push('\n');
 
-    tokio::fs::write(path, new_content).await?;
+    std::fs::write(path, new_content)?;
     Ok(())
 }

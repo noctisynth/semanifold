@@ -108,7 +108,7 @@ pub async fn generate_changelog(
 pub async fn read_latest_changelog<P: AsRef<Path>>(
     path: P,
 ) -> Result<types::Changelog, ResolveError> {
-    let content = tokio::fs::read_to_string(path.as_ref()).await?;
+    let content = std::fs::read_to_string(path.as_ref())?;
 
     let mut lines = content.lines();
 

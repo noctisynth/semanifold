@@ -1,11 +1,5 @@
 # Changelog
 
-## v0.1.15
-
-### New Features
-
-- [`35dad5f`](https://github.com/noctisynth/semifold/commit/35dad5f2d1b5348b2740cd4269005f52b5ca599b): Support pre-release versioning mode.
-
 ## v0.1.14
 
 ### Bug Fixes

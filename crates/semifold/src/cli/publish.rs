@@ -44,7 +44,7 @@ pub(crate) async fn create_github_release(
     let changelog = read_latest_changelog(&changelog_path).await?;
     let tag_name = format!("{}-{}", package_name, changelog.version);
     let release_title = format!("{} {}", package_name, changelog.version);
-    let version = semver::Version::parse(&changelog.version)?;
+    let version = semver::Version::parse(&changelog.version[1..])?;
 
     log::debug!("Tag name: {}", &tag_name);
     log::debug!("Changelog for {}:\n\n{}", &package_name, &changelog.body);

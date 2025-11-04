@@ -2,8 +2,13 @@ use clap::Parser;
 use log::LevelFilter;
 use semifold_resolver::context;
 
-use crate::cli::{Cli, Commands};
-use crate::{cli, logger, utils};
+pub mod cli;
+pub mod logger;
+pub mod utils;
+
+use cli::{Cli, Commands};
+
+rust_i18n::i18n!("locales", fallback = "en");
 
 pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();

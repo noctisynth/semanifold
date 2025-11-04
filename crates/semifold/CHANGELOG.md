@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.16
+
+### New Features
+
+- [`35dad5f`](https://github.com/noctisynth/semifold/commit/35dad5f2d1b5348b2740cd4269005f52b5ca599b): Support pre-release versioning mode.
+
+### Bug Fixes
+
+- [`9d625f4`](https://github.com/noctisynth/semifold/commit/9d625f4309fe19c60e380a6c64348fe2a83feb48): Fix version parse from changelog startswith `v`.
+
+### Refactors
+
+- [`3f27105`](https://github.com/noctisynth/semifold/commit/3f27105467f33cfcb03b6f62a72f9c912ec8827b): Refactor `semifold` crate to support library mode.
+
 ## v0.1.15
 
 ### Bug Fixes

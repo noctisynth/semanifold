@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.6
+
+### Performance Improvements
+
+- [`940c9fc`](https://github.com/noctisynth/semifold/commit/940c9fcfb0422fd98e239401b01683945011227e): Disable useless features and create release profile for binary size optimizations.
+
 ## v0.1.5
 
 ### Chores

@@ -1460,7 +1460,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-changelog"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "git2",

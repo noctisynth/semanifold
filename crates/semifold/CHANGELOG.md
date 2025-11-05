@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.18
+
+### New Features
+
+- [`4856c7d`](https://github.com/noctisynth/semifold/commit/4856c7d14bb2bd3622f9ae29f8b75e5ad2f60165): Improve compatibility to `changesets` and `covector`, allow empty tag key now.
+- [`ff9d9a1`](https://github.com/noctisynth/semifold/commit/ff9d9a150e5a968cd4f1d1ab7dcdfb29780e0e35): Block the publish process before pre-checking private packages.
+
 ## v0.1.17
 
 ### Performance Improvements

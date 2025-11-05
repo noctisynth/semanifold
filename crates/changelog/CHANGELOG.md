@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.7
+
+### New Features
+
+- [`4856c7d`](https://github.com/noctisynth/semifold/commit/4856c7d14bb2bd3622f9ae29f8b75e5ad2f60165): Improve compatibility to `changesets` and `covector`, allow empty tag key now.
+
 ## v0.1.6
 
 ### Performance Improvements

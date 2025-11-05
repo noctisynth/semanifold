@@ -1,6 +1,6 @@
 [package]
 name = "semifold-resolver"
-version = "0.1.15"
+version = "0.1.16"
 edition.workspace = true
 description.workspace = true
 license.workspace = true

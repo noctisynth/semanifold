@@ -109,6 +109,15 @@ pub(crate) async fn publish(
         let resolved_package = resolver.resolve(&root, package)?;
         log::debug!("Resolved package: {}", &resolved_package.name);
 
+        if resolved_package.private {
+            log::warn!(
+                "Skip publish {} v{} due to private flag",
+                &resolved_package.name.cyan(),
+                &format!("v{}", resolved_package.version).green()
+            );
+            continue;
+        }
+
         let url = minijinja::render!(
             &resolver_config.pre_check.url,
             package => &resolved_package,

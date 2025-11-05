@@ -183,7 +183,11 @@ pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
             &[]
         })
         .prompt()?;
-        changeset.add_packages(&selected_packages, variant.to_bump_level(), tag.clone());
+        changeset.add_packages(
+            &selected_packages,
+            variant.to_bump_level(),
+            Some(tag.clone()),
+        );
         packages.retain(|p| !selected_packages.contains(p));
     }
 

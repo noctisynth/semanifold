@@ -83,8 +83,13 @@ pub async fn generate_changelog(
 
         let package = changeset.packages.iter().find(|p| p.name == package_name);
         if let Some(package) = package {
+            let tag = package
+                .tag
+                .as_ref()
+                .and_then(|t| tags.get(t).map(|s| s.as_str()))
+                .unwrap_or("Changes");
             changes_map
-                .entry(tags.get(&package.tag).map_or("Changes", |v| v))
+                .entry(tag)
                 .or_insert_with(Vec::new)
                 .push(format_line(
                     changeset,

@@ -30,7 +30,7 @@ impl fmt::Display for BumpLevel {
 pub struct ChangePackage {
     pub name: String,
     pub level: BumpLevel,
-    pub tag: String,
+    pub tag: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,11 +54,11 @@ impl Changeset {
     }
 
     #[inline]
-    pub fn add_package(&mut self, name: String, level: BumpLevel, tag: String) {
+    pub fn add_package(&mut self, name: String, level: BumpLevel, tag: Option<String>) {
         self.packages.push(ChangePackage { name, level, tag })
     }
 
-    pub fn add_packages(&mut self, packages: &[String], level: BumpLevel, tag: String) {
+    pub fn add_packages(&mut self, packages: &[String], level: BumpLevel, tag: Option<String>) {
         for package in packages {
             self.add_package(package.clone(), level, tag.clone());
         }
@@ -115,10 +115,7 @@ impl Changeset {
                     path: path.to_path_buf(),
                     reason: format!("Failed to parse package mark: {v:?}"),
                 })?;
-                let tag = mark.next().ok_or(ResolveError::InvalidChangeset {
-                    path: path.to_path_buf(),
-                    reason: format!("Failed to parse package mark: {v:?}"),
-                })?;
+                let tag = mark.next().map(|s| s.to_string());
                 let level = match level {
                     "major" => BumpLevel::Major,
                     "minor" => BumpLevel::Minor,
@@ -130,11 +127,7 @@ impl Changeset {
                         });
                     }
                 };
-                packages.push(ChangePackage {
-                    name,
-                    level,
-                    tag: tag.to_string(),
-                });
+                packages.push(ChangePackage { name, level, tag });
                 Ok(())
             })?;
         }
@@ -166,10 +159,10 @@ impl Changeset {
         let mut emitter = YamlEmitter::new(&mut fm);
         let mut fm_map = Mapping::new();
         for package in &self.packages {
-            let mark = if package.tag.is_empty() {
-                format!("{}", package.level)
+            let mark = if let Some(tag) = &package.tag {
+                format!("{}:{}", package.level, tag)
             } else {
-                format!("{}:{}", package.level, package.tag)
+                format!("{}", package.level)
             };
 
             fm_map.insert(

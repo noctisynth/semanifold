@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.19
+
+### Bug Fixes
+
+- [`1862ba8`](https://github.com/noctisynth/semifold/commit/1862ba8d7df701893a65b9187cdbaf9ecaf20fa0): Fix version bump when version mode changed from pre-release to semantic.
+
 ## v0.1.18
 
 ### New Features

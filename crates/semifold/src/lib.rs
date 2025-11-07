@@ -21,7 +21,8 @@ pub fn run() -> anyhow::Result<()> {
 
     log::debug!("Parsed CLI arguments: {:?}", &cli);
 
-    let ctx = context::Context::create()?;
+    let mut ctx = context::Context::create()?;
+    ctx.dry_run(cli.dry_run);
 
     log::debug!("Loaded config: {:?}", &ctx.config);
 

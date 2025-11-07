@@ -80,10 +80,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {
         log::info!("No changesets found, will publish the current version.");
-        return publish::publish(ctx, true, false).await;
+        return publish::publish(ctx, true).await;
     }
 
-    let changelogs_map = version::version(ctx, &changesets, false).await?;
+    let changelogs_map = version::version(ctx, &changesets).await?;
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;

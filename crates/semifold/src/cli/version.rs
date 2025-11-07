@@ -15,18 +15,16 @@ use semifold_resolver::{
 pub(crate) struct Version {
     #[clap(long, help = "Allow versioning packages with dirty git working tree")]
     allow_dirty: bool,
-    #[clap(long, help = "Print the version bumps without applying them")]
-    dry_run: bool,
 }
 
-pub(crate) fn post_version(ctx: &Context, dry_run: bool) -> anyhow::Result<()> {
+pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
     let packages = ctx.get_packages();
     for (package_name, package_config) in packages {
         let resolver_config = ctx.get_resolver_config(package_config.resolver);
         if let Some(ResolverConfig { post_version, .. }) = &resolver_config {
             for command in post_version {
                 let args = command.args.as_deref().unwrap_or_default();
-                if dry_run && !command.dry_run.unwrap_or(false) {
+                if ctx.dry_run && !command.dry_run.unwrap_or(false) {
                     log::warn!(
                         "Skipping post version command {} {} for package {} due to dry run",
                         command.command.magenta(),
@@ -57,7 +55,6 @@ pub(crate) fn post_version(ctx: &Context, dry_run: bool) -> anyhow::Result<()> {
 pub(crate) async fn version(
     ctx: &Context,
     changesets: &[Changeset],
-    dry_run: bool,
 ) -> anyhow::Result<HashMap<String, String>> {
     let config = ctx.config.as_ref().unwrap();
     let root = ctx.repo_root.as_ref().unwrap();
@@ -80,7 +77,7 @@ pub(crate) async fn version(
 
         let mut bumped_version = resolved_package.version.clone();
         utils::bump_version(&mut bumped_version, level, &package_config.version_mode)?;
-        resolver.bump(root, &resolved_package, &bumped_version, dry_run)?;
+        resolver.bump(root, &resolved_package, &bumped_version, ctx.dry_run)?;
 
         let changelog = generate_changelog(
             ctx,
@@ -94,7 +91,7 @@ pub(crate) async fn version(
 
         log::debug!("changelog for {}:\n{}", package_name, changelog);
 
-        if !dry_run {
+        if !ctx.dry_run {
             insert_changelog(
                 root.join(&package_config.path).join("CHANGELOG.md"),
                 &changelog,
@@ -103,10 +100,10 @@ pub(crate) async fn version(
         }
     }
 
-    if !dry_run {
+    if !ctx.dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
     }
-    post_version(ctx, dry_run)?;
+    post_version(ctx)?;
 
     Ok(changelogs_map)
 }
@@ -126,7 +123,7 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    version(ctx, &changesets, opts.dry_run).await?;
+    version(ctx, &changesets).await?;
 
     Ok(())
 }

@@ -1,9 +1,11 @@
 use std::{
+    cell::Cell,
+    collections::HashMap,
     env,
     path::{Path, PathBuf},
 };
 
-use crate::{config, error, resolver};
+use crate::{changeset::BumpLevel, config, error, resolver};
 
 #[derive(Debug)]
 pub struct RepoInfo {
@@ -19,6 +21,8 @@ pub struct Context {
     pub repo_root: Option<PathBuf>,
     pub repo_info: Option<RepoInfo>,
     pub git_repo: Option<git2::Repository>,
+    pub version_bumps: Cell<HashMap<String, BumpLevel>>,
+    pub dry_run: bool,
 }
 
 impl Context {
@@ -56,6 +60,7 @@ impl Context {
             repo_root,
             repo_info,
             git_repo,
+            ..Default::default()
         })
     }
 
@@ -155,5 +160,9 @@ impl Context {
             Vec::new()
         };
         Ok(assets)
+    }
+
+    pub fn dry_run(&mut self, dry_run: bool) {
+        self.dry_run = dry_run
     }
 }

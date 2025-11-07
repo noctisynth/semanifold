@@ -20,9 +20,6 @@ pub(crate) struct Publish {
     /// Whether to allow dirty git working tree
     #[clap(short = 'd', long, default_value_t = false)]
     allow_dirty: bool,
-    /// Whether to publish the package
-    #[clap(long)]
-    dry_run: bool,
 }
 
 pub(crate) async fn create_github_release(
@@ -65,11 +62,7 @@ pub(crate) async fn create_github_release(
     Ok(Some(release))
 }
 
-pub(crate) async fn publish(
-    ctx: &Context,
-    github_release: bool,
-    dry_run: bool,
-) -> anyhow::Result<()> {
+pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Result<()> {
     let config = ctx.config.as_ref().unwrap();
 
     log::debug!(
@@ -146,14 +139,14 @@ pub(crate) async fn publish(
             continue;
         }
 
-        resolver.publish(&resolved_package, resolver_config, dry_run)?;
+        resolver.publish(&resolved_package, resolver_config, ctx.dry_run)?;
 
         if should_create_github_release {
             let Some(repo_info) = &ctx.repo_info else {
                 return Err(anyhow::anyhow!("Repo info not found"));
             };
 
-            if !dry_run {
+            if !ctx.dry_run {
                 let Some(release) =
                     create_github_release(ctx, &octocrab, package_name, package).await?
                 else {
@@ -213,7 +206,7 @@ pub(crate) async fn run(opts: &Publish, ctx: &Context) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!(t!("cli.dirty_repo")));
     }
 
-    publish(ctx, opts.github_release, opts.dry_run).await?;
+    publish(ctx, opts.github_release).await?;
 
     Ok(())
 }

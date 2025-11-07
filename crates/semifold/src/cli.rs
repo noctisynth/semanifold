@@ -37,6 +37,9 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(global = true, short, long, help = "Enable debug mode")]
+    #[arg(global = true, long, help = "Enable dry run mode")]
+    pub dry_run: bool,
+
+    #[arg(global = true, long, help = "Enable debug mode")]
     pub debug: bool,
 }

@@ -7,6 +7,7 @@ use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ResolverConfig, VersionMode},
+    context,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -137,10 +138,10 @@ impl Resolver for RustResolver {
 
     fn bump(
         &mut self,
+        ctx: &context::Context,
         root: &Path,
         package: &ResolvedPackage,
         version: &semver::Version,
-        dry_run: bool,
     ) -> Result<(), ResolveError> {
         let bumped_version = version.to_string();
         let cargo_toml_path = root.join(&package.path).join("Cargo.toml");
@@ -153,17 +154,31 @@ impl Resolver for RustResolver {
                     path: cargo_toml_path.clone(),
                     reason: e.to_string(),
                 })?;
-        let package_table =
-            toml_doc["package"]
-                .as_table_mut()
-                .ok_or_else(|| ResolveError::ParseError {
-                    path: cargo_toml_path.clone(),
-                    reason: "package table not found".to_string(),
-                })?;
+        let package_table = toml_doc["package"]
+            .as_table_mut()
+            .ok_or(ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: "package table not found".to_string(),
+            })?;
         package_table["version"] = toml_edit::value(&bumped_version);
 
+        let deps_table =
+            toml_doc["dependencies"]
+                .as_table_mut()
+                .ok_or(ResolveError::ParseError {
+                    path: cargo_toml_path.clone(),
+                    reason: "dependencies table not found".to_string(),
+                })?;
+        for (name, bumped_version) in ctx.version_bumps.borrow().iter() {
+            if let Some(dep) = deps_table.get_mut(name)
+                && dep["version"].is_str()
+            {
+                dep["version"] = toml_edit::value(&bumped_version.to_string());
+            }
+        }
+
         let toml_content = toml_doc.to_string();
-        if !dry_run {
+        if !ctx.dry_run {
             std::fs::write(cargo_toml_path, toml_content)?;
         } else {
             log::warn!(

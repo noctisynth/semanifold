@@ -1,11 +1,11 @@
 use std::{
-    cell::Cell,
+    cell::RefCell,
     collections::HashMap,
     env,
     path::{Path, PathBuf},
 };
 
-use crate::{changeset::BumpLevel, config, error, resolver};
+use crate::{config, error, resolver};
 
 #[derive(Debug)]
 pub struct RepoInfo {
@@ -21,7 +21,7 @@ pub struct Context {
     pub repo_root: Option<PathBuf>,
     pub repo_info: Option<RepoInfo>,
     pub git_repo: Option<git2::Repository>,
-    pub version_bumps: Cell<HashMap<String, BumpLevel>>,
+    pub version_bumps: RefCell<HashMap<String, semver::Version>>,
     pub dry_run: bool,
 }
 

@@ -63,7 +63,12 @@ pub(crate) async fn version(
     };
     let mut changelogs_map = HashMap::new();
 
-    for (package_name, package_config) in &config.packages {
+    let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
+    for resolver in config.resolver.keys() {
+        ctx.create_resolver(*resolver)
+            .sort_packages(&root, &mut sorted_packages)?;
+    }
+    for (package_name, package_config) in &sorted_packages {
         log::debug!("Processing package: {}", package_name);
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(root, package_config)?;
@@ -77,7 +82,11 @@ pub(crate) async fn version(
 
         let mut bumped_version = resolved_package.version.clone();
         utils::bump_version(&mut bumped_version, level, &package_config.version_mode)?;
-        resolver.bump(root, &resolved_package, &bumped_version, ctx.dry_run)?;
+        resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
+        ctx.version_bumps
+            .borrow_mut()
+            .entry(package_name.clone())
+            .or_insert(bumped_version.clone());
 
         let changelog = generate_changelog(
             ctx,

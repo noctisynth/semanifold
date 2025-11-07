@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{PackageConfig, ResolverConfig, VersionMode},
+    context,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -622,14 +623,14 @@ impl Resolver for PythonResolver {
 
     fn bump(
         &mut self,
+        ctx: &context::Context,
         root: &Path,
         package: &ResolvedPackage,
         version: &semver::Version,
-        dry_run: bool,
     ) -> Result<(), ResolveError> {
         let bumped_version = version.to_string();
 
-        if dry_run {
+        if ctx.dry_run {
             log::warn!(
                 "Skip bump for {} to version {} due to dry run",
                 package.name,

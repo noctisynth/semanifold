@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ResolverConfig, VersionMode},
+    context,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -167,10 +168,10 @@ impl Resolver for NodejsResolver {
 
     fn bump(
         &mut self,
+        ctx: &context::Context,
         root: &Path,
         package: &ResolvedPackage,
         version: &semver::Version,
-        dry_run: bool,
     ) -> Result<(), ResolveError> {
         let bumped_version = version.to_string();
         let package_json_path = root.join(&package.path).join("package.json");
@@ -194,7 +195,7 @@ impl Resolver for NodejsResolver {
                 path: package_json_path.clone(),
                 reason: e.to_string(),
             })?;
-        if !dry_run {
+        if !ctx.dry_run {
             std::fs::write(package_json_path, package_json_content)?;
         } else {
             log::warn!(

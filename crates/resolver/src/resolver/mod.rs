@@ -52,10 +52,10 @@ pub trait Resolver {
     /// Bump version
     fn bump(
         &mut self,
+        ctx: &Context,
         root: &Path,
         package: &ResolvedPackage,
         version: &semver::Version,
-        dry_run: bool,
     ) -> Result<(), ResolveError>;
     /// Sort packages by their dependencies
     fn sort_packages(

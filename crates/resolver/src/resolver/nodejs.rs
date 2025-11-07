@@ -128,7 +128,7 @@ impl Resolver for NodejsResolver {
         }
 
         for workspace_pattern in workspaces {
-            let pattern = format!("{}/{}", root.display(), workspace_pattern);
+            let pattern = root.join(&workspace_pattern).display().to_string();
             let paths = glob::glob(&pattern)
                 .map_err(|e| ResolveError::ParseError {
                     path: package_json_path.clone(),

@@ -101,7 +101,7 @@ impl Resolver for RustResolver {
         let members = cargo_toml.workspace.unwrap().members.iter().try_fold(
             Vec::new(),
             |mut members, member| {
-                let pattern = format!("{}/{}", root.display(), member);
+                let pattern = root.join(member).display().to_string();
                 let paths = glob::glob(&pattern)
                     .map_err(|e| ResolveError::ParseError {
                         path: cargo_toml_path.clone(),

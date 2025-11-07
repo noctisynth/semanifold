@@ -593,7 +593,7 @@ impl Resolver for PythonResolver {
         let common_patterns = vec!["packages/*", "libs/*", "apps/*"];
 
         for pattern in common_patterns {
-            let glob_pattern = format!("{}/{}", root.display(), pattern);
+            let glob_pattern = root.join(pattern).display().to_string();
             if let Ok(paths) = glob::glob(&glob_pattern) {
                 for path in paths.flatten() {
                     if path.join("pyproject.toml").exists() || path.join("setup.cfg").exists() {

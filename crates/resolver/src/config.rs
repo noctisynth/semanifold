@@ -109,6 +109,9 @@ pub struct CommandConfig {
     /// Type of standard error to use.
     #[serde(default, skip_serializing_if = "StdioType::is_inherit")]
     pub stderr: StdioType,
+    /// Whether to run the command in dry-run mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

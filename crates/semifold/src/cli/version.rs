@@ -13,18 +13,35 @@ use semifold_resolver::{
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
-    #[clap(long, help = "Allow versioning packages with dirty git repositories")]
+    #[clap(long, help = "Allow versioning packages with dirty git working tree")]
     allow_dirty: bool,
     #[clap(long, help = "Print the version bumps without applying them")]
     dry_run: bool,
 }
 
-pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
+pub(crate) fn post_version(ctx: &Context, dry_run: bool) -> anyhow::Result<()> {
     let packages = ctx.get_packages();
     for (package_name, package_config) in packages {
         let resolver_config = ctx.get_resolver_config(package_config.resolver);
         if let Some(ResolverConfig { post_version, .. }) = &resolver_config {
             for command in post_version {
+                let args = command.args.as_deref().unwrap_or_default();
+                if dry_run && !command.dry_run.unwrap_or(false) {
+                    log::warn!(
+                        "Skipping post version command {} {} for package {} due to dry run",
+                        command.command.magenta(),
+                        args.join(" ").magenta(),
+                        package_name.cyan()
+                    );
+                    continue;
+                }
+
+                log::info!(
+                    "Running post version command {} {} for package {}",
+                    command.command.magenta(),
+                    args.join(" ").magenta(),
+                    package_name.cyan()
+                );
                 utils::run_command(command, &package_config.path)?;
             }
         } else {
@@ -88,8 +105,9 @@ pub(crate) async fn version(
 
     if !dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
-        post_version(ctx)?;
     }
+    post_version(ctx, dry_run)?;
+
     Ok(changelogs_map)
 }
 

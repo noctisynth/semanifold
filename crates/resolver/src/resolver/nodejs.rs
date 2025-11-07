@@ -267,14 +267,7 @@ impl Resolver for NodejsResolver {
         resolver_config: &ResolverConfig,
         dry_run: bool,
     ) -> Result<(), ResolveError> {
-        if dry_run {
-            log::warn!(
-                "Skip publish {} {} due to dry run",
-                package.name,
-                format_args!("v{}", package.version)
-            );
-            return Ok(());
-        } else if package.private {
+        if package.private {
             log::warn!(
                 "Skip publish {} {} due to private flag",
                 package.name,
@@ -286,6 +279,14 @@ impl Resolver for NodejsResolver {
         log::info!("Running prepublish commands for {}", package.name);
         for prepublish in &resolver_config.prepublish {
             let args = prepublish.args.clone().unwrap_or_default();
+            if dry_run && !prepublish.dry_run.unwrap_or(false) {
+                log::warn!(
+                    "Skip prepublish command {} {} due to dry run",
+                    prepublish.command,
+                    args.join(" ")
+                );
+                continue;
+            }
             log::info!("Running {} {}", prepublish.command, args.join(" "));
             utils::run_command(prepublish, &package.path)?;
         }
@@ -293,6 +294,14 @@ impl Resolver for NodejsResolver {
         log::info!("Running publish commands for {}", package.name);
         for publish in &resolver_config.publish {
             let args = publish.args.clone().unwrap_or_default();
+            if dry_run && !publish.dry_run.unwrap_or(false) {
+                log::warn!(
+                    "Skip publish command {} {} due to dry run",
+                    publish.command,
+                    args.join(" ")
+                );
+                continue;
+            }
             log::info!("Running {} {}", publish.command, args.join(" "));
             utils::run_command(publish, &package.path)?;
         }

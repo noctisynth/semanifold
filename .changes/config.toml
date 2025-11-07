@@ -26,7 +26,7 @@ resolver = "rust"
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 
 [resolver.rust.pre-check.extra-headers]
-User-Agent = "Semifold 0.1.10"
+User-Agent = "Semifold 0.2.0"
 
 [[resolver.rust.prepublish]]
 command = "cargo"
@@ -39,3 +39,4 @@ args = ["publish"]
 [[resolver.rust.post-version]]
 command = "cargo"
 args = ["generate-lockfile"]
+dry_run = true

@@ -117,6 +117,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         extra_env: BTreeMap::new(),
                         stdout: config::StdioType::Inherit,
                         stderr: config::StdioType::Inherit,
+                        dry_run: None,
                     }],
                     post_version: vec![CommandConfig {
                         command: "cargo".to_string(),
@@ -124,6 +125,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         extra_env: BTreeMap::new(),
                         stdout: config::StdioType::Inherit,
                         stderr: config::StdioType::Inherit,
+                        dry_run: Some(true),
                     }],
                 },
             ),
@@ -143,6 +145,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                         extra_env: BTreeMap::new(),
                         stdout: config::StdioType::Inherit,
                         stderr: config::StdioType::Inherit,
+                        dry_run: None,
                     }],
                     post_version: vec![]
                 },

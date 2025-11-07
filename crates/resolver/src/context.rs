@@ -80,7 +80,13 @@ impl Context {
         self.git_repo
             .as_ref()
             .and_then(|r| r.statuses(None).ok())
-            .map(|s| s.iter().all(|s| s.status() == git2::Status::CURRENT))
+            .map(|s| {
+                s.iter().all(|s| {
+                    let status = s.status();
+                    log::debug!("git repo file status for {:?}: {:?}", s.path(), status);
+                    status == git2::Status::CURRENT || status == git2::Status::IGNORED
+                })
+            })
             .unwrap_or(false)
     }
 

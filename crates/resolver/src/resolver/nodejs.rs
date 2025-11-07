@@ -113,6 +113,20 @@ impl Resolver for NodejsResolver {
         let workspaces = workspaces.unwrap();
         let mut packages = Vec::new();
 
+        if let Ok(root_package) = self.resolve(
+            root,
+            &PackageConfig {
+                path: ".".into(),
+                resolver: ResolverType::Nodejs,
+                version_mode: VersionMode::Semantic,
+                assets: vec![],
+            },
+        ) {
+            packages.push(root_package);
+        } else {
+            log::warn!("Failed to resolve root package in {}", root.display());
+        }
+
         for workspace_pattern in workspaces {
             let pattern = format!("{}/{}", root.display(), workspace_pattern);
             let paths = glob::glob(&pattern)
@@ -124,6 +138,10 @@ impl Resolver for NodejsResolver {
                 .collect::<Vec<_>>();
 
             for path in paths {
+                if path == root {
+                    continue;
+                }
+
                 if path.join("package.json").exists() {
                     let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
                     match self.resolve(

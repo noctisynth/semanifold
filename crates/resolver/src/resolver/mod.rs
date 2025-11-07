@@ -17,7 +17,7 @@ pub mod rust;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ResolvedPackage {
     pub name: String,
-    pub version: String,
+    pub version: semver::Version,
     pub path: PathBuf,
     pub private: bool,
 }

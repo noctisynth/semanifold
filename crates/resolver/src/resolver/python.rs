@@ -133,7 +133,7 @@ impl PythonResolver {
 
         Ok(ResolvedPackage {
             name,
-            version,
+            version: semver::Version::parse(&version)?,
             path: pkg_path.to_path_buf(),
             private: false,
         })
@@ -188,7 +188,7 @@ impl PythonResolver {
 
         Ok(ResolvedPackage {
             name,
-            version,
+            version: semver::Version::parse(&version)?,
             path: pkg_path.to_path_buf(),
             private: false,
         })

@@ -48,7 +48,7 @@ impl Resolver for NodejsResolver {
 
         let package = ResolvedPackage {
             name: package_json.name,
-            version: package_json.version,
+            version: semver::Version::parse(&package_json.version)?,
             path: pkg_config.path.clone(),
             private: package_json.private.unwrap_or(false),
         };

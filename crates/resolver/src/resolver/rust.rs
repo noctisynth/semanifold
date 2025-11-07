@@ -57,7 +57,7 @@ impl Resolver for RustResolver {
         })?;
         let package = ResolvedPackage {
             name: cargo_pkg_config.name,
-            version: cargo_pkg_config.version,
+            version: semver::Version::parse(&cargo_pkg_config.version)?,
             path: pkg_config.path.clone(),
             private: cargo_pkg_config.publish.unwrap_or(false),
         };

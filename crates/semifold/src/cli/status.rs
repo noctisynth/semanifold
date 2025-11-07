@@ -5,7 +5,9 @@ use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semifold_resolver::{changeset::BumpLevel, context::Context, resolver, utils};
+use semifold_resolver::{
+    changeset::BumpLevel, config::VersionMode, context::Context, resolver, utils,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,17 +48,15 @@ pub(crate) struct Status {
 }
 
 pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
-    let Context {
-        config: Some(config),
-        ..
-    } = ctx
-    else {
+    if !ctx.is_initialized() {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
 
     let is_ci = ctx.is_ci();
     log::debug!("GitHub CI environment: {}", is_ci);
+
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
+    let config = ctx.config.as_ref().unwrap();
 
     let changesets = resolver::get_changesets(ctx)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
@@ -70,6 +70,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     );
 
     let mut bump_map = HashMap::new();
+    let mut warnings = vec![];
     for (package_name, package_config) in &config.packages {
         let level = utils::get_bump_level(&changesets, package_name);
         if matches!(level, BumpLevel::Unchanged) {
@@ -78,11 +79,23 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
 
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(&root, package_config)?;
-        let bumped_version = utils::bump_version(
-            &resolved_package.version,
-            level,
-            &package_config.version_mode,
-        )?;
+        let mut bumped_version = resolved_package.version.clone();
+        utils::bump_version(&mut bumped_version, level, &package_config.version_mode)?;
+
+        if matches!(package_config.version_mode, VersionMode::Semantic)
+            && !resolved_package.version.pre.is_empty()
+            && level != BumpLevel::Unchanged
+            && level != BumpLevel::Patch
+        {
+            log::debug!(
+                "Adding pre-release warning for package: {}",
+                package_name.as_str()
+            );
+            warnings.push(t!(
+                "cli.status.pre_release_warning",
+                package = package_name.as_str().cyan()
+            ));
+        }
 
         bump_map.insert(
             package_name,
@@ -102,10 +115,17 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             println!(
                 "{:name_width$} {} → {}",
                 package_name.cyan().bold(),
-                resolved_version.yellow(),
+                resolved_version.to_string().yellow(),
                 bumped_version.to_string().green()
             );
         }
+    }
+
+    if !warnings.is_empty() {
+        println!("\n{}", t!("cli.status.pre_release_warning_header").yellow());
+    }
+    for warning in warnings.iter() {
+        println!("{}", warning.yellow());
     }
 
     if !is_ci {
@@ -160,6 +180,16 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             .map(|(k, (l, v, b))| format!("| {} | {} | {} | {} |", k, l, v, b))
             .collect::<Vec<_>>()
             .join("\n");
+        let warnings_section = if !warnings.is_empty() {
+            let warnings_md = warnings
+                .iter()
+                .map(|w| format!("- {}", w))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("\n### Warnings\n\n{}", warnings_md)
+        } else {
+            String::new()
+        };
         let comment_body = format!(
             "## Workspace change through: {}\n\n\
             {} changesets found\n\n\
@@ -168,10 +198,12 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             | Package | Bump Level | Current Version | Next Version |\n\
             | ------- | ---------- | --------------- | ------------ |\n\
             {}\n\
-            </details>",
+            </details>\n\
+            {}",
             &last_commit.sha,
             changesets.len(),
             &markdown_table,
+            &warnings_section,
         );
 
         if let Some(comment) = existing {

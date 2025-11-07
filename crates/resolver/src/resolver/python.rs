@@ -630,8 +630,8 @@ impl Resolver for PythonResolver {
         let bumped_version = version.to_string();
 
         if dry_run {
-            log::info!(
-                "Dry run: Would update {} to version {}",
+            log::warn!(
+                "Skip bump for {} to version {} due to dry run",
                 package.name,
                 bumped_version
             );

@@ -91,12 +91,17 @@ pub fn bump_version(
                 version.major += 1;
                 version.minor = 0;
                 version.patch = 0;
+                version.pre = semver::Prerelease::EMPTY;
             }
             BumpLevel::Minor => {
                 version.minor += 1;
                 version.patch = 0;
+                version.pre = semver::Prerelease::EMPTY;
             }
-            BumpLevel::Patch => version.patch += 1,
+            BumpLevel::Patch => {
+                version.patch += 1;
+                version.pre = semver::Prerelease::EMPTY;
+            }
             BumpLevel::Unchanged => {}
         },
         VersionMode::PreRelease { tag } => {

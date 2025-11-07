@@ -166,8 +166,8 @@ impl Resolver for RustResolver {
         if !dry_run {
             std::fs::write(cargo_toml_path, toml_content)?;
         } else {
-            log::info!(
-                "Dry run: Would update {} to version {}",
+            log::warn!(
+                "Skip bump for {} to version {} due to dry run",
                 package.name,
                 bumped_version
             );

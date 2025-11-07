@@ -197,8 +197,8 @@ impl Resolver for NodejsResolver {
         if !dry_run {
             std::fs::write(package_json_path, package_json_content)?;
         } else {
-            log::info!(
-                "Dry run: Would update {} to version {}",
+            log::warn!(
+                "Skip bump for {} to version {} due to dry run",
                 package.name,
                 bumped_version
             );

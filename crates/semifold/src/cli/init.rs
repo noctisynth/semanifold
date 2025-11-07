@@ -139,7 +139,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     prepublish: vec![],
                     publish: vec![CommandConfig {
                         command: "npm".to_string(),
-                        args: vec!["publish".to_string()].into(),
+                        args: vec!["publish".to_string(), "--provenance".to_string(), "--access".to_string(), "public".to_string()].into(),
                         extra_env: BTreeMap::new(),
                         stdout: config::StdioType::Inherit,
                         stderr: config::StdioType::Inherit,

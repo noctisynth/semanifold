@@ -83,9 +83,6 @@ pub(crate) async fn publish(
     } else {
         octocrab::Octocrab::default()
     };
-    let Some(repo_info) = &ctx.repo_info else {
-        return Err(anyhow::anyhow!("Git repository is not initialized"));
-    };
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
     let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
@@ -149,6 +146,10 @@ pub(crate) async fn publish(
         resolver.publish(&resolved_package, resolver_config, dry_run)?;
 
         if should_create_github_release {
+            let Some(repo_info) = &ctx.repo_info else {
+                return Err(anyhow::anyhow!("Repo info not found"));
+            };
+
             if !dry_run {
                 let Some(release) =
                     create_github_release(ctx, &octocrab, package_name, package).await?

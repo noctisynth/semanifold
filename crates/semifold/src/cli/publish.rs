@@ -17,6 +17,9 @@ pub(crate) struct Publish {
     /// Whether to create a GitHub release, only available when running in CI
     #[clap(short = 'r', long, default_value_t = true)]
     github_release: bool,
+    /// Whether to allow dirty git working tree
+    #[clap(short = 'd', long, default_value_t = false)]
+    allow_dirty: bool,
     /// Whether to publish the package
     #[clap(long)]
     dry_run: bool,
@@ -205,6 +208,10 @@ pub(crate) async fn run(opts: &Publish, ctx: &Context) -> anyhow::Result<()> {
     if !ctx.is_initialized() {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
     };
+
+    if !opts.allow_dirty && !ctx.is_git_repo_clean() {
+        return Err(anyhow::anyhow!(t!("cli.dirty_repo")));
+    }
 
     publish(ctx, opts.github_release, opts.dry_run).await?;
 

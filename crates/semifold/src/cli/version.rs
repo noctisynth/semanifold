@@ -66,7 +66,7 @@ pub(crate) async fn version(
     let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
     for resolver in config.resolver.keys() {
         ctx.create_resolver(*resolver)
-            .sort_packages(&root, &mut sorted_packages)?;
+            .sort_packages(root, &mut sorted_packages)?;
     }
     for (package_name, package_config) in &sorted_packages {
         log::debug!("Processing package: {}", package_name);

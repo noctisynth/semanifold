@@ -173,7 +173,7 @@ impl Resolver for RustResolver {
             if let Some(dep) = deps_table.get_mut(name)
                 && dep["version"].is_str()
             {
-                dep["version"] = toml_edit::value(&bumped_version.to_string());
+                dep["version"] = toml_edit::value(bumped_version.to_string());
             }
         }
 

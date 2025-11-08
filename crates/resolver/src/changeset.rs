@@ -59,9 +59,9 @@ impl Changeset {
     }
 
     pub fn add_packages(&mut self, packages: &[String], level: BumpLevel, tag: Option<String>) {
-        for package in packages {
+        packages.iter().for_each(|package| {
             self.add_package(package.clone(), level, tag.clone());
-        }
+        })
     }
 
     pub fn summary(&mut self, summary: String) {

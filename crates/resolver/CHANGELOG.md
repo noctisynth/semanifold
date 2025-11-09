@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.2.0
+
+### Bug Fixes
+
+- [`cd86453`](https://github.com/noctisynth/semifold/commit/cd86453841b6d394d9281c0412ad5e75794b85a9): Fix git repo status check for `git2::Status::IGNORE` files.
+- [`8e8bf97`](https://github.com/noctisynth/semifold/commit/8e8bf97acefef3faf4817957acb12ec0f91dd93a): Fix glob pattern on non-posix platforms.
+
+### Refactors
+
+- [`86c97d9`](https://github.com/noctisynth/semifold/commit/86c97d9a63cff0931588c434908bcf4fe91f7805): Mark `--dry-run` flag as global options.
+
+### New Features
+
+- [`e009c7e`](https://github.com/noctisynth/semifold/commit/e009c7ec0d2908cdf6bf11430a7c0db46f8f40ad): Support running commands in dry run mode.
+- [`98e4a7d`](https://github.com/noctisynth/semifold/commit/98e4a7d7ba33a1179fd542fdef0c7a4011ecab64): Sort packages and cache version bumps in version process, fix Rust workspace related packages version bump.
+- [`27b53b2`](https://github.com/noctisynth/semifold/commit/27b53b28c15e7056f54e0f61ae8f688cf714e59a): When switching from pre-release mode to production mode, ignore minor and major version bumps and remove only the pre-release tag.
+
 ## v0.1.17
 
 ### Bug Fixes

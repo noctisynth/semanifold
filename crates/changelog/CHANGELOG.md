@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0
+
+### New Features
+
+- [`e009c7e`](https://github.com/noctisynth/semifold/commit/e009c7ec0d2908cdf6bf11430a7c0db46f8f40ad): Support running commands in dry run mode.
+
 ## v0.1.7
 
 ### New Features

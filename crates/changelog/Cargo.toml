@@ -1,6 +1,6 @@
 [package]
 name = "semifold-changelog"
-version = "0.1.7"
+version = "0.2.0"
 edition.workspace = true
 description.workspace = true
 license.workspace = true
@@ -16,4 +16,4 @@ git2 = "0.20.2"
 octocrab = "0.47.0"
 pathdiff = "0.2.3"
 regex = "1.12.2"
-semifold-resolver = { version = "0.1.0", path = "../resolver" }
+semifold-resolver = { version = "0.2.0", path = "../resolver" }

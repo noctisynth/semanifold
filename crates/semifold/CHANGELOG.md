@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.0
+
+### Refactors
+
+- [`86c97d9`](https://github.com/noctisynth/semifold/commit/86c97d9a63cff0931588c434908bcf4fe91f7805): Mark `--dry-run` flag as global options.
+
+### Bug Fixes
+
+- [`cf4c08b`](https://github.com/noctisynth/semifold/commit/cf4c08b72e6003062a18bd077db3f92ea98a86cd): Fix panic if running publish cli on local machine.
+- [`c35a34e`](https://github.com/noctisynth/semifold/commit/c35a34e5a3854cc949fac3d2ee9a80778cc0fd12): Add `id-token` permission for GitHub Actions workflow files to support Node.js publish.
+- [`5bc444a`](https://github.com/noctisynth/semifold/commit/5bc444a4e4ec5b864d63cef23687aad52cc854d7): Fix Nodejs default publish command.
+
+### New Features
+
+- [`e009c7e`](https://github.com/noctisynth/semifold/commit/e009c7ec0d2908cdf6bf11430a7c0db46f8f40ad): Support running commands in dry run mode.
+- [`b346aa7`](https://github.com/noctisynth/semifold/commit/b346aa74585fbe4196d303ff5b34934d6b8493b5): Prevent publish process with dirty git working tree.
+- [`98e4a7d`](https://github.com/noctisynth/semifold/commit/98e4a7d7ba33a1179fd542fdef0c7a4011ecab64): Sort packages and cache version bumps in version process, fix Rust workspace related packages version bump.
+- [`27b53b2`](https://github.com/noctisynth/semifold/commit/27b53b28c15e7056f54e0f61ae8f688cf714e59a): When switching from pre-release mode to production mode, ignore minor and major version bumps and remove only the pre-release tag.
+- [`985a9f5`](https://github.com/noctisynth/semifold/commit/985a9f5f7614877d8abf54404112481fa45f4a75): Enhance i18n supports for Semifold CLI
+
 ## v0.1.19
 
 ### Bug Fixes

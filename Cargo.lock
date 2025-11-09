@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.1.19"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1873,7 +1873,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-changelog"
-version = "0.1.7"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "git2",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.1.17"
+version = "0.2.0"
 dependencies = [
  "git2",
  "glob",

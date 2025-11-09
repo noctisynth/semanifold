@@ -2,6 +2,18 @@
 not_initialized = "Semifold 未初始化。请先运行 `semifold init`。"
 dirty_repo = "Git 仓库不干净。请先提交或暂存您的更改，或使用 `--allow-dirty` 选项。"
 
+[cli.commands]
+commit = "提交一个新的变更集"
+init = "在当前仓库初始化 Semifold 变更集配置"
+version = "提升包版本"
+publish = "发布存在变更的包"
+ci = "运行 Semifold 的持续集成任务"
+status = "获取 Semifold 变更集状态"
+
+[cli.flags]
+dry_run = "启用模拟运行模式"
+debug = "启用调试模式"
+
 [cli.commit]
 warn_incomplete_select = "未提升所有已选包，是否继续？"
 query_name = "提交的名称是什么？"
@@ -17,6 +29,11 @@ commit_exists = "名为 %{name} 的提交已存在"
 warn_no_packages = "未选择任何包"
 empty_summary = "摘要不能为空"
 
+[cli.commit.flags]
+name = "要提交的变更集名称"
+level = "要提升的版本级别"
+summary = "变更摘要"
+
 [cli.init]
 already_initialized = "Semifold 已经初始化，如果要重新初始化，请使用 `--force` 选项。"
 not_repo_root = "当前目录不是仓库根目录。"
@@ -29,9 +46,35 @@ base_branch = "要使用的基础分支？"
 release_branch = "要使用的发布分支？"
 write_ci = "是否写入 GitHub Actions 工作流？"
 
+[cli.init.flags]
+target = "要存储变更集的目标目录"
+resolvers = "要使用的工作区解析器"
+force = "强制重新初始化 Semifold"
+base_branch = "要使用的基础分支"
+release_branch = "要使用的发布分支"
+
 [cli.status]
 changesets = "共找到 %{count} 个变更集"
 packages = "以下包将被提升："
 no_packages = "没有包需要提升"
 pre_release_warning = "%{package} 处于预发布模式，但是正在尝试非补丁提升。"
 pre_release_warning_header = "警告:"
+
+[cli.version]
+no_git_repo = "没有识别到 Git 仓库"
+empty_changesets = "没有变更集可用于版本提升"
+unchanged = "包 %{package} 没有变更，跳过版本提升"
+skip_post_version = "由于处于模拟运行模式，跳过包 %{package} 的后版本命令 %{command}"
+run_post_version = "为包 %{package} 运行后版本钩子命令 %{command}"
+no_resolver_config = "没有为解析器 %{resolver} 找到配置，无法为包 %{package} 运行后版本钩子"
+
+[cli.version.flags]
+allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"
+
+[cli.publish]
+skip_private = "跳过发布 %{package} %{version} 作为它是私有的"
+pre_check = "包 %{package} %{version} 的预检查通过，跳过发布"
+
+[cli.publish.flags]
+github_release = "为发布的包创建 GitHub Release，仅在 CI 环境中可用"
+allow_dirty = "允许发布包含不干净的 Git 工作树的包"

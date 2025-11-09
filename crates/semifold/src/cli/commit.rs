@@ -36,10 +36,11 @@ impl Level {
 
 #[derive(Parser, Debug)]
 pub(crate) struct Commit {
+    #[arg(short, long, help = t!("cli.commit.flags.name"))]
     pub name: Option<String>,
-    #[arg(short, long)]
+    #[arg(short, long, help = t!("cli.commit.flags.level"))]
     pub level: Option<Level>,
-    #[arg(short, long)]
+    #[arg(short, long, help = t!("cli.commit.flags.summary"))]
     pub summary: Option<String>,
 }
 

@@ -2,6 +2,18 @@
 not_initialized = "Semifold is not initialized. Please run `semifold init` first."
 dirty_repo = "Git repository is dirty. Please commit or stash your changes first, or use `--allow-dirty` option."
 
+[cli.commands]
+commit = "Commit a new changeset"
+init = "Initialize Semifold changesets config in current repository"
+version = "Bump package versions"
+publish = "Publish packages with changes"
+ci = "Run CI tasks of Semifold"
+status = "Get status of Semifold changesets"
+
+[cli.flags]
+dry_run = "Enable dry run mode"
+debug = "Enable debug mode"
+
 [cli.commit]
 warn_incomplete_select = "Not all selected packages are bumped, continue?"
 query_name = "What is the name of the commit?"
@@ -17,6 +29,11 @@ commit_exists = "Commit with name %{name} already exists"
 warn_no_packages = "No packages selected"
 empty_summary = "Summary cannot be empty"
 
+[cli.commit.flags]
+name = "Name of the changeset to commit"
+level = "Level of version bump"
+summary = "Summary of changes"
+
 [cli.init]
 already_initialized = "Semifold is already initialized. If you want to re-initialize, please use the `--force` option."
 not_repo_root = "Current directory is not the root of the repository."
@@ -29,9 +46,38 @@ base_branch = "What is the base branch?"
 release_branch = "What is the release branch?"
 write_ci = "Write GitHub Actions workflows?"
 
+[cli.init.flags]
+target = "Target directory to store changesets"
+resolvers = "Resolvers to use for workspace resolution"
+force = "Force re-initialize Semifold"
+base_branch = "Base branch to use for release"
+release_branch = "Release branch to use for release"
+
 [cli.status]
 changesets = "%{count} changesets found"
 packages = "The following packages will be bumped:"
 no_packages = "No packages to bump"
 pre_release_warning = "%{package} is currently in a pre-release mode, but a non-patch bump is being attempted."
 pre_release_warning_header = "Warnings:"
+
+[cli.status.flags]
+comment = "Create GitHub pull request comments, only available in CI environment"
+
+[cli.version]
+no_git_repo = "No Git repository found"
+empty_changesets = "No changesets found, skipping versioning"
+unchanged = "%{package} is unchanged, skipping versioning"
+skip_post_version = "Skipping post-version command %{command} for %{package} due to dry run"
+run_post_version = "Running post-version command %{command} for %{package}"
+no_resolver_config = "No resolver config found for %{resolver}, failed to run post-version for %{package}"
+
+[cli.version.flags]
+allow_dirty = "Allow versioning packages with dirty Git working tree"
+
+[cli.publish]
+skip_private = "Skip publishing %{package} %{version} as it is private"
+pre_check = "Pre-check passed for %{package} %{version}, skipping publish"
+
+[cli.publish.flags]
+github_release = "Create GitHub releases for published packages, only available in CI environment"
+allow_dirty = "Allow publishing packages with dirty Git working tree"

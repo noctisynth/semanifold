@@ -14,11 +14,9 @@ use semifold_resolver::{config::PackageConfig, context::Context};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
-    /// Whether to create a GitHub release, only available when running in CI
-    #[clap(short = 'r', long, default_value_t = true)]
+    #[clap(short = 'r', long, default_value_t = true, help = t!("cli.publish.flags.github_release"))]
     github_release: bool,
-    /// Whether to allow dirty git working tree
-    #[clap(short = 'd', long, default_value_t = false)]
+    #[clap(short = 'd', long, default_value_t = false, help = t!("cli.publish.flags.allow_dirty"))]
     allow_dirty: bool,
 }
 
@@ -104,9 +102,12 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
 
         if resolved_package.private {
             log::warn!(
-                "Skip publish {} v{} due to private flag",
-                &resolved_package.name.cyan(),
-                &format!("v{}", resolved_package.version).green()
+                "{}",
+                t!(
+                    "cli.publish.skip_private",
+                    package = package_name.cyan(),
+                    version = format!("v{}", resolved_package.version).green()
+                )
             );
             continue;
         }
@@ -132,9 +133,12 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
         log::debug!("Pre-check response: {:?}", &resp);
         if resp.status() == StatusCode::OK {
             log::warn!(
-                "Pre-check passed for {} {}, skip publish",
-                &package_name.cyan(),
-                &format!("v{}", resolved_package.version).green()
+                "{}",
+                t!(
+                    "cli.publish.pre_check",
+                    package = package_name.cyan(),
+                    version = format!("v{}", resolved_package.version).green()
+                )
             );
             continue;
         }

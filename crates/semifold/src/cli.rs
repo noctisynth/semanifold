@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, builder::styling};
+use rust_i18n::t;
 
 pub mod ci;
 pub mod commit;
@@ -9,17 +10,17 @@ pub mod version;
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {
-    #[command(about = "Commit a new change", visible_alias = "add")]
+    #[command(about = t!("cli.commands.commit"), visible_alias = "add")]
     Commit(commit::Commit),
-    #[command(about = "Initialize semifold changesets config")]
+    #[command(about = t!("cli.commands.init"))]
     Init(init::Init),
-    #[command(about = "Bump version of packages")]
+    #[command(about = t!("cli.commands.version"))]
     Version(version::Version),
-    #[command(about = "Publish packages")]
+    #[command(about = t!("cli.commands.publish"))]
     Publish(publish::Publish),
-    #[command(about = "Run CI tasks")]
+    #[command(about = t!("cli.commands.ci"))]
     CI(ci::CI),
-    #[command(about = "Get status of semifold changesets")]
+    #[command(about = t!("cli.commands.status"))]
     Status(status::Status),
 }
 
@@ -37,9 +38,9 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(global = true, long, help = "Enable dry run mode")]
+    #[arg(global = true, long, help = t!("cli.flags.dry_run"))]
     pub dry_run: bool,
 
-    #[arg(global = true, long, help = "Enable debug mode")]
+    #[arg(global = true, long, help = t!("cli.flags.debug"))]
     pub debug: bool,
 }

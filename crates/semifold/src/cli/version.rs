@@ -13,7 +13,7 @@ use semifold_resolver::{
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
-    #[clap(long, help = "Allow versioning packages with dirty git working tree")]
+    #[clap(long, help = t!("cli.version.flags.allow_dirty"))]
     allow_dirty: bool,
 }
 
@@ -26,26 +26,34 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
                 let args = command.args.as_deref().unwrap_or_default();
                 if ctx.dry_run && !command.dry_run.unwrap_or(false) {
                     log::warn!(
-                        "Skipping post version command {} {} for package {} due to dry run",
-                        command.command.magenta(),
-                        args.join(" ").magenta(),
-                        package_name.cyan()
+                        "{}",
+                        t!(
+                            "cli.version.skip_post_version",
+                            command = format!("{} {}", command.command, args.join(" ")).magenta(),
+                            package = package_name.cyan()
+                        )
                     );
                     continue;
                 }
 
                 log::info!(
-                    "Running post version command {} {} for package {}",
-                    command.command.magenta(),
-                    args.join(" ").magenta(),
-                    package_name.cyan()
+                    "{}",
+                    t!(
+                        "cli.version.run_post_version",
+                        command = format!("{} {}", command.command, args.join(" ")).magenta(),
+                        package = package_name.cyan()
+                    )
                 );
                 utils::run_command(command, &package_config.path)?;
             }
         } else {
             log::warn!(
-                "Failed to get post version commands for package: {}",
-                package_name
+                "{}",
+                t!(
+                    "cli.version.no_resolver_config",
+                    resolver = package_config.resolver.to_string().cyan(),
+                    package = package_name.cyan()
+                )
             );
         }
     }
@@ -59,7 +67,7 @@ pub(crate) async fn version(
     let config = ctx.config.as_ref().unwrap();
     let root = ctx.repo_root.as_ref().unwrap();
     let Some(repo) = ctx.git_repo.as_ref() else {
-        return Err(anyhow::anyhow!("Failed to open Git repository"));
+        return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
     let mut changelogs_map = HashMap::new();
 
@@ -76,7 +84,10 @@ pub(crate) async fn version(
 
         // Skip unchanged packages
         if matches!(level, BumpLevel::Unchanged) {
-            log::warn!("{} is unchanged, skip versioning", package_name.cyan());
+            log::warn!(
+                "{}",
+                t!("cli.version.unchanged", package = package_name.cyan())
+            );
             continue;
         }
 
@@ -128,7 +139,7 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
 
     let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {
-        log::warn!("No changesets found, skip versioning");
+        log::warn!("{}", t!("cli.version.empty_changesets"));
         return Ok(());
     }
 

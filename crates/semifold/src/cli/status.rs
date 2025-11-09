@@ -42,8 +42,7 @@ pub(crate) struct GitHubEvent {
 
 #[derive(Parser, Debug)]
 pub(crate) struct Status {
-    /// Create GitHub pull request comments, only available for pull requests
-    #[arg(short, long, default_value_t = true)]
+    #[arg(short, long, default_value_t = true, help = t!("cli.status.flags.comment"))]
     pub comment: bool,
 }
 

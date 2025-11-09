@@ -46,15 +46,15 @@ pub(crate) struct CIAsset;
 
 #[derive(Debug, Args)]
 pub(crate) struct Init {
-    #[arg(short, long, default_value = ".changes")]
+    #[arg(short, long, default_value = ".changes", help = t!("cli.init.flags.target"))]
     pub target: Option<PathBuf>,
-    #[arg(short, long)]
+    #[arg(short, long, help = t!("cli.init.flags.resolvers"))]
     pub resolvers: Vec<ResolverType>,
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long, default_value_t = false, help = t!("cli.init.flags.force"))]
     pub force: bool,
-    #[arg(long)]
+    #[arg(long, help = t!("cli.init.flags.base_branch"))]
     pub base_branch: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = t!("cli.init.flags.release_branch"))]
     pub release_branch: Option<String>,
 }
 

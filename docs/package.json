@@ -1,14 +1,14 @@
 {
+  "devDependencies": {
+    "@types/node": "^18.11.17",
+    "rspress": "^1.46.1"
+  },
   "name": "@semifold/docs",
-  "version": "1.0.0",
   "private": true,
   "scripts": {
     "build": "rspress build",
     "dev": "rspress dev",
     "preview": "rspress preview"
   },
-  "devDependencies": {
-    "@types/node": "^18.11.17",
-    "rspress": "^1.46.1"
-  }
+  "version": "1.0.1"
 }

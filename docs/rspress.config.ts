@@ -6,7 +6,6 @@ export default defineConfig({
   title: 'Semifold - Next-generation cross-language monorepo version and release management tool',
   icon: '/noctisynth.png',
   logo: '/noctisynth.png',
-
   themeConfig: {
     socialLinks: [
       {

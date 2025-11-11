@@ -1,0 +1,43 @@
+<!-- Semifold — C refined Dark Mode (no background) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="gC_dark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5aa0ff"/>
+      <stop offset="1" stop-color="#c47fff"/>
+    </linearGradient>
+
+    <filter id="shadowC_dark" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadowC_dark)">
+    <path
+      d="M64 18 L105 42 L105 86 L64 110 L23 86 L23 42 Z"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <path
+    d="M64 18 L105 42 L64 66 L23 42 Z"
+    fill="none"
+    stroke="url(#gC_dark)"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M64 18 L64 110"
+    stroke="rgba(255,255,255,0.15)"
+    stroke-width="1.2"
+    stroke-dasharray="5 6"
+    stroke-linecap="round"
+  />
+
+  <circle cx="64" cy="66" r="3.5" fill="url(#gC_dark)" />
+</svg>

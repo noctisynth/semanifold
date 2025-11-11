@@ -5,8 +5,11 @@ export default defineConfig({
   root: path.join(__dirname, 'docs'),
   title:
     'Semifold - Next-generation cross-language monorepo version and release management tool',
-  icon: '/noctisynth.png',
-  logo: '/noctisynth.png',
+  icon: '/favicon-dark.svg',
+  logo: {
+    light: '/favicon-light.svg',
+    dark: '/favicon-dark.svg',
+  },
   route: {
     cleanUrls: true,
   },

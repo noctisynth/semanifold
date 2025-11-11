@@ -3,7 +3,7 @@ pageType: home
 
 hero:
   name: Semifold
-  text: cross-language monorepo version and release management tool.
+  text: Cross-language monorepo versioning and release manager
   tagline: Consistency, automation, and zero pain for large cross-language monorepos.
   actions:
     - theme: brand
@@ -13,8 +13,10 @@ hero:
       text: GitHub
       link: https://github.com/noctisynth/semifold
   image:
-    src: /noctisynth.png
-    alt: Logo
+    src:
+      light: /logo-light.svg
+      dark: /logo-dark.svg
+    alt: Semifold Logo
 features:
   - title: Cross-language Monorepo Support
     details: Manage versions for Rust, Node.js, Python, Go, Java, Kotlin, and more (extensible).

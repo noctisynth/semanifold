@@ -21,9 +21,12 @@
     "semif",
     "semifold",
     "smif",
+    "srcset",
     "Swatinem",
     "thiserror",
     "userpass"
   ],
-  "ignorePaths": ["Cargo.toml"]
+  "ignorePaths": [
+    "Cargo.toml"
+  ]
 }

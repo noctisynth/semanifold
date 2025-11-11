@@ -1,0 +1,5 @@
+packages:
+  - docs
+
+onlyBuiltDependencies:
+  - core-js

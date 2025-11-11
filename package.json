@@ -1,0 +1,21 @@
+{
+  "name": "@semifold/workspace",
+  "version": "0.1.0",
+  "description": "Next-generation cross-language monorepo version and release management tool",
+  "private": true,
+  "scripts": {
+    "docs:build": "pnpm --filter @semifold/docs build",
+    "docs:dev": "pnpm --filter @semifold/docs dev",
+    "docs:preview": "pnpm --filter @semifold/docs preview",
+    "lint:fix": "pnpm biome check docs --fix"
+  },
+  "author": {
+    "name": "苏向夜",
+    "email": "fu050409@163.com"
+  },
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "@biomejs/biome": "^2.3.4"
+  }
+}

@@ -9,6 +9,10 @@ fix = "Bug Fixes"
 perf = "Performance Improvements"
 refactor = "Refactors"
 
+[packages."@semifold/docs"]
+path = "docs"
+resolver = "nodejs"
+
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
@@ -40,3 +44,6 @@ args = ["publish"]
 command = "cargo"
 args = ["generate-lockfile"]
 dry_run = true
+
+[resolver.nodejs.pre-check]
+url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"

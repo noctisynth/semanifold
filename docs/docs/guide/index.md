@@ -8,13 +8,13 @@ Nowadays, cross-language monorepos are becoming more and more common. For exampl
 
 ## ✨ Features
 
-| Feature                             | Description                                                  |
-| ----------------------------------- | ------------------------------------------------------------ |
-| **Cross-language monorepo support** | Manage versions for Rust / Node.js / more (extensible)       |
-| **Changeset-based workflow**        | Clear and traceable version reasoning                        |
-| **Automatic version bumping**       | `smif version` reads changes and bumps semver                |
-| **Automated changelogs**            | Generated from commit metadata / changesets                  |
-| **One-command publishing**          | Publish multiple packages reliably                           |
+| Feature                             | Description                                                    |
+| ----------------------------------- | -------------------------------------------------------------- |
+| **Cross-language monorepo support** | Manage versions for Rust / Node.js / more (extensible)         |
+| **Changeset-based workflow**        | Clear and traceable version reasoning                          |
+| **Automatic version bumping**       | `smif version` reads changes and bumps semver                  |
+| **Automated changelogs**            | Generated from commit metadata / changesets                    |
+| **One-command publishing**          | Publish multiple packages reliably                             |
 | **CI-friendly design**              | `smif ci` gives a stable pipeline for GitHub Actions or others |
 
 ## 🚀 Quick Start

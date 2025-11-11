@@ -7,6 +7,7 @@
     "maturin",
     "minijinja",
     "napi",
+    "noctisynth",
     "octocrab",
     "pathdiff",
     "pathspec",
@@ -15,6 +16,7 @@
     "reqwest",
     "revwalk",
     "rfind",
+    "rspress",
     "saphyr",
     "semif",
     "semifold",
@@ -23,7 +25,5 @@
     "thiserror",
     "userpass"
   ],
-  "ignorePaths": [
-    "Cargo.toml"
-  ]
+  "ignorePaths": ["Cargo.toml"]
 }

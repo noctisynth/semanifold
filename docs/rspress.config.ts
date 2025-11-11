@@ -11,7 +11,7 @@ export default defineConfig({
       {
         icon: 'github',
         mode: 'link',
-        content: 'https://github.com/noctisynth/semifold#',
+        content: 'https://github.com/noctisynth/semifold',
       },
     ],
   },

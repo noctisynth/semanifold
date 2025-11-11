@@ -1,0 +1,29 @@
+/* 调整正文内容的字体大小 */
+.rspress-content p, .rspress-content li {
+  font-size: 16px; /* 你可以调整成需要的大小 */
+  line-height: 1.6; /* 调整行高 */
+}
+
+/* 调整标题字体大小 */
+.rspress-content h1 {
+  font-size: 2.5em;
+}
+
+/* 全局调整图片样式 */
+.rspress-content img {
+  max-width: 80%; /* 图片最大宽度 */
+  height: auto; /* 保持宽高比 */
+  border-radius: 8px; /* 可选：添加圆角 */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 可选：添加阴影 */
+}
+
+/* 调整侧边栏宽度 */
+:root {
+  --rp-sidebar-width: 280px; /* 侧边栏宽度 */
+}
+
+/* 如果需要，也可以调整正内容区域的距离 */
+.rspress-doc {
+  padding-left: 2rem;
+  padding-right: 2rem;
+}

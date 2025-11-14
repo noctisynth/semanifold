@@ -1,5 +1,6 @@
 ---
 pageType: home
+titleSuffix: Next-generation cross-language monorepo versioning and release manager
 
 hero:
   name: Semifold
@@ -8,7 +9,7 @@ hero:
   actions:
     - theme: brand
       text: Quick Start
-      link: /guide/
+      link: /guide/start/quick-start/
     - theme: alt
       text: GitHub
       link: https://github.com/noctisynth/semifold
@@ -19,21 +20,21 @@ hero:
     alt: Semifold Logo
 features:
   - title: Cross-language Monorepo Support
-    details: Manage versions for Rust, Node.js, Python, Go, Java, Kotlin, and more (extensible).
+    details: Manage versions for Rust, Node.js, Python, and more (extensible).
     icon: 🌍
   - title: Changeset-based Workflow
     details: Provides clear and traceable version reasoning through a simple and elegant changeset-based workflow.
     icon: 📝
   - title: Automatic Version Bumping
-    details: "`smif version` reads changes and automatically bumps SemVer versions across your repository."
+    details: <code>smif version</code> reads changes and automatically bumps SemVer versions across your repository.
     icon: 🚀
   - title: Automated Changelogs
     details: Changelogs are automatically generated from commit metadata or changesets, keeping documentation up-to-date.
     icon: 📰
-  - title: One-command Publishing & CI-Friendly
-    details: Publish multiple packages reliably with a single command and utilize `smif ci` for stable CI pipelines.
+  - title: One-command Publishing
+    details: With a single command, publish all packages with changes in your repository, ensuring reliable releases with <code>smif publish</code>.
     icon: 📦
-  - title: License
-    details: Semifold is licensed under the AGPL-3.0 License.
-    icon: ⚖️
+  - title: CI-Friendly Design
+    details: <code>smif ci</code> gives a stable pipeline for GitHub Actions or others, ensuring consistent and reliable builds.
+    icon: 🔄
 ---

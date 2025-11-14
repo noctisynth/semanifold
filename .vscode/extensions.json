@@ -4,6 +4,8 @@
     "tamasfe.even-better-toml",
     "DavidAnson.vscode-markdownlint",
     "streetsidesoftware.code-spell-checker",
-    "samuelcolvin.jinjahtml"
+    "samuelcolvin.jinjahtml",
+    "unifiedjs.vscode-mdx",
+    "biomejs.biome"
   ]
 }

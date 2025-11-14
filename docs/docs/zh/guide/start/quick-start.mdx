@@ -1,0 +1,134 @@
+import { PackageManagerTabs, Tabs, Tab } from "rspress/theme";
+import PipIcon from "./assets/pip.png";
+import PipxIcon from "./assets/pipx.svg?react";
+import UvIcon from "./assets/uv.svg?react";
+import PdmIcon from "./assets/pdm.svg?react";
+
+import { TabLabel } from "./components/tab-label";
+
+# 快速开始
+
+## 1. 安装 Semifold
+
+### 从 crates.io 安装
+
+如果您已经安装了 Rust 工具链，您可以从 crates.io 安装 Semifold：
+
+```bash
+cargo install semifold
+```
+
+### 从 Npm Registry 安装
+
+如果您使用 Node.js 项目，您可以从 Npm Registry 安装 Semifold：
+
+<PackageManagerTabs command="install -g semifold" />
+
+### 从 PyPI 安装
+
+如果您使用 Python 项目，您可以从 PyPI 安装 Semifold：
+
+<Tabs>
+  <Tab label={<TabLabel icon={PipIcon}>pip</TabLabel>}>
+
+```bash
+pip install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={PipxIcon}>pipx</TabLabel>}>
+
+```bash
+pipx install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={UvIcon}>uv</TabLabel>}>
+
+```bash
+uv tool install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={PdmIcon}>pdm</TabLabel>}>
+```bash
+pdm install semifold -g
+```
+  </Tab>
+</Tabs>
+
+## 2. 初始化 Semifold 工作区
+
+执行以下命令初始化 Semifold 工作区：
+
+```bash
+semifold init
+```
+
+按照提示选择工作区解析器，Semifold 会自动根据对应解析器生成工作区配置文件：
+
+```console
+? 要使用哪些工作区解析器？  
+> [ ] Rust
+  [ ] Nodejs
+  [ ] Python
+```
+
+## 3. 配置 Semifold 工作区
+
+部分工作区解析器需要您手动配置，例如 Python 解析器。Python 的社区生态具有多种常用的包管理器，例如 pip、pipx、uv 和 pdm。您需要根据您的项目环境自行配置发布指令。
+
+例如，如果使用 uv 作为包管理器，您需要在 `.changes/config.toml` 中配置发布指令：
+
+```toml title=".changes/config.toml"
+[[resolver.python.publish]]
+command = "uv"
+args = ["publish"]
+```
+
+## 4. 提交变更
+
+
+执行以下命令提交变更：
+
+```bash
+semifold commit
+```
+
+## 5. 版本提升
+
+执行以下命令提升版本：
+
+```bash
+semifold version
+```
+
+执行`semifold version`时请确保 Git 工作区是干净的，或使用`--allow-dirty`选项绕过 Git 工作区检查。
+
+版本提升后，Semifold 会自动清理所有变更集文件，同时更新工作区对应项目中的版本号，将基于变更集生成的变更日志插入变更日志文件。
+
+## 6. 发布变更
+
+### 本地发布
+
+执行以下命令发布变更：
+
+```bash
+semifold publish
+```
+
+### Github Actions
+
+Semifold 封装了 Github Actions 工作流，执行以下命令发布变更：
+
+```bash
+semifold ci
+```
+
+如果你在执行`semifold init`时选择了包含 GitHub Actions 工作流，Semifold 会自动生成两个工作流文件：
+
+- `.github/workflows/semifold-ci.yaml`，检查每一个提交下的 Semifold 工作区变更集状态，如果存在变更集则生成或更新已有的发布分支并自动提交 Pull Request；如果不存在变更集，则检查并发布工作区所有未发布的包。
+- `.github/workflows/semifold-status.yaml`，检查 Pull Request 下的 Semifold 工作区变更集状态，并创建包含变更集状态的评论。

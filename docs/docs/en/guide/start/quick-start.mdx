@@ -1,0 +1,133 @@
+import { PackageManagerTabs, Tabs, Tab } from "rspress/theme";
+import PipIcon from "./assets/pip.png";
+import PipxIcon from "./assets/pipx.svg?react";
+import UvIcon from "./assets/uv.svg?react";
+import PdmIcon from "./assets/pdm.svg?react";
+
+import { TabLabel } from "./components/tab-label";
+
+# Quick Start
+
+## 1. Install Semifold
+
+### Install from crates.io
+
+If you have the Rust toolchain installed, you can install Semifold from crates.io:
+
+```bash
+cargo install semifold
+```
+
+### Install from Npm Registry
+
+If you're using a Node.js project, you can install Semifold from the Npm Registry:
+
+<PackageManagerTabs command="install -g semifold" />
+
+### Install from PyPI
+
+If you're using a Python project, you can install Semifold from PyPI:
+
+<Tabs>
+  <Tab label={<TabLabel icon={PipIcon}>pip</TabLabel>}>
+
+```bash
+pip install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={PipxIcon}>pipx</TabLabel>}>
+
+```bash
+pipx install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={UvIcon}>uv</TabLabel>}>
+
+```bash
+uv tool install semifold
+```
+
+  </Tab>
+
+  <Tab label={<TabLabel icon={PdmIcon}>pdm</TabLabel>}>
+```bash
+pdm install semifold -g
+```
+  </Tab>
+</Tabs>
+
+## 2. Initialize Semifold Workspace
+
+Run the following command to initialize the Semifold workspace:
+
+```bash
+semifold init
+```
+
+Follow the prompts to select the workspace resolver(s). Semifold will automatically generate the workspace configuration file based on the selected resolver(s):
+
+```console
+? Which workspace resolver(s) would you like to use?
+> [ ] Rust
+  [ ] Nodejs
+  [ ] Python
+```
+
+## 3. Configure Semifold Workspace
+
+Some workspace resolvers require manual configuration, such as the Python resolver. The Python community ecosystem has various commonly used package managers, such as pip, pipx, uv, and pdm. You need to configure the publish command according to your project environment.
+
+For example, if using uv as the package manager, you need to configure the publish command in `.changes/config.toml`:
+
+```toml title=".changes/config.toml"
+[[resolver.python.publish]]
+command = "uv"
+args = ["publish"]
+```
+
+## 4. Commit Changes
+
+Run the following command to commit changes:
+
+```bash
+semifold commit
+```
+
+## 5. Bump Version
+
+Run the following command to bump the version:
+
+```bash
+semifold version
+```
+
+Ensure your Git workspace is clean when running `semifold version`, or use the `--allow-dirty` option to bypass the Git workspace check.
+
+After version bumping, Semifold will automatically clean up all changeset files, update the version numbers in the corresponding projects within the workspace, and insert the changelog generated from the changesets into the changelog file.
+
+## 6. Publish Changes
+
+### Local Publish
+
+Run the following command to publish changes:
+
+```bash
+semifold publish
+```
+
+### Github Actions
+
+Semifold provides encapsulated Github Actions workflows. Run the following command to publish changes:
+
+```bash
+semifold ci
+```
+
+If you selected to include GitHub Actions workflows during `semifold init`, Semifold will automatically generate two workflow files:
+
+- `.github/workflows/semifold-ci.yaml`: Checks the changeset status of the Semifold workspace for each commit. If changesets exist, it generates or updates the existing release branch and automatically submits a Pull Request. If no changesets exist, it checks and publishes all unpublished packages in the workspace.
+- `.github/workflows/semifold-status.yaml`: Checks the changeset status of the Semifold workspace under a Pull Request and creates a comment containing the changeset status.

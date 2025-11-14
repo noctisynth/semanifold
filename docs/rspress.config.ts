@@ -13,7 +13,6 @@ export default defineConfig({
   title: 'Semifold',
   description:
     'Next-generation cross-language monorepo versioning and release manager.',
-
   route: {
     cleanUrls: true,
   },
@@ -48,6 +47,11 @@ export default defineConfig({
   },
   builderConfig: {
     plugins: [pluginSvgr()],
+    resolve: {
+      alias: {
+        '@components': path.join(__dirname, 'components'),
+      },
+    },
   },
-  globalStyles: path.join(__dirname, 'docs/styles/index.css'),
+  globalStyles: path.join(__dirname, 'styles/index.css'),
 });

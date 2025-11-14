@@ -1,14 +1,18 @@
 {
-  "devDependencies": {
-    "@types/node": "^18.11.17",
-    "rspress": "^1.46.1"
-  },
   "name": "@semifold/docs",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "build": "rspress build",
     "dev": "rspress dev",
     "preview": "rspress preview"
   },
-  "version": "1.0.1"
+  "devDependencies": {
+    "@rsbuild/plugin-svgr": "^1.2.2",
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.4",
+    "rspress": "^1.46.1",
+    "tailwindcss": "^4.1.17"
+  }
 }

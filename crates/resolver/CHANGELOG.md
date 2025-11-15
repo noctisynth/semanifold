@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1
+
+### New Features
+
+- [`45b6ab3`](https://github.com/noctisynth/semifold/commit/45b6ab314430aa410d44ad2c545518773d812337): Fix the order of JSON fields when bumping versions.
+
 ## v0.2.0
 
 ### Bug Fixes

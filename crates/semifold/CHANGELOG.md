@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1
+
+### New Features
+
+- [`1996e48`](https://github.com/noctisynth/semifold/commit/1996e485d9b61e837c660d8b5683b6d11cc6f863): Default to create GitHub releases for private packages.
+
 ## v0.2.0
 
 ### Refactors

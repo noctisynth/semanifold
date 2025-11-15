@@ -10,7 +10,11 @@ use reqwest::{
 use rust_i18n::t;
 
 use semifold_changelog::read_latest_changelog;
-use semifold_resolver::{config::PackageConfig, context::Context};
+use semifold_resolver::{
+    config::{PackageConfig, ResolverConfig},
+    context::Context,
+    resolver::ResolvedPackage,
+};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -60,6 +64,32 @@ pub(crate) async fn create_github_release(
     Ok(Some(release))
 }
 
+pub(crate) async fn pre_check(
+    resolver_config: &ResolverConfig,
+    resolved_package: &ResolvedPackage,
+) -> anyhow::Result<bool> {
+    let url = minijinja::render!(
+        &resolver_config.pre_check.url,
+        package => &resolved_package,
+    );
+    log::debug!("Pre-check URL: {}", &url);
+    let client = reqwest::Client::new();
+    let headers = resolver_config.pre_check.extra_headers.iter().try_fold(
+        HeaderMap::new(),
+        |mut acc, (key, value)| {
+            let header_name = HeaderName::from_bytes(key.as_bytes())
+                .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
+            let header_value = HeaderValue::from_str(value)
+                .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
+            acc.insert(header_name, header_value);
+            Ok::<_, anyhow::Error>(acc)
+        },
+    )?;
+    let resp = client.get(url).headers(headers).send().await?;
+    log::debug!("Pre-check response: {:?}", &resp);
+    Ok(resp.status() == StatusCode::OK)
+}
+
 pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Result<()> {
     let config = ctx.config.as_ref().unwrap();
 
@@ -100,38 +130,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
         let resolved_package = resolver.resolve(&root, package)?;
         log::debug!("Resolved package: {}", &resolved_package.name);
 
-        if resolved_package.private {
-            log::warn!(
-                "{}",
-                t!(
-                    "cli.publish.skip_private",
-                    package = package_name.cyan(),
-                    version = format!("v{}", resolved_package.version).green()
-                )
-            );
-            continue;
-        }
-
-        let url = minijinja::render!(
-            &resolver_config.pre_check.url,
-            package => &resolved_package,
-        );
-        log::debug!("Pre-check URL: {}", &url);
-        let client = reqwest::Client::new();
-        let headers = resolver_config.pre_check.extra_headers.iter().try_fold(
-            HeaderMap::new(),
-            |mut acc, (key, value)| {
-                let header_name = HeaderName::from_bytes(key.as_bytes())
-                    .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
-                let header_value = HeaderValue::from_str(value)
-                    .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
-                acc.insert(header_name, header_value);
-                Ok::<_, anyhow::Error>(acc)
-            },
-        )?;
-        let resp = client.get(url).headers(headers).send().await?;
-        log::debug!("Pre-check response: {:?}", &resp);
-        if resp.status() == StatusCode::OK {
+        if pre_check(resolver_config, &resolved_package).await? {
             log::warn!(
                 "{}",
                 t!(
@@ -143,7 +142,18 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
             continue;
         }
 
-        resolver.publish(&resolved_package, resolver_config, ctx.dry_run)?;
+        if !resolved_package.private {
+            resolver.publish(&resolved_package, resolver_config, ctx.dry_run)?;
+        } else {
+            log::warn!(
+                "{}",
+                t!(
+                    "cli.publish.skip_private",
+                    package = package_name.cyan(),
+                    version = format!("v{}", resolved_package.version).green()
+                )
+            );
+        }
 
         if should_create_github_release {
             let Some(repo_info) = &ctx.repo_info else {

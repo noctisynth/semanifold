@@ -72,7 +72,7 @@ no_resolver_config = "没有为解析器 %{resolver} 找到配置，无法为包
 allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"
 
 [cli.publish]
-skip_private = "跳过发布 %{package} %{version} 作为它是私有的"
+skip_private = "由于包 %{package} %{version} 是私有的，跳过发布"
 pre_check = "包 %{package} %{version} 的预检查通过，跳过发布"
 
 [cli.publish.flags]

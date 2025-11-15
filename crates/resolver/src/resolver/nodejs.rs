@@ -183,11 +183,10 @@ impl Resolver for NodejsResolver {
                 reason: e.to_string(),
             })?;
 
-        if let Some(obj) = package_json.as_object_mut() {
-            obj.insert(
-                "version".to_string(),
-                serde_json::Value::String(bumped_version.clone()),
-            );
+        if let Some(obj) = package_json.as_object_mut()
+            && let Some(version) = obj.get_mut("version")
+        {
+            *version = serde_json::Value::String(bumped_version.clone());
         }
 
         let package_json_content =

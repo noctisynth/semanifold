@@ -23,7 +23,7 @@ anyhow = "1.0.99"
 clap = { version = "4.5.45", features = ["derive"] }
 colored = "3.0.0"
 fern = "0.7.1"
-git2 = "0.20.2"
+git2 = { version = "0.20.2", features = ["vendored-openssl"] }
 inquire = "0.9.1"
 log = "0.4.27"
 octocrab = "0.47.0"

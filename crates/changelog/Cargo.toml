@@ -12,7 +12,7 @@ authors.workspace = true
 
 [dependencies]
 anyhow = "1.0.99"
-git2 = "0.20.2"
+git2 = { version = "0.20.2", features = ["vendored-openssl"] }
 octocrab = "0.47.0"
 pathdiff = "0.2.3"
 regex = "1.12.2"

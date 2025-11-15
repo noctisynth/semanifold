@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.2
+
+### Chores
+
+- [`bc7de21`](https://github.com/noctisynth/semifold/commit/bc7de21ba72b63b2c558e7d1906517c2301cb153): Release cross-platform artifacts to GitHub Release.
+
 ## v0.2.1
 
 ### New Features

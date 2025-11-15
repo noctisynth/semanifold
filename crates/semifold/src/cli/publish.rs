@@ -51,7 +51,7 @@ pub(crate) async fn create_github_release(
     log::debug!("Tag name: {}", &tag_name);
     log::debug!("Changelog for {}:\n\n{}", &package_name, &changelog.body);
 
-    let release = octocrab
+    match octocrab
         .repos(&repo_info.owner, &repo_info.repo_name)
         .releases()
         .create(&tag_name)
@@ -59,9 +59,22 @@ pub(crate) async fn create_github_release(
         .body(&changelog.body)
         .prerelease(!version.pre.is_empty())
         .send()
-        .await?;
-
-    Ok(Some(release))
+        .await
+    {
+        Ok(release) => Ok(Some(release)),
+        Err(octocrab::Error::GitHub { source, .. }) => {
+            if source.status_code == StatusCode::UNPROCESSABLE_ENTITY {
+                log::warn!("Failed to create GitHub release: {:?}", source);
+                Ok(None)
+            } else {
+                Err(anyhow::anyhow!(
+                    "Failed to create GitHub release: {:?}",
+                    source
+                ))
+            }
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to create GitHub release: {:?}", e)),
+    }
 }
 
 pub(crate) async fn pre_check(

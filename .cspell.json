@@ -6,6 +6,7 @@
     "endraw",
     "maturin",
     "minijinja",
+    "msvc",
     "napi",
     "noctisynth",
     "octocrab",

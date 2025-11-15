@@ -16,7 +16,17 @@ resolver = "nodejs"
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
-assets = ["target/release/semifold"]
+assets = [
+    # Linux
+    "artifacts/semifold-linux-x86_64",
+    "artifacts/semifold-linux-arm64",
+    # macOS
+    "artifacts/semifold-macos-x86_64",
+    "artifacts/semifold-macos-arm64",
+    # Windows
+    "artifacts/semifold-windows-x86_64.exe",
+    "artifacts/semifold-windows-arm64.exe",
+]
 
 [packages.semifold-changelog]
 path = "crates/changelog"

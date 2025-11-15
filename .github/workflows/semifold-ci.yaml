@@ -23,8 +23,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Build
-        run: cargo build --workspace
+      - name: Download build artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: artifacts/
       - name: Semifold CI
         run: cargo run --bin semifold ci --debug
         env:

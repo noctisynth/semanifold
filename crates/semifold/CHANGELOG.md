@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.2
+
+### Bug Fixes
+
+- [`89e5ddd`](https://github.com/noctisynth/semifold/commit/89e5dddf3059dcd69579f431d21dbbf5742c56d8): Skip 422 issue reported from GitHub when trying to create release.
+
+### Chores
+
+- [`bc7de21`](https://github.com/noctisynth/semifold/commit/bc7de21ba72b63b2c558e7d1906517c2301cb153): Release cross-platform artifacts to GitHub Release.
+
 ## v0.2.1
 
 ### New Features

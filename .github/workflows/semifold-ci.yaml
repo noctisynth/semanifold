@@ -50,6 +50,8 @@ jobs:
 
       - name: Cache rust artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.target }}
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

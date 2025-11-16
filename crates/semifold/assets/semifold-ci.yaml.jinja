@@ -3,13 +3,16 @@ on:
   push:
     branches: [{{ base_branch }}]
 
+env:
+  CLICOLOR_FORCE: 1
+
 permissions:
   id-token: write
   contents: write
   pull-requests: write
 
 jobs:
-  status:
+  build:
     name: Version or Publish
     runs-on: ubuntu-latest
     steps:

@@ -192,7 +192,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                         &asset.name,
                         &asset.path.display()
                     );
-                    if asset.path.exists() {
+                    if asset.path.exists() && asset.path.is_file() {
                         let mut file = fs::File::open(&asset.path)?;
                         let mut bytes = Vec::new();
                         file.read_to_end(&mut bytes)?;
@@ -203,6 +203,8 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                             .upload_asset(release.id.0, &asset.name, bytes)
                             .send()
                             .await?;
+                    } else if !asset.path.is_file() {
+                        log::warn!("Asset {} is not a file, skip upload", &asset.path.display());
                     } else {
                         log::warn!("Asset {} not found, skip upload", &asset.path.display());
                     }

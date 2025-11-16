@@ -42,10 +42,6 @@ url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 [resolver.rust.pre-check.extra-headers]
 User-Agent = "Semifold 0.2.0"
 
-[[resolver.rust.prepublish]]
-command = "cargo"
-args = ["build", "--release"]
-
 [[resolver.rust.publish]]
 command = "cargo"
 args = ["publish"]

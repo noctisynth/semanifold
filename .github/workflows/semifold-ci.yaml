@@ -77,7 +77,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact_name }}
-          path: target/${{ matrix.target }}/release/semifold${{ matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-pc-windows-msvc' && '.exe' || '' }}
+          path: target/${{ matrix.target }}/release/semifold${{ matrix.os == 'windows-latest' && '.exe' || '' }}
           retention-days: 7
 
   release:

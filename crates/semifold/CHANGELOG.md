@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.5
+
+### Chores
+
+- [`6f381fa`](https://github.com/noctisynth/semifold/commit/6f381fa674e1fbc9bc5ed12124e1e64047de6b7c): Rename all artifacts to `artifact_name` in CI to ensure the filename of all downloaded.
+
 ## v0.2.4
 
 ### New Features

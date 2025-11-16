@@ -10,6 +10,25 @@ import { TabLabel } from "@components/tab-label";
 
 ## 1. 安装 Semifold
 
+### 从安装脚本安装
+
+您可以使用 Semifold 的安装脚本安装：
+
+<Tabs>
+  <Tab label="Linux">
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+  </Tab>
+  <Tab label="Windows">
+```bash
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+  </Tab>
+</Tabs>
+
+请注意，安装脚本会默认将 Semifold 安装到 `$HOME/.local/bin` 目录下，这通常与一些应用的默认安装路径一致。安装脚本目前不会修改您的 shell 配置文件，您需要手动将 `$HOME/.local/bin` 添加到您的 `$PATH` 环境变量中。
+
 ### 从 crates.io 安装
 
 如果您已经安装了 Rust 工具链，您可以从 crates.io 安装 Semifold：

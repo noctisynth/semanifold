@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.4
+
+### New Features
+
+- [`549d339`](https://github.com/noctisynth/semifold/commit/549d33903c8731f334305fc1d57f3291f1437f02): Optimize CI template and add shell install scripts.
+
 ## v0.2.3
 
 ### Bug Fixes

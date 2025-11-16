@@ -5,7 +5,6 @@ on:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
-  BINARY_NAME: semifold
   CLICOLOR_FORCE: 1
 
 permissions:
@@ -74,11 +73,13 @@ jobs:
         if: matrix.os != 'ubuntu-latest'
         run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Rename binary
+        run: mv target/${{ matrix.target }}/release/semifold${{ matrix.os == 'windows-latest' && '.exe' || '' }} target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
       - name: Upload build artifact
         uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact_name }}
-          path: target/${{ matrix.target }}/release/semifold${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
           retention-days: 7
 
   release:

@@ -10,6 +10,25 @@ import { TabLabel } from "@components/tab-label";
 
 ## 1. Install Semifold
 
+### Install from Install Script
+
+You can install Semifold using the installation script:
+
+<Tabs>
+  <Tab label="Linux">
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+  </Tab>
+  <Tab label="Windows">
+```bash
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+  </Tab>
+</Tabs>
+
+Semifold will be installed to `$HOME/.local/bin` by default. The installation script does not modify your shell configuration files. You need to add `$HOME/.local/bin` to your `$PATH` environment variable manually.
+
 ### Install from crates.io
 
 If you have the Rust toolchain installed, you can install Semifold from crates.io:

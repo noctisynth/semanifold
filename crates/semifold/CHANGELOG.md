@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.3
+
+### Bug Fixes
+
+- [`2505304`](https://github.com/noctisynth/semifold/commit/2505304e487bd00bf1c2c87e2c26909b677de202): Ignore errors reported from IO due to invalid asset file which is a dir.
+
 ## v0.2.2
 
 ### Bug Fixes

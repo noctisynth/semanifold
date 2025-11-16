@@ -101,6 +101,8 @@ jobs:
         with:
           path: artifacts/
           merge-multiple: true
+      - name: List artifacts
+        run: ls -R artifacts/
       - name: Semifold CI
         run: cargo run --bin semifold ci --debug
         env:

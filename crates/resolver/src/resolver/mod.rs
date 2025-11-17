@@ -10,6 +10,7 @@ use crate::{
 use core::fmt;
 use std::path::{Path, PathBuf};
 
+pub mod cpp;
 pub mod nodejs;
 pub mod python;
 pub mod rust;
@@ -28,6 +29,7 @@ pub enum ResolverType {
     Rust,
     Nodejs,
     Python,
+    Cpp,
 }
 
 impl fmt::Display for ResolverType {
@@ -36,6 +38,7 @@ impl fmt::Display for ResolverType {
             ResolverType::Rust => write!(f, "rust"),
             ResolverType::Nodejs => write!(f, "nodejs"),
             ResolverType::Python => write!(f, "python"),
+            ResolverType::Cpp => write!(f, "cpp"),
         }
     }
 }

@@ -1901,6 +1901,7 @@ dependencies = [
  "glob",
  "log",
  "pathdiff",
+ "regex",
  "saphyr",
  "semver",
  "serde",

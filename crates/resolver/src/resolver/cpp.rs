@@ -14,36 +14,57 @@ use crate::{
 pub struct CppResolver;
 
 impl CppResolver {
-    /// Read version from CMakeLists.txt
-    fn read_cmake_version(&self, package_path: &Path) -> Result<String, ResolveError> {
-        let cmake_path = package_path.join("CMakeLists.txt");
-        if !cmake_path.exists() {
-            return Err(ResolveError::FileOrDirNotFound {
-                path: cmake_path.clone(),
-            });
-        }
-
-        let content = std::fs::read_to_string(&cmake_path)?;
-
+    /// Extract version from CMakeLists.txt content
+    fn extract_version_from_content(
+        &self,
+        content: &str,
+        cmake_path: &Path,
+    ) -> Result<String, ResolveError> {
         // Match: project(...VERSION x.y.z...)
-        let re = Regex::new(r"project\s*\([^)]*VERSION\s+([\d.]+)").map_err(|e| {
+        let re = Regex::new(
+            r"(?i)project\s*\([^)]*VERSION\s+([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
+        )
+        .map_err(|e| ResolveError::ParseError {
+            path: cmake_path.to_path_buf(),
+            reason: format!("Invalid regex: {}", e),
+        })?;
+
+        let version = re
+            .captures(content)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().to_string())
+            .ok_or_else(|| ResolveError::ParseError {
+                path: cmake_path.to_path_buf(),
+                reason: "VERSION not found in project() declaration".to_string(),
+            })?;
+
+        Ok(version)
+    }
+
+    /// Extract project name from CMakeLists.txt content
+    fn extract_name_from_content(
+        &self,
+        content: &str,
+        cmake_path: &Path,
+    ) -> Result<String, ResolveError> {
+        // Match: project(ProjectName ...) or project("project-name" ...)
+        let re = Regex::new(r#"(?i)project\s*\(\s*["']?([a-zA-Z0-9_-]+)["']?"#).map_err(|e| {
             ResolveError::ParseError {
-                path: cmake_path.clone(),
+                path: cmake_path.to_path_buf(),
                 reason: format!("Invalid regex: {}", e),
             }
         })?;
 
-        let version = re
-            .captures(&content)
+        let name = re
+            .captures(content)
             .and_then(|caps| caps.get(1))
             .map(|m| m.as_str().to_string())
             .ok_or_else(|| ResolveError::ParseError {
-                path: cmake_path.clone(),
-                reason: "VERSION not found in project() declaration".to_string(),
+                path: cmake_path.to_path_buf(),
+                reason: "Project name not found in project() declaration".to_string(),
             })?;
 
-        log::debug!("Read version {} from {:?}", version, cmake_path);
-        Ok(version)
+        Ok(name)
     }
 
     /// Update version in CMakeLists.txt
@@ -56,11 +77,12 @@ impl CppResolver {
         let content = std::fs::read_to_string(&cmake_path)?;
 
         // Replace version in project() declaration
-        let re = Regex::new(r"(project\s*\([^)]*VERSION\s+)([\d.]+)").map_err(|e| {
-            ResolveError::ParseError {
-                path: cmake_path.clone(),
-                reason: format!("Invalid regex: {}", e),
-            }
+        let re = Regex::new(
+            r"(?i)(project\s*\([^)]*VERSION\s+)([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
+        )
+        .map_err(|e| ResolveError::ParseError {
+            path: cmake_path.clone(),
+            reason: format!("Invalid regex: {}", e),
         })?;
 
         let updated_content = re.replace(&content, |caps: &regex::Captures| {
@@ -97,6 +119,11 @@ impl CppResolver {
                 "version".to_string(),
                 serde_json::Value::String(new_version.to_string()),
             );
+        } else {
+            return Err(ResolveError::ParseError {
+                path: vcpkg_path.clone(),
+                reason: "vcpkg.json root must be an object".to_string(),
+            });
         }
 
         let updated_content =
@@ -118,26 +145,18 @@ impl Resolver for CppResolver {
         pkg_config: &PackageConfig,
     ) -> Result<ResolvedPackage, ResolveError> {
         let package_path = root.join(&pkg_config.path);
-        let version = self.read_cmake_version(&package_path)?;
-
-        // Extract project name from CMakeLists.txt
         let cmake_path = package_path.join("CMakeLists.txt");
-        let content = std::fs::read_to_string(&cmake_path)?;
 
-        // Match: project(ProjectName ...)
-        let re = Regex::new(r"project\s*\(\s*(\w+)").map_err(|e| ResolveError::ParseError {
-            path: cmake_path.clone(),
-            reason: format!("Invalid regex: {}", e),
-        })?;
-
-        let name = re
-            .captures(&content)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
-            .ok_or_else(|| ResolveError::ParseError {
+        if !cmake_path.exists() {
+            return Err(ResolveError::FileOrDirNotFound {
                 path: cmake_path.clone(),
-                reason: "Project name not found in project() declaration".to_string(),
-            })?;
+            });
+        }
+
+        // Read file once and extract both name and version
+        let content = std::fs::read_to_string(&cmake_path)?;
+        let name = self.extract_name_from_content(&content, &cmake_path)?;
+        let version = self.extract_version_from_content(&content, &cmake_path)?;
 
         Ok(ResolvedPackage {
             name,

@@ -1,11 +1,5 @@
 # Changelog
 
-## v1.0.4
-
-### New Features
-
-- Add script-based installation method in quick start section.
-
 ## v1.0.3
 
 ### New Features

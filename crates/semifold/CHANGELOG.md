@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.6
+
+### New Features
+
+- [`d39c94a`](https://github.com/noctisynth/semifold/commit/d39c94a3b30df9640fb147c77a820a87c9167319): bump version for semifold cpp support ([#52](https://github.com/noctisynth/semifold/pull/52) by @BegoniaHe)
+
 ## v0.2.5
 
 ### Chores

@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.4
+
+### New Features
+
+- [`61d9a7b`](https://github.com/noctisynth/semifold/commit/61d9a7bc3bc73879a3bdb9e7a59c81581cdbfd72): Add script-based installation method in quick start section.
+
 ## v1.0.3
 
 ### New Features

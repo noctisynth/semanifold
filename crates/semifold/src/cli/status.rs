@@ -25,6 +25,8 @@ pub(crate) struct Repository {
 pub(crate) struct Branch {
     #[serde(rename = "ref")]
     pub ref_name: String,
+    pub label: String,
+    pub owner: RepoOwner,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -140,6 +142,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let event: GitHubEvent = serde_json::from_str(&event_data)?;
 
     let owner = &event.repository.owner.login;
+    let head_owner = &event.pull_request.head.owner.login;
     let repo_name = &event.repository.name;
     let pr_number = event.pull_request.number;
     let head_ref = event.pull_request.head.ref_name;
@@ -155,7 +158,8 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         .personal_token(env::var("GITHUB_TOKEN")?)
         .build()?;
 
-    let is_matched = base_ref == config.branches.base && head_ref != config.branches.base;
+    let is_matched = base_ref == config.branches.base
+        && (head_ref != config.branches.base || head_owner != owner);
     if status.comment && is_matched {
         let issues = octocrab.issues(owner, repo_name);
 

@@ -4,9 +4,10 @@
     <source media="(prefers-color-scheme: light)" srcset="./docs/docs/public/logo-light.svg">
     <img alt="Semifold Logo" src="./docs/docs/public/logo-light.svg">
   </picture>
-</div>
 
 # Semifold
+
+</div>
 
 Next-generation cross-language monorepo version and release management tool.
 

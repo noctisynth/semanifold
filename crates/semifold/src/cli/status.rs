@@ -26,7 +26,7 @@ pub(crate) struct Branch {
     #[serde(rename = "ref")]
     pub ref_name: String,
     pub label: String,
-    pub owner: RepoOwner,
+    pub repo: Repository,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -142,7 +142,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let event: GitHubEvent = serde_json::from_str(&event_data)?;
 
     let owner = &event.repository.owner.login;
-    let head_owner = &event.pull_request.head.owner.login;
+    let head_owner = &event.pull_request.head.repo.owner.login;
     let repo_name = &event.repository.name;
     let pr_number = event.pull_request.number;
     let head_ref = event.pull_request.head.ref_name;

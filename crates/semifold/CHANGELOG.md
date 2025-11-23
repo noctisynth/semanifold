@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.6
+
+### New Features
+
+- [`d39c94a`](https://github.com/noctisynth/semifold/commit/d39c94a3b30df9640fb147c77a820a87c9167319): bump version for semifold cpp support ([#52](https://github.com/noctisynth/semifold/pull/52) by @BegoniaHe)
+
+### Bug Fixes
+
+- [`4d19256`](https://github.com/noctisynth/semifold/commit/4d1925639592cd2d9149a2f865ceb38c935e47a7): Nothing will be reported if a pull request submitted from a main branch of a forked repository.
+- [`4d19256`](https://github.com/noctisynth/semifold/commit/4d1925639592cd2d9149a2f865ceb38c935e47a7): Fix invalid changeset content with empty tag.
+
 ## v0.2.5
 
 ### Chores

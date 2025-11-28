@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.7
+
+### New Features
+
+- [`8d6ec13`](https://github.com/noctisynth/semifold/commit/8d6ec138b31560337dbfdc854e61d68072ca9be1): add `cpp` option in `init` command, which was forgotten in the previous commits ([#54](https://github.com/noctisynth/semifold/pull/54) by @BegoniaHe)
+
 ## v0.2.6
 
 ### New Features

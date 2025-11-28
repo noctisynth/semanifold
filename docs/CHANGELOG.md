@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.5
+
+### Chores
+
+- [`8d6ec13`](https://github.com/noctisynth/semifold/commit/8d6ec138b31560337dbfdc854e61d68072ca9be1): update README to indicate the support for C++ projects, which was forgotten in the previous commits ([#54](https://github.com/noctisynth/semifold/pull/54) by @BegoniaHe)
+
 ## v1.0.4
 
 ### New Features

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.8
+
+### New Features
+
+- [`4bee630`](https://github.com/noctisynth/semifold/commit/4bee630d87e143e22ca954d2c10634936d1879e2): Optimize CI template files for auto detect whether should add CLI token envs.
+- [`5ff36f0`](https://github.com/noctisynth/semifold/commit/5ff36f02db26132a3ec01089d46069a70210324d): Defaults to select all packages if only a package is found in a single workspace.
+
 ## v0.2.7
 
 ### New Features

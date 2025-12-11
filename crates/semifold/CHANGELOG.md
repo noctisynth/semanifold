@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.9
+
+### New Features
+
+- [`d8959d0`](https://github.com/noctisynth/semifold/commit/d8959d02b980e2407fa95009e8afbf4c4375b1c0): Add cli.ci section with 7 translation keys to en.toml and zh.toml and replace hardcoded English strings in ci.rs with t!() macro calls ([#58](https://github.com/noctisynth/semifold/pull/58) by @BegoniaHe)
+
+### Bug Fixes
+
+- [`df11377`](https://github.com/noctisynth/semifold/commit/df11377f2143106eab2cd0c8654fe76624502892): Fix panic if `.github/workflows` does not exists.
+
+### Refactors
+
+- [`d8959d0`](https://github.com/noctisynth/semifold/commit/d8959d02b980e2407fa95009e8afbf4c4375b1c0): 1. Add optional clap dependency to semifold-resolver 2. Conditionally derive ValueEnum on ResolverType 3. Remove duplicate ResolverType definition in init.rs ([#58](https://github.com/noctisynth/semifold/pull/58) by @BegoniaHe)
+
 ## v0.2.8
 
 ### New Features

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1
+
+### New Features
+
+- [`d8959d0`](https://github.com/noctisynth/semifold/commit/d8959d02b980e2407fa95009e8afbf4c4375b1c0): 1. Add base_url field to RepoInfo struct 2. Read GITHUB_SERVER_URL env var with fallback to <https://github.com> 3. Use dynamic URL in changelog commit links ([#58](https://github.com/noctisynth/semifold/pull/58) by @BegoniaHe)
+
 ## v0.2.0
 
 ### New Features

@@ -1,12 +1,5 @@
 # Changelog
 
-## v0.3.1
-
-### Bug Fixes
-
-- [`8a26838`](https://github.com/noctisynth/semifold/commit/8a2683871626a57a4e3b80788c8f151d8fde9a76): Fix rust private flag.
-- [`306d737`](https://github.com/noctisynth/semifold/commit/306d7375fb2da7adabf9ad4b268e119674732c17): Fix resolver display names, use camel case instead.
-
 ## v0.3.0
 
 ### New Features

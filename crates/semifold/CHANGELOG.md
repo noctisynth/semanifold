@@ -1,11 +1,5 @@
 # Changelog
 
-## v0.2.10
-
-### Bug Fixes
-
-- [`306d737`](https://github.com/noctisynth/semifold/commit/306d7375fb2da7adabf9ad4b268e119674732c17): Fix resolver display names, use camel case instead.
-
 ## v0.2.9
 
 ### New Features

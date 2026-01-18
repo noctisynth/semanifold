@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.12
+
+### Bug Fixes
+
+- [`df6e2ab`](https://github.com/noctisynth/semifold/commit/df6e2abd48beff959570d9cce997a7a00c829ee9): Always resolve asset files and use full path glob pattern instead.
+
 ## v0.2.11
 
 ### New Features

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.2
+
+### New Features
+
+- [`fd41853`](https://github.com/noctisynth/semifold/commit/fd41853260fbb5b1e61a41373c24684d2a38e22e): Support search upload assets by glob pattern.
+
 ## v0.3.1
 
 ### Bug Fixes

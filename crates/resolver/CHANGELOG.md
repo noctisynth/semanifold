@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.4
+
+### Bug Fixes
+
+- [`1eb7732`](https://github.com/noctisynth/semifold/commit/1eb7732b230b9c809e292f6ec3324e3eb7dfba34): Ensure all assets filtered by glob patterns are files.
+
 ## v0.3.3
 
 ### Bug Fixes

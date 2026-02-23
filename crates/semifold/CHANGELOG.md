@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.14
+
+### New Features
+
+- [`2814bed`](https://github.com/noctisynth/semifold/commit/2814bedcd13d3b35490628becea25a63795b082d): Detect if GitHub release tag exists.
+
+### Bug Fixes
+
+- [`65a53a7`](https://github.com/noctisynth/semifold/commit/65a53a7a5e121f0fa52e258f14681aa727a473c9): Auto add version field for path based dependencies.
+
 ## v0.2.13
 
 ### Bug Fixes

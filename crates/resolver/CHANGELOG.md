@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.5
+
+### Bug Fixes
+
+- [`65a53a7`](https://github.com/noctisynth/semifold/commit/65a53a7a5e121f0fa52e258f14681aa727a473c9): Auto add version field for path based dependencies.
+
 ## v0.3.4
 
 ### Bug Fixes

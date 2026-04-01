@@ -26,7 +26,7 @@ fern = "0.7.1"
 git2 = { version = "0.20.2", features = ["vendored-openssl"] }
 inquire = "0.9.1"
 log = "0.4.27"
-octocrab = "0.47.0"
+octocrab = "0.49.7"
 rust-i18n = "3.1.5"
 saphyr = "0.0.6"
 semifold-resolver = { version = "0.3.5", path = "../resolver", features = [
@@ -35,11 +35,11 @@ semifold-resolver = { version = "0.3.5", path = "../resolver", features = [
 semifold-changelog = { version = "0.2.1", path = "../changelog" }
 sys-locale = "0.3.2"
 tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
-toml_edit = "0.23.3"
+toml_edit = "0.25.9"
 rust-embed = "8.8.0"
-reqwest = { version = "0.12.24", default-features = false, features = [
+reqwest = { version = "0.13.2", default-features = false, features = [
     "json",
-    "rustls-tls-native-roots",
+    "rustls",
 ] }
 minijinja = { version = "2.12.0", default-features = false }
 serde_json = "1.0.145"

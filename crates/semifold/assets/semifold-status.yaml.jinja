@@ -1,7 +1,7 @@
 name: Semifold Status
 on:
   pull_request:
-    branches: [main]
+    branches: [{{ base_branch }}]
 
 env:
   CLICOLOR_FORCE: 1

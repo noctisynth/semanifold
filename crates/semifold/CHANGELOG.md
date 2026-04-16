@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.15
+
+### Bug Fixes
+
+- [`64041fa`](https://github.com/noctisynth/semifold/commit/64041fa8b241297a200d2dfc97dea0dc899346b2): Fix status CI workflow file hardcoded main branch. ([#76](https://github.com/noctisynth/semifold/pull/76) by @fu050409)
+
 ## v0.2.14
 
 ### New Features

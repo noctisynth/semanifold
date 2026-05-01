@@ -2,6 +2,7 @@ use clap::Parser;
 use log::LevelFilter;
 use semifold_resolver::context;
 
+pub mod agent;
 pub mod cli;
 pub mod logger;
 pub mod utils;

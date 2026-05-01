@@ -42,6 +42,8 @@ pub(crate) struct Commit {
     pub level: Option<Level>,
     #[arg(short, long, help = t!("cli.commit.flags.summary"))]
     pub summary: Option<String>,
+    #[arg(short, long, help = t!("cli.commit.flags.agent"))]
+    pub agent: bool,
 }
 
 fn sanitize_filename(filename: &str) -> String {
@@ -65,6 +67,10 @@ fn file_exists(root_path: &Path, filename: &str) -> bool {
 }
 
 pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
+    if commit.agent {
+        return crate::agent::run(ctx);
+    }
+
     let Context {
         config: Some(config),
         changeset_root: Some(changeset_root),

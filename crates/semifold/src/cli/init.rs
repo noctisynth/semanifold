@@ -29,6 +29,8 @@ pub(crate) struct Init {
     pub base_branch: Option<String>,
     #[arg(long, help = t!("cli.init.flags.release_branch"))]
     pub release_branch: Option<String>,
+    #[arg(long, help = t!("cli.init.flags.agent"))]
+    pub agent: bool,
 }
 
 pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
@@ -293,6 +295,10 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                 resolvers => &resolvers
             ),
         )?;
+    }
+
+    if init.agent {
+        crate::agent::setup_agent_config()?;
     }
 
     Ok(())

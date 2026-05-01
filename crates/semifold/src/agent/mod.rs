@@ -73,15 +73,17 @@ pub fn setup_agent_config() -> anyhow::Result<()> {
     let content = std::fs::read_to_string(&config_path)?;
     let mut toml_content: toml_edit::DocumentMut = content.parse()?;
 
-    if toml_content.get("provider").is_some() {
-        println!("[provider] section already exists in .changes/config.toml");
+    let provider_table = if toml_content.get("provider").is_some() {
+        toml_content["provider"].as_table_mut()
     } else {
-        let mut provider_table = toml_edit::Table::new();
-        provider_table.insert("base_url", toml_edit::value(base_url));
-        provider_table.insert("model", toml_edit::value(model));
+        let mut table = toml_edit::Table::new();
+        toml_content.insert("provider", toml_edit::Item::Table(table));
+        toml_content["provider"].as_table_mut()
+    };
 
-        toml_content.insert("provider", toml_edit::Item::Table(provider_table));
-        println!("Added [provider] section to .changes/config.toml");
+    if let Some(table) = provider_table {
+        table.insert("base_url", toml_edit::value(base_url));
+        table.insert("model", toml_edit::value(model));
     }
 
     std::fs::write(&config_path, toml_content.to_string())?;

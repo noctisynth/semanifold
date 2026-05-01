@@ -207,6 +207,7 @@ pub fn save_config(config_path: &Path, config: &Config, force: bool) -> Result<(
             reason: "Config file already exists. Use --force to overwrite.".to_string(),
         });
     }
+
     let mut doc = if config_path.exists() {
         std::fs::read_to_string(config_path)
             .map_err(|e| ResolveError::IoError(e))?
@@ -219,21 +220,20 @@ pub fn save_config(config_path: &Path, config: &Config, force: bool) -> Result<(
         toml_edit::DocumentMut::new()
     };
 
-    let config_toml = toml_edit::ser::to_string_pretty(config)
+    let config_toml: toml_edit::DocumentMut = toml_edit::ser::to_string_pretty(config)
         .map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|e| ResolveError::InvalidConfig {
+        .parse()
+        .map_err(|e: toml_edit::TomlError| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?;
 
-    doc["branches"] = config_toml["branches"].clone();
-    doc["tags"] = config_toml["tags"].clone();
-    doc["packages"] = config_toml["packages"].clone();
-    doc["resolver"] = config_toml["resolver"].clone();
+    for section in ["branches", "tags", "packages", "resolver"] {
+        doc[section] = config_toml[section].clone();
+    }
 
     std::fs::write(config_path, doc.to_string())?;
     Ok(())

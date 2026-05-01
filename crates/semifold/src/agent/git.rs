@@ -1,11 +1,13 @@
-use anyhow::Context;
-use git2::{Diff, DiffOptions, Repository};
+use inquire::Confirm;
 
 use semifold_resolver::{changeset::BumpLevel, context::Context as ResolverContext};
+
+use super::git_checker::GitChecker;
 
 pub struct ChangesetDiff {
     pub diff_content: String,
     pub affected_packages: Vec<AffectedPackage>,
+    pub is_commit_messages: bool,
 }
 
 pub struct AffectedPackage {
@@ -14,10 +16,7 @@ pub struct AffectedPackage {
 }
 
 pub fn get_changeset_diff(ctx: &ResolverContext) -> anyhow::Result<ChangesetDiff> {
-    let repo = Repository::open(".").context("Failed to open git repository")?;
-
-    let head = repo.head().context("Failed to get HEAD")?;
-    let head_commit = head.peel_to_commit().context("Failed to peel to commit")?;
+    let checker = GitChecker::new();
 
     let base_branch = ctx
         .config
@@ -25,47 +24,52 @@ pub fn get_changeset_diff(ctx: &ResolverContext) -> anyhow::Result<ChangesetDiff
         .map(|c| c.branches.base.clone())
         .unwrap_or_else(|| "main".to_string());
 
-    let base_commit = repo
-        .resolve_reference_from_short_name(&base_branch)?
-        .peel_to_commit()
-        .context("Failed to get base commit")?;
+    if let Err(e) = checker.check_has_commits() {
+        anyhow::bail!("❌ {}", e);
+    }
 
-    let mut diff_opts = DiffOptions::new();
-    diff_opts.context_lines(3);
+    if let Err(e) = checker.check_base_branch(&base_branch) {
+        anyhow::bail!("❌ {}", e);
+    }
 
-    let diff = repo
-        .diff_tree_to_tree(
-            Some(&base_commit.tree().context("Failed to get base tree")?),
-            Some(&head_commit.tree().context("Failed to get head tree")?),
-            Some(&mut diff_opts),
+    if let Some(msg) = checker.check_dirty() {
+        println!("⚠️  {}", msg);
+    }
+
+    if let Err(e) = checker.check_new_commits(&base_branch) {
+        anyhow::bail!("⚠️  {}", e);
+    }
+
+    let diff_content = checker.get_diff(&base_branch)
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+    if diff_content.is_empty() {
+        let use_messages = Confirm::new(
+            "No file changes detected, but commits exist.\nDo you want to generate changes from commit messages? (y/n)",
         )
-        .context("Failed to get diff")?;
+        .with_default(false)
+        .prompt()?;
 
-    let diff_content = format_diff(&diff)?;
+        if use_messages {
+            let messages = checker.get_commit_messages(&base_branch, 10)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            return Ok(ChangesetDiff {
+                diff_content: messages,
+                affected_packages: vec![],
+                is_commit_messages: true,
+            });
+        } else {
+            anyhow::bail!("No changes to analyze.");
+        }
+    }
 
     let affected_packages = detect_affected_packages(&diff_content, ctx)?;
 
     Ok(ChangesetDiff {
         diff_content,
         affected_packages,
+        is_commit_messages: false,
     })
-}
-
-fn format_diff(diff: &Diff) -> anyhow::Result<String> {
-    let mut output = String::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
-        let prefix = match line.origin() {
-            '+' => "+",
-            '-' => "-",
-            ' ' => " ",
-            _ => return true,
-        };
-        output.push_str(prefix);
-        output.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
-        true
-    })
-    .context("Failed to print diff")?;
-    Ok(output)
 }
 
 fn detect_affected_packages(

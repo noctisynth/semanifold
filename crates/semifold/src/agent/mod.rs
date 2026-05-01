@@ -1,6 +1,7 @@
 pub mod client;
 pub mod config;
 pub mod git;
+pub mod git_checker;
 pub mod prompter;
 
 use anyhow::Context;

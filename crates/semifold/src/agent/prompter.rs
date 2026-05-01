@@ -39,8 +39,43 @@ fn build_prompt(diff: &ChangesetDiff, ctx: &ResolverContext) -> anyhow::Result<S
         .collect::<Vec<_>>()
         .join("\n");
 
-    let prompt = format!(
-        r#"You are a version management assistant. Analyze the following git diff and create a changeset for it.
+    if diff.is_commit_messages {
+        Ok(format!(
+            r#"You are a version management assistant. Analyze the following git commit messages and create a changeset for them.
+
+## Available Packages
+{packages_info}
+
+## Available Tags
+{tags_info}
+
+## Commit Messages
+{content}
+
+## Instructions
+1. Analyze which packages are likely affected based on the commit messages
+2. Determine the appropriate bump level (major/minor/patch) for each package:
+   - major: Breaking changes, API changes, or significant refactoring
+   - minor: New features or functional improvements
+   - patch: Bug fixes, performance improvements, or minor changes
+3. Assign appropriate tags if relevant (e.g., feat, fix, chore, refactor, perf)
+4. Generate a clear, concise summary describing the core change
+
+## Output Format
+Output ONLY the changeset in the following format (no explanations or markdown code blocks):
+---
+<package-name>: <major|minor|patch>[:<tag>]
+<package-name>: <major|minor|patch>[:<tag>]
+---
+
+<Summary of changes, concise and descriptive>"#,
+            packages_info = packages_info,
+            tags_info = tags_info,
+            content = diff.diff_content
+        ))
+    } else {
+        Ok(format!(
+            r#"You are a version management assistant. Analyze the following git diff and create a changeset for it.
 
 ## Available Packages
 {packages_info}
@@ -49,7 +84,7 @@ fn build_prompt(diff: &ChangesetDiff, ctx: &ResolverContext) -> anyhow::Result<S
 {tags_info}
 
 ## Git Diff
-{diff_content}
+{content}
 
 ## Instructions
 1. Analyze which packages are affected by the changes
@@ -68,12 +103,11 @@ Output ONLY the changeset in the following format (no explanations or markdown c
 ---
 
 <Summary of changes, concise and descriptive>"#,
-        packages_info = packages_info,
-        tags_info = tags_info,
-        diff_content = diff.diff_content
-    );
-
-    Ok(prompt)
+            packages_info = packages_info,
+            tags_info = tags_info,
+            content = diff.diff_content
+        ))
+    }
 }
 
 fn parse_changeset_response(
@@ -110,7 +144,7 @@ fn parse_changeset_response(
         .map(|p| p.name.as_str())
         .collect();
 
-    if affected_names.is_empty() {
+    if affected_names.is_empty() && !diff.is_commit_messages {
         anyhow::bail!("AI response does not match expected format and no affected packages detected");
     }
 
@@ -127,11 +161,15 @@ fn parse_changeset_response(
 ---
 
 {}",
-        affected_names
-            .iter()
-            .map(|name| format!("{}: {}", name, level))
-            .collect::<Vec<_>>()
-            .join("\n"),
+        if affected_names.is_empty() {
+            "semifold: patch".to_string()
+        } else {
+            affected_names
+                .iter()
+                .map(|name| format!("{}: {}", name, level))
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
         content.lines().take(3).collect::<Vec<_>>().join(" ")
     );
 

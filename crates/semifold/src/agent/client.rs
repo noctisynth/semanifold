@@ -79,8 +79,10 @@ impl AgentClient {
             anyhow::bail!("API request failed: {} - {}", status, body);
         }
 
-        let chat_response: OpenAIChatResponse =
-            response.json().await.context("Failed to parse API response")?;
+        let chat_response: OpenAIChatResponse = response
+            .json()
+            .await
+            .context("Failed to parse API response")?;
 
         chat_response
             .choices
@@ -141,8 +143,10 @@ impl AgentClient {
             text: String,
         }
 
-        let anthropic_response: AnthropicResponse =
-            response.json().await.context("Failed to parse API response")?;
+        let anthropic_response: AnthropicResponse = response
+            .json()
+            .await
+            .context("Failed to parse API response")?;
 
         anthropic_response
             .content

@@ -57,14 +57,12 @@ pub fn setup_agent_config() -> anyhow::Result<()> {
         .map(|(name, _, _)| *name)
         .collect::<Vec<_>>();
 
-    let selected_provider = Select::new("Select provider", provider_options)
-        .prompt()?;
+    let selected_provider = Select::new("Select provider", provider_options).prompt()?;
 
     let (base_url, model) = config::get_preset(selected_provider)
         .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", selected_provider))?;
 
-    let api_key = inquire::Text::new("Enter API key")
-        .prompt()?;
+    let api_key = inquire::Text::new("Enter API key").prompt()?;
 
     let changeset_root = config::find_changeset_root()?;
     let config_path = changeset_root.join("config.toml");

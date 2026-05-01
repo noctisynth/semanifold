@@ -8,9 +8,7 @@ impl GitChecker {
     }
 
     pub fn check_has_commits(&self) -> Result<(), String> {
-        let output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .output();
+        let output = Command::new("git").args(["rev-parse", "HEAD"]).output();
 
         match output {
             Ok(out) if out.status.success() => Ok(()),
@@ -19,9 +17,7 @@ impl GitChecker {
     }
 
     pub fn check_base_branch(&self, base: &str) -> Result<(), String> {
-        let output = Command::new("git")
-            .args(["rev-parse", base])
-            .output();
+        let output = Command::new("git").args(["rev-parse", base]).output();
 
         match output {
             Ok(out) if out.status.success() => Ok(()),
@@ -33,9 +29,7 @@ impl GitChecker {
     }
 
     pub fn check_dirty(&self) -> Option<String> {
-        let output = Command::new("git")
-            .args(["status", "--porcelain"])
-            .output();
+        let output = Command::new("git").args(["status", "--porcelain"]).output();
 
         match output {
             Ok(out) if out.status.success() => {
@@ -75,9 +69,7 @@ impl GitChecker {
             .output();
 
         match output {
-            Ok(out) if out.status.success() => {
-                Ok(String::from_utf8_lossy(&out.stdout).to_string())
-            }
+            Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
             Err(e) => Err(format!("Failed to get diff: {}", e)),
             _ => Err("Failed to get diff.".to_string()),
         }
@@ -94,9 +86,7 @@ impl GitChecker {
             .output();
 
         match output {
-            Ok(out) if out.status.success() => {
-                Ok(String::from_utf8_lossy(&out.stdout).to_string())
-            }
+            Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
             Err(e) => Err(format!("Failed to get commit messages: {}", e)),
             _ => Err("Failed to get commit messages.".to_string()),
         }

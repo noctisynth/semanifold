@@ -40,7 +40,8 @@ pub fn get_changeset_diff(ctx: &ResolverContext) -> anyhow::Result<ChangesetDiff
         anyhow::bail!("⚠️  {}", e);
     }
 
-    let diff_content = checker.get_diff(&base_branch)
+    let diff_content = checker
+        .get_diff(&base_branch)
         .map_err(|e| anyhow::anyhow!(e))?;
 
     if diff_content.is_empty() {
@@ -51,7 +52,8 @@ pub fn get_changeset_diff(ctx: &ResolverContext) -> anyhow::Result<ChangesetDiff
         .prompt()?;
 
         if use_messages {
-            let messages = checker.get_commit_messages(&base_branch, 10)
+            let messages = checker
+                .get_commit_messages(&base_branch, 10)
                 .map_err(|e| anyhow::anyhow!(e))?;
             return Ok(ChangesetDiff {
                 diff_content: messages,

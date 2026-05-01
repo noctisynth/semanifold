@@ -20,15 +20,19 @@ pub fn generate_changeset(
 }
 
 fn build_prompt(diff: &ChangesetDiff, ctx: &ResolverContext) -> anyhow::Result<String> {
-    let config = ctx
-        .config
-        .as_ref()
-        .context("Config not loaded")?;
+    let config = ctx.config.as_ref().context("Config not loaded")?;
 
     let packages_info = config
         .packages
         .iter()
-        .map(|(name, pkg)| format!("- {} (path: {}, resolver: {})", name, pkg.path.display(), pkg.resolver))
+        .map(|(name, pkg)| {
+            format!(
+                "- {} (path: {}, resolver: {})",
+                name,
+                pkg.path.display(),
+                pkg.resolver
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -133,10 +137,7 @@ fn parse_changeset_response(
         }
     }
 
-    let _config = ctx
-        .config
-        .as_ref()
-        .context("Config not loaded")?;
+    let _config = ctx.config.as_ref().context("Config not loaded")?;
 
     let affected_names: Vec<&str> = diff
         .affected_packages
@@ -145,7 +146,9 @@ fn parse_changeset_response(
         .collect();
 
     if affected_names.is_empty() && !diff.is_commit_messages {
-        anyhow::bail!("AI response does not match expected format and no affected packages detected");
+        anyhow::bail!(
+            "AI response does not match expected format and no affected packages detected"
+        );
     }
 
     let level = if !diff.affected_packages.is_empty() {

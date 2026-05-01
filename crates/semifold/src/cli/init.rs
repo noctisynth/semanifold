@@ -267,7 +267,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     if !target.exists() {
         std::fs::create_dir_all(&target)?;
     }
-    config::save_config(&target.join("config.toml"), &config)?;
+    config::save_config(&target.join("config.toml"), &config, init.force)?;
     if write_ci {
         let workflow_dir = target_dir.join(".github").join("workflows");
         if !workflow_dir.exists() {

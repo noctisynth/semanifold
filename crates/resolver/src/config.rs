@@ -200,7 +200,13 @@ pub fn get_config() -> Result<Config, ResolveError> {
     load_config(&config_path)
 }
 
-pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveError> {
+pub fn save_config(config_path: &Path, config: &Config, force: bool) -> Result<(), ResolveError> {
+    if config_path.exists() && !force {
+        return Err(ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: "Config file already exists. Use --force to overwrite.".to_string(),
+        });
+    }
     let config_content = if config_path.extension() == Some(OsStr::new("toml")) {
         toml_edit::ser::to_string_pretty(config).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),

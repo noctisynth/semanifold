@@ -76,7 +76,7 @@ pub fn setup_agent_config() -> anyhow::Result<()> {
     let provider_table = if toml_content.get("provider").is_some() {
         toml_content["provider"].as_table_mut()
     } else {
-        let mut table = toml_edit::Table::new();
+        let table = toml_edit::Table::new();
         toml_content.insert("provider", toml_edit::Item::Table(table));
         toml_content["provider"].as_table_mut()
     };

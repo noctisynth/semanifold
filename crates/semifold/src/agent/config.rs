@@ -92,12 +92,12 @@ pub fn has_provider_config() -> bool {
     };
     let config_path = changeset_root.join("config.toml");
 
-    if let Ok(content) = std::fs::read_to_string(&config_path) {
-        if let Ok(doc) = content.parse::<toml_edit::DocumentMut>() {
-            return doc.get("provider").is_some();
+    match std::fs::read_to_string(&config_path) {
+        Ok(content) => {
+            matches!(content.parse::<toml_edit::DocumentMut>(), Ok(doc) if doc.get("provider").is_some())
         }
+        Err(_) => false,
     }
-    false
 }
 
 pub const PROVIDER_PRESETS: &[(&str, &str, &str)] = &[

@@ -81,7 +81,7 @@ impl GitChecker {
                 "log",
                 &format!("{}..HEAD", base),
                 "--pretty=format:%s",
-                &format!("-{}", count.to_string()),
+                &format!("-{}", count),
             ])
             .output();
 

@@ -210,7 +210,7 @@ pub fn save_config(config_path: &Path, config: &Config, force: bool) -> Result<(
 
     let mut doc = if config_path.exists() {
         std::fs::read_to_string(config_path)
-            .map_err(|e| ResolveError::IoError(e))?
+            .map_err(ResolveError::IoError)?
             .parse::<toml_edit::DocumentMut>()
             .map_err(|e| ResolveError::InvalidConfig {
                 path: config_path.to_path_buf(),

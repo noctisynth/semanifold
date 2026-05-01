@@ -207,17 +207,34 @@ pub fn save_config(config_path: &Path, config: &Config, force: bool) -> Result<(
             reason: "Config file already exists. Use --force to overwrite.".to_string(),
         });
     }
-    let config_content = if config_path.extension() == Some(OsStr::new("toml")) {
-        toml_edit::ser::to_string_pretty(config).map_err(|e| ResolveError::InvalidConfig {
-            path: config_path.to_path_buf(),
-            reason: e.to_string(),
-        })?
+    let mut doc = if config_path.exists() {
+        std::fs::read_to_string(config_path)
+            .map_err(|e| ResolveError::IoError(e))?
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| ResolveError::InvalidConfig {
+                path: config_path.to_path_buf(),
+                reason: e.to_string(),
+            })?
     } else {
-        serde_json::to_string(config).map_err(|e| ResolveError::InvalidConfig {
+        toml_edit::DocumentMut::new()
+    };
+
+    let config_toml = toml_edit::ser::to_string_pretty(config)
+        .map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?
-    };
-    std::fs::write(config_path, config_content)?;
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: e.to_string(),
+        })?;
+
+    doc["branches"] = config_toml["branches"].clone();
+    doc["tags"] = config_toml["tags"].clone();
+    doc["packages"] = config_toml["packages"].clone();
+    doc["resolver"] = config_toml["resolver"].clone();
+
+    std::fs::write(config_path, doc.to_string())?;
     Ok(())
 }

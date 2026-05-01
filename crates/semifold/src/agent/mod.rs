@@ -73,16 +73,20 @@ pub fn setup_agent_config() -> anyhow::Result<()> {
     let content = std::fs::read_to_string(&config_path)?;
     let mut toml_content: toml_edit::DocumentMut = content.parse()?;
 
-    let mut provider_table = toml_edit::Table::new();
-    provider_table.insert("base_url", toml_edit::value(base_url));
-    provider_table.insert("model", toml_edit::value(model));
+    if toml_content.get("provider").is_some() {
+        println!("[provider] section already exists in .changes/config.toml");
+    } else {
+        let mut provider_table = toml_edit::Table::new();
+        provider_table.insert("base_url", toml_edit::value(base_url));
+        provider_table.insert("model", toml_edit::value(model));
 
-    toml_content.insert("provider", toml_edit::Item::Table(provider_table));
+        toml_content.insert("provider", toml_edit::Item::Table(provider_table));
+        println!("Added [provider] section to .changes/config.toml");
+    }
 
     std::fs::write(&config_path, toml_content.to_string())?;
     std::fs::write(&env_path, format!("AGENT_API_KEY={}\n", api_key))?;
 
-    println!("Added [provider] section to .changes/config.toml");
     println!("Created .env file with AGENT_API_KEY");
 
     Ok(())

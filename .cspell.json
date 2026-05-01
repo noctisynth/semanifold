@@ -35,7 +35,5 @@
     "zigbuild",
     "ziglang"
   ],
-  "ignorePaths": [
-    "Cargo.toml"
-  ]
+  "ignorePaths": ["Cargo.toml"]
 }

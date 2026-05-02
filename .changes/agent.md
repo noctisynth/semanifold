@@ -1,3 +1,4 @@
+---
 @semifold/docs: major:chore
 semifold: minor:feat
 semifold-changelog: major:chore

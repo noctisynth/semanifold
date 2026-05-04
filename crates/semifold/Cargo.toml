@@ -10,6 +10,10 @@ repository.workspace = true
 readme.workspace = true
 authors.workspace = true
 
+[package.metadata.semifold]
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-pro"
+
 [[bin]]
 name = "semifold"
 path = "src/main.rs"
@@ -44,6 +48,7 @@ reqwest = { version = "0.12.24", default-features = false, features = [
 minijinja = { version = "2.12.0", default-features = false }
 serde_json = "1.0.145"
 serde = "1.0.228"
+toml = "0.8"
 bytes = "1.10.1"
 semver = "1.0.27"
 dotenvy = "0.15"

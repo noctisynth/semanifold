@@ -89,29 +89,12 @@ fn detect_affected_packages(
         let package_path_str = package_config.path.to_string_lossy();
 
         if diff_content.contains(&*package_path_str) {
-            let suggested_level = infer_bump_level(diff_content);
-
             affected.push(AffectedPackage {
                 name: package_name.clone(),
-                suggested_level,
+                suggested_level: BumpLevel::Patch,
             });
         }
     }
 
     Ok(affected)
-}
-
-fn infer_bump_level(diff_content: &str) -> BumpLevel {
-    let diff_lower = diff_content.to_lowercase();
-
-    if diff_lower.contains("breaking")
-        || diff_lower.contains("major")
-        || diff_lower.contains("breaking change")
-    {
-        BumpLevel::Major
-    } else if diff_lower.contains("feat") || diff_lower.contains("feature") {
-        BumpLevel::Minor
-    } else {
-        BumpLevel::Patch
-    }
 }

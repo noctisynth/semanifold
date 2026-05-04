@@ -1897,6 +1897,7 @@ dependencies = [
  "serde_json",
  "sys-locale",
  "tokio",
+ "toml",
  "toml_edit 0.23.10+spec-1.0.0",
 ]
 

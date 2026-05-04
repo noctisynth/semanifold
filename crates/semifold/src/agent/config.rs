@@ -21,9 +21,31 @@ pub enum ApiType {
     Anthropic,
 }
 
+#[derive(Debug, Deserialize)]
+struct CargoManifest {
+    package: CargoPackage,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoPackage {
+    metadata: CargoMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadata {
+    #[serde(rename = "semifold")]
+    agent: SemifoldConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct SemifoldConfig {
+    base_url: String,
+    model: String,
+}
+
 impl AgentConfig {
     pub fn load() -> anyhow::Result<Self> {
-        dotenvy::dotenv().ok();
+        load_dotenv();
 
         let api_key = std::env::var("AGENT_API_KEY")
             .map_err(|_| anyhow::anyhow!("AGENT_API_KEY not set in .env file"))?;
@@ -45,31 +67,100 @@ impl AgentConfig {
     }
 }
 
+fn load_dotenv() {
+    if std::env::var("CARGO_MANIFEST_DIR").is_ok() {
+        dotenvy::dotenv().ok();
+        return;
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        let mut search_dir = exe_path.parent().map(|p| p.to_path_buf());
+
+        for _ in 0..5 {
+            if let Some(dir) = &search_dir {
+                let env_path = dir.join(".env");
+                if env_path.exists() {
+                    load_env_file(&env_path);
+                    return;
+                }
+                search_dir = dir.parent().map(|p| p.to_path_buf());
+            }
+        }
+    }
+
+    dotenvy::dotenv().ok();
+}
+
+fn load_env_file(path: &std::path::Path) {
+    if let Ok(content) = std::fs::read_to_string(path) {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+                if !value.is_empty() {
+                    unsafe {
+                        std::env::set_var(key, value);
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn load_provider_config() -> anyhow::Result<ProviderConfig> {
-    let changeset_root = find_changeset_root()?;
-    let config_path = changeset_root.join("config.toml");
+    let cargo_toml_path = find_cargo_toml()?;
 
-    let content = std::fs::read_to_string(&config_path)?;
-    let toml_content: toml_edit::DocumentMut = content.parse()?;
+    let content = std::fs::read_to_string(&cargo_toml_path)?;
+    let manifest: CargoManifest = toml::from_str(&content)?;
 
-    let provider = toml_content
-        .get("provider")
-        .and_then(|p| p.as_table())
-        .ok_or_else(|| anyhow::anyhow!("[provider] section not found in config.toml"))?;
+    Ok(ProviderConfig {
+        base_url: manifest.package.metadata.agent.base_url,
+        model: manifest.package.metadata.agent.model,
+    })
+}
 
-    let base_url = provider
-        .get("base_url")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("base_url not found in [provider]"))?
-        .to_string();
+fn find_cargo_toml() -> anyhow::Result<PathBuf> {
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let path = PathBuf::from(&manifest_dir).join("Cargo.toml");
+        if path.exists() {
+            return Ok(path);
+        }
+    }
 
-    let model = provider
-        .get("model")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow::anyhow!("model not found in [provider]"))?
-        .to_string();
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        let mut search_dir: Option<PathBuf> = Some(exe_dir.to_path_buf());
 
-    Ok(ProviderConfig { base_url, model })
+        for _ in 0..5 {
+            if let Some(dir) = &search_dir {
+                let crates_dir = dir.join("crates");
+                if crates_dir.exists()
+                    && let Ok(entries) = std::fs::read_dir(&crates_dir)
+                {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let cargo_path = path.join("Cargo.toml");
+                            if cargo_path.exists() {
+                                let content = std::fs::read_to_string(&cargo_path)?;
+                                if content.contains("package.metadata.semifold") {
+                                    return Ok(cargo_path);
+                                }
+                            }
+                        }
+                    }
+                }
+                search_dir = dir.parent().map(|p| p.to_path_buf());
+            }
+        }
+    }
+
+    anyhow::bail!("Cannot find Cargo.toml with package.metadata.semifold")
 }
 
 pub fn find_changeset_root() -> anyhow::Result<PathBuf> {
@@ -93,9 +184,7 @@ pub fn has_provider_config() -> bool {
     let config_path = changeset_root.join("config.toml");
 
     match std::fs::read_to_string(&config_path) {
-        Ok(content) => {
-            matches!(content.parse::<toml_edit::DocumentMut>(), Ok(doc) if doc.get("provider").is_some())
-        }
+        Ok(content) => content.contains("[provider]"),
         Err(_) => false,
     }
 }

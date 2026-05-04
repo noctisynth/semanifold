@@ -1,8 +1,10 @@
 use anyhow::Context;
+use inquire::Select;
 
 use super::client::AgentClient;
 use super::config::AgentConfig;
 use super::git::ChangesetDiff;
+use semifold_resolver::changeset::Changeset;
 use semifold_resolver::context::Context as ResolverContext;
 
 pub fn generate_changeset(
@@ -17,6 +19,39 @@ pub fn generate_changeset(
     let response = runtime.block_on(client.chat(&prompt))?;
 
     parse_changeset_response(&response, diff, ctx)
+}
+
+fn handle_ai_error(response: &str, diff: &ChangesetDiff) -> anyhow::Result<String> {
+    println!("AI returned invalid changeset format.");
+    println!(
+        "Raw response (first 200 chars): {}",
+        &response[..response.len().min(200)]
+    );
+
+    let options = vec!["Regenerate", "Manual edit", "Exit"];
+    let choice = Select::new("What would you like to do?", options).prompt()?;
+
+    match choice {
+        "Regenerate" => anyhow::bail!("regenerate"),
+        "Manual edit" => {
+            let summary = response.lines().take(3).collect::<Vec<_>>().join(" ");
+            let changeset = format!(
+                "---\n{}\n---\n\n{}",
+                if diff.affected_packages.is_empty() {
+                    "semifold: patch".to_string()
+                } else {
+                    diff.affected_packages
+                        .iter()
+                        .map(|p| format!("{}: {}", p.name, p.suggested_level))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                },
+                summary
+            );
+            Ok(changeset)
+        }
+        _ => anyhow::bail!("User exited"),
+    }
 }
 
 fn build_prompt(diff: &ChangesetDiff, ctx: &ResolverContext) -> anyhow::Result<String> {
@@ -72,7 +107,15 @@ Output ONLY the changeset in the following format (no explanations or markdown c
 <package-name>: <major|minor|patch>[:<tag>]
 ---
 
-<Summary of changes, concise and descriptive>"#,
+<Summary of changes, concise and descriptive>
+
+## Example
+---
+semifold: minor:feat
+docs: patch:fix
+---
+
+Add AI-powered changeset generation with configurable provider support"#,
             packages_info = packages_info,
             tags_info = tags_info,
             content = diff.diff_content
@@ -106,7 +149,15 @@ Output ONLY the changeset in the following format (no explanations or markdown c
 <package-name>: <major|minor|patch>[:<tag>]
 ---
 
-<Summary of changes, concise and descriptive>"#,
+<Summary of changes, concise and descriptive>
+
+## Example
+---
+semifold: minor:feat
+docs: patch:fix
+---
+
+Add AI-powered changeset generation with configurable provider support"#,
             packages_info = packages_info,
             tags_info = tags_info,
             content = diff.diff_content
@@ -132,49 +183,20 @@ fn parse_changeset_response(
                 let summary = summary.trim_start_matches("---").trim();
 
                 let changeset = format!("{}\n---\n\n{}\n", front_matter.trim(), summary);
+
+                let temp_path = std::env::temp_dir().join("test_changeset.md");
+                if std::fs::write(&temp_path, &changeset).is_ok() {
+                    if Changeset::from_file(ctx, &temp_path).is_ok() {
+                        std::fs::remove_file(&temp_path).ok();
+                        return Ok(changeset);
+                    }
+                    std::fs::remove_file(&temp_path).ok();
+                }
+
                 return Ok(changeset);
             }
         }
     }
 
-    let _config = ctx.config.as_ref().context("Config not loaded")?;
-
-    let affected_names: Vec<&str> = diff
-        .affected_packages
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect();
-
-    if affected_names.is_empty() && !diff.is_commit_messages {
-        anyhow::bail!(
-            "AI response does not match expected format and no affected packages detected"
-        );
-    }
-
-    let level = if !diff.affected_packages.is_empty() {
-        diff.affected_packages[0].suggested_level.to_string()
-    } else {
-        "patch".to_string()
-    };
-
-    let fallback = format!(
-        "\
----
-{}
----
-
-{}",
-        if affected_names.is_empty() {
-            "semifold: patch".to_string()
-        } else {
-            affected_names
-                .iter()
-                .map(|name| format!("{}: {}", name, level))
-                .collect::<Vec<_>>()
-                .join("\n")
-        },
-        content.lines().take(3).collect::<Vec<_>>().join(" ")
-    );
-
-    Ok(fallback)
+    handle_ai_error(content, diff)
 }

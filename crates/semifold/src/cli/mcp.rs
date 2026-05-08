@@ -56,7 +56,7 @@ impl Default for SemifoldMcp {
 
 #[tool_router]
 impl SemifoldMcp {
-    #[tool(name = "get_tags", description = "获取所有可用的 tags")]
+    #[tool(name = "get_tags", description = "Get all available tags")]
     fn get_tags(&self, Parameters(_): Parameters<GetTagsParams>) -> Result<String, String> {
         let ctx =
             context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
@@ -67,7 +67,7 @@ impl SemifoldMcp {
             .map(|c| serde_json::to_string(&c.tags).unwrap())
     }
 
-    #[tool(name = "get_packages", description = "获取所有可用的 packages")]
+    #[tool(name = "get_packages", description = "Get all available packages")]
     fn get_packages(&self, Parameters(_): Parameters<GetPackagesParams>) -> Result<String, String> {
         let ctx =
             context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
@@ -93,7 +93,7 @@ impl SemifoldMcp {
             })
     }
 
-    #[tool(name = "create_changeset", description = "创建 changeset")]
+    #[tool(name = "create_changeset", description = "create changeset")]
     fn create_changeset(
         &self,
         Parameters(params): Parameters<CreateChangesetParams>,

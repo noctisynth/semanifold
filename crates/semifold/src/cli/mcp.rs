@@ -2,7 +2,7 @@ use clap::Parser;
 use rmcp::schemars::JsonSchema;
 use rmcp::{
     ServerHandler, ServiceExt,
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    handler::server::wrapper::Parameters,
     model::{ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
 };
@@ -35,29 +35,13 @@ pub struct McpCommand {
     pub stdio: bool,
 }
 
-#[derive(Clone)]
-pub struct SemifoldMcp {
-    tool_router: ToolRouter<Self>,
-}
-
-impl SemifoldMcp {
-    pub fn new() -> Self {
-        Self {
-            tool_router: Self::tool_router(),
-        }
-    }
-}
-
-impl Default for SemifoldMcp {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Default, Clone)]
+pub struct SemifoldMcp;
 
 #[tool_router]
 impl SemifoldMcp {
     #[tool(name = "get_tags", description = "Get all available tags")]
-    fn get_tags(&self, Parameters(_): Parameters<GetTagsParams>) -> Result<String, String> {
+    fn get_tags(&self) -> Result<String, String> {
         let ctx =
             context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
 
@@ -68,7 +52,7 @@ impl SemifoldMcp {
     }
 
     #[tool(name = "get_packages", description = "Get all available packages")]
-    fn get_packages(&self, Parameters(_): Parameters<GetPackagesParams>) -> Result<String, String> {
+    fn get_packages(&self) -> Result<String, String> {
         let ctx =
             context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
 
@@ -143,22 +127,23 @@ impl SemifoldMcp {
     }
 }
 
-#[tool_handler(router = self.tool_router)]
+#[tool_handler(name = "semifold_mcp", version = "0.1")]
 impl ServerHandler for SemifoldMcp {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some(
-                "Semifold MCP Server - Use get_tags, get_packages, create_changeset tools"
-                    .to_string(),
-            ),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        ServerInfo::new(
+            ServerCapabilities::builder()
+                .enable_tools()
+                .enable_resources()
+                .build(),
+        )
+        .with_instructions(
+            "Semifold MCP Server - Use get_tags, get_packages, create_changeset tools",
+        )
     }
 }
 
 pub async fn run_mcp() -> anyhow::Result<()> {
-    let service = SemifoldMcp::new()
+    let service = SemifoldMcp::default()
         .serve(rmcp::transport::io::stdio())
         .await?;
     service.waiting().await?;

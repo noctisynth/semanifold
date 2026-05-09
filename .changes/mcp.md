@@ -1,5 +1,5 @@
 ---
-semifold: "minor:feat"
+semifold: "patch:feat"
 ---
 
 Add mcp server

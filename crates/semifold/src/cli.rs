@@ -4,6 +4,7 @@ use rust_i18n::t;
 pub mod ci;
 pub mod commit;
 pub mod init;
+pub mod mcp;
 pub mod publish;
 pub mod status;
 pub mod version;
@@ -22,6 +23,8 @@ pub(crate) enum Commands {
     CI(ci::CI),
     #[command(about = t!("cli.commands.status"))]
     Status(status::Status),
+    #[command(about = "Start MCP server")]
+    Mcp(mcp::McpCommand),
 }
 
 fn get_styles() -> clap::builder::Styles {

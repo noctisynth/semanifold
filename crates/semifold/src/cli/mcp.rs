@@ -143,9 +143,7 @@ impl ServerHandler for SemifoldMcp {
 }
 
 pub async fn run_mcp() -> anyhow::Result<()> {
-    let service = SemifoldMcp::default()
-        .serve(rmcp::transport::io::stdio())
-        .await?;
+    let service = SemifoldMcp.serve(rmcp::transport::io::stdio()).await?;
     service.waiting().await?;
     Ok(())
 }

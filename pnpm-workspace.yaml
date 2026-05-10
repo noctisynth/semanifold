@@ -1,5 +1,8 @@
 packages:
   - docs
 
+allowBuilds:
+  core-js: true
+
 onlyBuiltDependencies:
   - core-js

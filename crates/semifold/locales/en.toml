@@ -90,3 +90,36 @@ not_base_branch = "Not a push to base branch, skip versioning and publishing."
 no_changesets_publish = "No changesets found, will publish the current version."
 no_existing_pr = "No existing PR found, create a new one."
 existing_pr_found = "Existing PR #%{number} found, skip creating a new one."
+
+[cli.mcp]
+not_initialized = "Semifold not initialized. Run 'smif init' first."
+changeset_dir_not_found = "Changeset directory not found. Run 'smif init' first."
+package_not_found = "Package '%{package}' not found in config"
+invalid_level = "Invalid level '%{level}'. Use: major, minor, patch"
+changeset_created = "Changeset created: %{name}"
+instructions = """Semifold MCP Server
+
+Available tools:
+- get_tags: Get all available tags
+- get_packages: Get all packages in the project
+- create_changeset: Create a new changeset based on the packages affected by this change and the version bump level"""
+
+[cli.mcp.flags]
+current_dir = "Current working directory for MCP server"
+
+[cli.mcp.tools]
+get_tags = "Get all available tags"
+get_packages = "Get all available packages"
+create_changeset = "Create a new changeset based on the packages affected by this change and the version bump level"
+
+[cli.mcp.params]
+name = "Name"
+name_desc = "A unique identifier for this changeset"
+packages = "Packages"
+packages_desc = "Packages that will be bumped in this changeset"
+level = "Level"
+level_desc = "Must be one of: major, minor, or patch"
+summary = "Summary"
+summary_desc = "Brief description of what changed"
+tag = "Tag"
+tag_desc = "Optional tag to categorize this changeset, defaults to first available tag"

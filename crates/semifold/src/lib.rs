@@ -33,7 +33,7 @@ pub fn run() -> anyhow::Result<()> {
         Some(Commands::Publish(publish)) => utils::run_async(cli::publish::run(publish, &ctx))?,
         Some(Commands::CI(ci)) => utils::run_async(cli::ci::run(ci, &ctx))?,
         Some(Commands::Status(status)) => utils::run_async(cli::status::run(status, &ctx))?,
-        Some(Commands::Mcp(_)) => utils::run_async(cli::mcp::run_mcp())?,
+        Some(Commands::Mcp(mcp)) => utils::run_async(cli::mcp::run_mcp(mcp))?,
         None => {}
     }
 

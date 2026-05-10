@@ -87,3 +87,36 @@ not_base_branch = "不是推送到基础分支，跳过版本提升和发布。"
 no_changesets_publish = "未找到变更集，将发布当前版本。"
 no_existing_pr = "未找到现有 PR，创建新的 PR。"
 existing_pr_found = "找到现有 PR #%{number}，跳过创建新 PR。"
+
+[cli.mcp]
+not_initialized = "Semifold 未初始化。请先运行 'smif init'。"
+changeset_dir_not_found = "未找到变更集目录。请先运行 'smif init'。"
+package_not_found = "包 '%{package}' 在配置中未找到"
+invalid_level = "级别 '%{level}' 无效。可用值：major, minor, patch"
+changeset_created = "变更集已创建：%{name}"
+instructions = """Semifold MCP 服务器
+
+使用以下工具：
+- get_tags: 获取所有可用的标签
+- get_packages: 获取项目中所有的包
+- create_changeset: 基于本次修改影响到的包和版本级别创建新的变更集"""
+
+[cli.mcp.flags]
+current_dir = "MCP 服务器的当前工作目录"
+
+[cli.mcp.tools]
+get_tags = "获取所有可用的标签"
+get_packages = "获取所有可用的包"
+create_changeset = "基于本次修改影响到的包和版本级别创建新的变更集"
+
+[cli.mcp.params]
+name = "名称"
+name_desc = "此变更集的唯一标识符"
+packages = "包列表"
+packages_desc = "将在此变更集中被提升的包"
+level = "版本级别"
+level_desc = "必须为以下之一：major、minor 或 patch"
+summary = "变更摘要"
+summary_desc = "更改的简要描述"
+tag = "标签"
+tag_desc = "用于分类此变更集的可选标签，默认为第一个可用标签"

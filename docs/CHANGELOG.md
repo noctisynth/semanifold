@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.6
+
+### Chores
+
+- [`561e98a`](https://github.com/noctisynth/semifold/commit/561e98a8733dfa390b12d1bbdba9746f03d5e1f2): Approve builds of `core-js` by pnpm
+
 ## v1.0.5
 
 ### Chores

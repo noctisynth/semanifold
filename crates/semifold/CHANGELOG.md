@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.16
+
+### New Features
+
+- [`1350979`](https://github.com/noctisynth/semifold/commit/1350979c131c09552cde780ad109fc2ede217bca): Add i18n support to MCP server with localized error messages and descriptions for schemars
+- [`564a7b3`](https://github.com/noctisynth/semifold/commit/564a7b37233308685a99dabd5e9c006fc9b1f213): Add mcp server ([#79](https://github.com/noctisynth/semifold/pull/79) by @YESWmeshade)
+
 ## v0.2.15
 
 ### Bug Fixes

@@ -1,0 +1,124 @@
+# Init
+
+在仓库中初始化 Semifold。
+
+## 概要
+
+```bash
+smif init [选项]
+```
+
+## 描述
+
+`init` 命令在当前仓库中初始化 Semifold。它创建配置文件并可选地生成 GitHub Actions 工作流。
+
+## 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--target <路径>` | `-t` | Changeset 目录路径（默认：`.changes`） |
+| `--resolvers <类型>` | `-r` | 启用的解析器类型（rust/nodejs/python/cpp） |
+| `--force` | `-f` | 强制重新初始化（覆盖现有配置） |
+| `--base-branch <名称>` | - | 基础分支名称（默认：`main`） |
+| `--release-branch <名称>` | - | 发布分支名称（默认：`release`） |
+
+## 选项详情
+
+### `--resolvers`
+
+指定要启用的工作区解析器。可以指定多个：
+
+```bash
+smif init --resolvers rust --resolvers nodejs
+```
+
+可用的解析器：
+- `rust` - Rust/Cargo 工作区
+- `nodejs` - Node.js/npm 工作区
+- `python` - Python 包
+- `cpp` - C++ 项目
+
+## 生成的命令
+
+运行 `init` 会创建以下文件：
+
+### `.changes/config.toml`
+
+主配置文件：
+
+```toml
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+
+[packages]
+# 包配置会被自动检测
+
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### `.github/workflows/semifold-ci.yaml`（可选）
+
+用于发布的 CI 工作流。
+
+### `.github/workflows/semifold-status.yaml`（可选）
+
+用于 PR 状态评论的 CI 工作流。
+
+## 交互式提示
+
+1. **Changeset 目录**: 选择 `.changes` 或 `.changesets`
+2. **解析器**: 多选工作区解析器
+3. **标签**: 是否包含默认标签
+4. **基础分支**: 基础分支名称（默认：`main`）
+5. **发布分支**: 发布分支名称（默认：`release`）
+6. **GitHub Actions**: 是否生成工作流文件
+
+## 示例
+
+### 基本初始化
+
+```bash
+smif init
+```
+
+### 指定解析器
+
+```bash
+smif init --resolvers rust --resolvers nodejs
+```
+
+### 自定义分支
+
+```bash
+smif init --base-branch develop --release-branch releases
+```
+
+### 强制重新初始化
+
+```bash
+smif init --force
+```
+
+## 要求
+
+- 必须在 Git 仓库内运行
+- Git 仓库应该是干净的（没有未提交的更改），或使用 `--force`
+
+## 相关链接
+
+- [配置参考](../configuration/config-file.mdx)
+- [GitHub Actions 集成](../integration/github-actions.mdx)

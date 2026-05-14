@@ -2,6 +2,21 @@
   {
     "type": "dir",
     "name": "start",
-    "label": "start"
+    "label": "开始"
+  },
+  {
+    "type": "dir",
+    "name": "commands",
+    "label": "命令"
+  },
+  {
+    "type": "dir",
+    "name": "configuration",
+    "label": "配置"
+  },
+  {
+    "type": "dir",
+    "name": "advanced",
+    "label": "高级"
   }
 ]

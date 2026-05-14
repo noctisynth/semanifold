@@ -1,0 +1,83 @@
+# Status
+
+显示 changesets 和版本提升的状态。
+
+## 概要
+
+```bash
+smif status [选项]
+```
+
+## 描述
+
+`status` 命令显示有关待处理 changesets 和计划版本提升的信息。它对于审查下次发布将包含哪些变更非常有用。
+
+## 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--comment <布尔值>` | `-c` | 在 CI 中发布 PR 评论（默认：`true`） |
+
+## 输出
+
+### 本地模式
+
+在本地运行（非 CI）时：
+
+```
+Changesets: 3
+
+Packages:
+semifold              0.2.15 → 0.2.16
+my-library            1.0.0 → 1.1.0
+```
+
+### CI 模式（GitHub Actions）
+
+在 GitHub Actions 中配合 PR 运行时：
+
+1. 显示与本地模式相同的状态
+2. 发布或更新包含表格的 PR 评论：
+
+```
+## Workspace change through: abc1234
+
+3 changesets found
+
+| Package | Bump Level | Current Version | Next Version |
+| ------- | ---------- | --------------- | ------------ |
+| semifold | patch | 0.2.15 | 0.2.16 |
+| my-library | minor | 1.0.0 | 1.1.0 |
+```
+
+## 预发布警告
+
+当包有预发布版本且正在以 major 或 minor（不是 patch）提升时，会显示警告：
+
+```
+⚠️ Warning: package "semifold" has a pre-release version and is being bumped with minor
+```
+
+## 示例
+
+### 标准用法
+
+```bash
+smif status
+```
+
+### 禁用 PR 评论
+
+```bash
+smif status --comment false
+```
+
+## 要求
+
+- Semifold 必须已初始化
+
+## 相关链接
+
+- [Commit 命令](./commit.mdx) - 创建 changesets
+- [Version 命令](./version.mdx) - 提升版本
+- [CI 命令](./ci.mdx) - 完整 CI 流水线

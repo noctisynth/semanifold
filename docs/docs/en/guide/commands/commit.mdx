@@ -1,0 +1,89 @@
+# Commit
+
+Create a new changeset file to track package version changes.
+
+## Synopsis
+
+```bash
+smif commit [options]
+smif add [options]     # alias
+```
+
+## Description
+
+The `commit` command creates a new changeset file in the `.changes` or `.changesets` directory. A changeset describes which packages should be bumped and at what level (major/minor/patch).
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--name <NAME>` | `-n` | Changeset filename (will be sanitized) |
+| `--level <LEVEL>` | `-l` | Default bump level (major/minor/patch) |
+| `--summary <TEXT>` | `-s` | Changeset summary/description |
+
+## Interactive Prompts
+
+When running without options, the command will interactively prompt for:
+
+1. **Changeset Name**: A unique identifier for this changeset (will be sanitized to lowercase with dashes)
+
+2. **Packages**: Multi-select list of packages affected by this change
+
+3. **Bump Level per Package**: For each bump level (patch, minor, major), select which packages should be bumped at that level
+
+4. **Tag**: Select a category tag (e.g., feat, fix, chore)
+
+5. **Summary**: A description of the changes
+
+## Changeset File Format
+
+Changesets are stored as Markdown files with YAML front matter:
+
+```yaml
+---
+semifold: minor
+my-library: patch:fix
+---
+Add new feature to semifold and fix bug in my-library
+```
+
+The format is:
+- `---` marks the start of YAML front matter
+- Each line `package: level` or `package: level:tag` defines a package bump
+- Another `---` separates front matter from the summary
+- The remaining content is the Markdown summary
+
+## Bump Levels
+
+| Level | Description |
+|-------|-------------|
+| `major` | Breaking changes (e.g., 1.0.0 → 2.0.0) |
+| `minor` | New features, backward compatible (e.g., 1.0.0 → 1.1.0) |
+| `patch` | Bug fixes, backward compatible (e.g., 1.0.0 → 1.0.1) |
+
+## Examples
+
+### Interactive Mode
+
+```bash
+smif commit
+```
+
+### With Options
+
+```bash
+smif commit -n "add-awesome-feature" -s "Add awesome new feature"
+```
+
+### Specify Level
+
+```bash
+smif commit --level minor
+```
+
+## Notes
+
+- If only one package exists in the workspace, it will be automatically selected
+- The changeset name must be unique (no existing file with same name)
+- Invalid characters in the name are replaced with `-`
+- Use `smif status` to see all pending changesets

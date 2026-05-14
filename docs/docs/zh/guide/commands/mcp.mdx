@@ -1,0 +1,138 @@
+# MCP
+
+启动 MCP 服务器以集成 AI 工具。
+
+## 概要
+
+```bash
+smif mcp [选项]
+```
+
+## 描述
+
+`mcp` 命令启动一个 Model Context Protocol (MCP) 服务器，向 AI 助手暴露 Semifold 工具。这使得 AI 工具能够以编程方式与 Semifold 交互。
+
+## 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--current-dir <目录>` | `-C` | 启动前切换到指定目录 |
+
+## MCP 工具
+
+Semifold MCP 服务器提供以下工具：
+
+### get_tags
+
+从 Semifold 配置中获取所有可用的标签。
+
+**返回**：JSON 对象，映射标签键到描述
+
+```json
+{
+  "feat": "New Features",
+  "fix": "Bug Fixes",
+  "chore": "Chores"
+}
+```
+
+### get_packages
+
+获取 Semifold 配置中的所有包及其路径和解析器。
+
+**返回**：包含包详情的 JSON 对象
+
+```json
+{
+  "semifold": {
+    "path": "crates/semifold",
+    "resolver": "Rust"
+  },
+  "my-library": {
+    "path": "packages/my-library",
+    "resolver": "Nodejs"
+  }
+}
+```
+
+### create_changeset
+
+以编程方式创建新的 changeset。
+
+**参数**：
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | Changeset 文件名 |
+| `packages` | string[] | 要包含的包名列表 |
+| `level` | string | 版本提升级别："major"、"minor" 或 "patch" |
+| `summary` | string | Changeset 摘要/描述 |
+| `tag` | string（可选） | 标签类别 |
+
+## 示例
+
+### 启动 MCP 服务器
+
+```bash
+smif mcp
+```
+
+### 在指定目录启动
+
+```bash
+smif mcp --current-dir /path/to/project
+```
+
+## MCP 客户端配置
+
+服务器通过 stdio 通信。配置 MCP 客户端以生成 `smif mcp` 作为子进程。
+
+### Claude Code / Claude Desktop
+
+添加到您的 Claude 配置文件中：
+
+```json
+{
+  "mcpServers": {
+    "semifold": {
+      "command": "smif",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### OpenCode
+
+添加到您的 OpenCode 配置文件（`~/.config/opencode/opencode.json` 或 `./opencode.json`）：
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "semifold": {
+      "type": "local",
+      "command": ["smif", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### 其他 MCP 客户端
+
+服务器通过 stdio 通信。配置 MCP 客户端以生成 `smif mcp` 作为子进程。
+
+## 使用场景
+
+- AI 辅助 changeset 创建
+- 自动化发布管理
+- 集成 AI 代码审查工具
+
+## 要求
+
+- 项目中必须已初始化 Semifold
+
+## 相关链接
+
+- [Commit 命令](./commit.mdx) - 手动创建 changeset
+- [配置参考](../configuration/config-file.mdx)

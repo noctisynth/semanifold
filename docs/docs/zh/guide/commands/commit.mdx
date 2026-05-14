@@ -1,0 +1,94 @@
+# Commit
+
+创建一个新的 changeset 文件来跟踪包版本变更。
+
+## 概要
+
+```bash
+smif commit [选项]
+smif add [选项]     # 别名
+```
+
+## 描述
+
+`commit` 命令在 `.changes` 或 `.changesets` 目录中创建一个新的 changeset 文件。Changeset 描述哪些包应该以什么级别（major/minor/patch）进行版本提升。
+
+## 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--name <名称>` | `-n` | Changeset 文件名（将被规范化） |
+| `--level <级别>` | `-l` | 默认版本提升级别（major/minor/patch） |
+| `--summary <文本>` | `-s` | Changeset 摘要/描述 |
+
+## 交互式提示
+
+在不带选项运行时会交互式提示：
+
+1. **Changeset 名称**: 唯一的标识符（将被规范化为小写并用短横线分隔）
+
+2. **包**: 多选受此变更影响的包
+
+3. **每个包的版本提升级别**: 为每个级别（patch、minor、major）选择哪些包应该提升
+
+4. **标签**: 选择类别标签（如 feat、fix、chore）
+
+5. **摘要**: 变更描述
+
+## Changeset 文件格式
+
+Changeset 存储为带有 YAML front matter 的 Markdown 文件：
+
+```yaml
+---
+semifold: minor
+my-library: patch:fix
+---
+为 semifold 添加新功能并修复 my-library 中的 bug
+```
+
+格式说明：
+- `---` 标记 YAML 文档的开始
+- 每行 `包名: 级别` 或 `包名: 级别:标签` 定义一个包版本提升
+- 另一个 `---` 分隔 front matter 和摘要
+- 剩余内容是 Markdown 摘要
+
+## 版本提升级别
+
+| 级别 | 说明 |
+|------|------|
+| `major` | 破坏性变更（如 1.0.0 → 2.0.0） |
+| `minor` | 新功能，向后兼容（如 1.0.0 → 1.1.0） |
+| `patch` | Bug 修复，向后兼容（如 1.0.0 → 1.0.1） |
+
+## 示例
+
+### 交互模式
+
+```bash
+smif commit
+```
+
+### 带选项
+
+```bash
+smif commit -n "add-awesome-feature" -s "添加酷炫新功能"
+```
+
+### 指定级别
+
+```bash
+smif commit --level minor
+```
+
+## 注意事项
+
+- 如果工作区只有一个包，将自动选中
+- Changeset 名称必须唯一（不能有同名文件）
+- 名称中的无效字符将被替换为 `-`
+- 使用 `smif status` 查看所有待处理的 changesets
+
+## 相关链接
+
+- [Status 命令](./status.mdx) - 查看待处理的 changesets
+- [Version 命令](./version.mdx) - 处理 changesets

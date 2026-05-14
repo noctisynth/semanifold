@@ -1,0 +1,193 @@
+# Resolvers
+
+Detailed reference for workspace resolver configuration.
+
+## Overview
+
+Resolvers are language-specific components that handle package discovery, version management, and publishing. Semifold supports multiple resolvers that can be used together in a cross-language monorepo.
+
+## Supported Resolvers
+
+| Resolver | Package Manager | Status |
+|----------|-----------------|--------|
+| `rust` | Cargo | ✅ Stable |
+| `nodejs` | npm | ✅ Stable |
+| `python` | pip, uv, pdm | ✅ Stable |
+| `cpp` | Custom | ✅ Stable |
+| `go` | Go modules | 🔜 Planned |
+| `java` | Maven | 🔜 Planned |
+| `kotlin` | Gradle | 🔜 Planned |
+
+---
+
+## Rust Resolver
+
+### Capabilities
+
+- Discovers packages from Cargo workspaces
+- Reads version from `Cargo.toml`
+- Updates version in `Cargo.toml`
+- Runs `cargo publish` for publishing
+- Supports `cargo generate-lockfile` as post-version
+
+### Configuration
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+```
+
+### Package Discovery
+
+The Rust resolver looks for `Cargo.toml` files and identifies packages in the workspace.
+
+---
+
+## Node.js Resolver
+
+### Capabilities
+
+- Discovers packages from package.json files
+- Reads version from package.json
+- Updates version in package.json
+- Runs `npm publish` for publishing
+- Supports scoped packages
+
+### Configuration
+
+```toml
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### For Scoped Packages
+
+```toml
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/@my-org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--access", "restricted"] }]
+```
+
+---
+
+## Python Resolver
+
+### Capabilities
+
+- Discovers packages by looking for `pyproject.toml`, `setup.py`, or `setup.cfg`
+- Reads version from `pyproject.toml` or `setup.*`
+- Updates version in configuration files
+- Does not include a default publish command (must be configured)
+
+### Configuration
+
+Python packages typically require manual configuration of the publish command:
+
+```toml
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+
+# Using uv
+[[resolver.python.publish]]
+command = "uv"
+args = ["publish"]
+
+# Using pip
+[[resolver.python.publish]]
+command = "pip"
+args = ["install", "build", "&&", "twine", "upload", "dist/*"]
+```
+
+### Version Sources
+
+The Python resolver supports multiple version file formats:
+
+**pyproject.toml (PEP 621)**:
+```toml
+[project]
+name = "my-package"
+version = "1.0.0"
+```
+
+**setup.py**:
+```python
+setuptools.setup(
+    name="my-package",
+    version="1.0.0",
+)
+```
+
+---
+
+## C++ Resolver
+
+### Capabilities
+
+- Basic package discovery support
+- Does not include default publish command (must be configured)
+- Suitable for custom build and release processes
+
+### Configuration
+
+```toml
+[resolver.cpp]
+pre-check.url = ""
+publish = [
+  { command = "cmake", args = ["--build", "build"] },
+  { command = "make", args = ["package"] }
+]
+```
+
+---
+
+## Custom Resolver Extension
+
+For unsupported languages, you can configure custom commands:
+
+```toml
+# Example: Custom Java configuration
+[packages.my-java-lib]
+path = "java-lib"
+resolver = "rust"  # Use rust resolver as base
+
+# Override with custom commands
+[[resolver.rust.publish]]
+command = "./gradlew"
+args = ["publish"]
+```
+
+### Implementing a Custom Resolver
+
+To implement a full custom resolver, you would need to:
+
+1. Create a new resolver module in the semifold-resolver crate
+2. Implement the `Resolver` trait
+3. Register the resolver in `Context::create_resolver()`
+
+---
+
+## Template Variables
+
+All resolver configurations support template variables:
+
+| Variable | Description |
+|----------|-------------|
+| `{{ package.name }}` | Package name from config |
+| `{{ package.version }}` | Current/new version |
+| `{{ package.path }}` | Path to package directory |
+
+Example with custom URL:
+
+```toml
+pre-check.url = "https://my-registry.example.com/packages/{{ package.name }}/versions/{{ package.version }}"
+```
+
+---
+
+## See Also
+
+- [Configuration Reference](./config-file.mdx)
+- [Init Command](../commands/init.mdx)

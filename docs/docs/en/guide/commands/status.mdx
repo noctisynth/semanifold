@@ -1,0 +1,83 @@
+# Status
+
+Show status of changesets and version bumps.
+
+## Synopsis
+
+```bash
+smif status [options]
+```
+
+## Description
+
+The `status` command displays information about pending changesets and planned version bumps. It's useful for reviewing what changes will be included in the next release.
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--comment <BOOL>` | `-c` | Post PR comment in CI (default: `true`) |
+
+## Output
+
+### Local Mode
+
+When run locally (not in CI):
+
+```
+Changesets: 3
+
+Packages:
+semifold              0.2.15 → 0.2.16
+my-library            1.0.0 → 1.1.0
+```
+
+### CI Mode (GitHub Actions)
+
+When run in GitHub Actions with a PR:
+
+1. Displays the same status as local mode
+2. Posts or updates a PR comment with a table showing:
+
+```
+## Workspace change through: abc1234
+
+3 changesets found
+
+| Package | Bump Level | Current Version | Next Version |
+| ------- | ---------- | --------------- | ------------ |
+| semifold | patch | 0.2.15 | 0.2.16 |
+| my-library | minor | 1.0.0 | 1.1.0 |
+```
+
+## Pre-release Warnings
+
+When a package has a pre-release version and is being bumped with major or minor (not patch), a warning is displayed:
+
+```
+⚠️ Warning: package "semifold" has a pre-release version and is being bumped with minor
+```
+
+## Examples
+
+### Standard Usage
+
+```bash
+smif status
+```
+
+### Disable PR Comment
+
+```bash
+smif status --comment false
+```
+
+## Requirements
+
+- Semifold must be initialized
+
+## See Also
+
+- [Commit Command](./commit.mdx) - Creating changesets
+- [Version Command](./version.mdx) - Bumping versions
+- [CI Command](./ci.mdx) - Full CI pipeline

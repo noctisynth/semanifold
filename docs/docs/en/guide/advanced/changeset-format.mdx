@@ -1,0 +1,220 @@
+# Changeset Format
+
+Detailed reference for changeset file format.
+
+## Overview
+
+Changesets are Markdown files with YAML front matter that describe version bumps for packages. They are stored in the `.changes` or `.changesets` directory.
+
+## File Structure
+
+```
+.changes/
+├── config.toml
+└── add-awesome-feature.md   # One changeset per file
+```
+
+## Changeset File Format
+
+```yaml
+---
+semifold: minor
+my-library: patch:fix
+---
+Add awesome new feature to semifold and fix bug in my-library
+```
+
+### Components
+
+1. **`---`** - YAML document start marker
+2. **Front matter** - Package bump specifications
+3. **`---`** - Front matter separator
+4. **Summary** - Markdown description of changes
+
+---
+
+## Front Matter Format
+
+### Basic Format
+
+```
+package-name: bump-level
+```
+
+### With Tag
+
+```
+package-name: bump-level:tag
+```
+
+### Multiple Packages
+
+```yaml
+---
+package-a: major
+package-b: minor
+package-c: patch:feat
+---
+Summary of changes affecting all three packages
+```
+
+---
+
+## Bump Levels
+
+| Level | SemVer | Description |
+|-------|--------|-------------|
+| `major` | X.Y.Z → X+1.0.0 | Breaking changes |
+| `minor` | X.Y.Z → X.Y+1.0 | New features |
+| `patch` | X.Y.Z → X.Y.Z+1 | Bug fixes |
+
+---
+
+## Tags
+
+Tags categorize changesets for changelog generation. Tags must be defined in `config.toml`:
+
+```toml
+[tags]
+feat = "New Features"
+fix = "Bug Fixes"
+chore = "Chores"
+refactor = "Refactors"
+perf = "Performance Improvements"
+```
+
+### Using Tags
+
+```yaml
+---
+my-package: minor:feat
+---
+Add new API endpoint
+```
+
+When no tag is specified, the default label is "Changes".
+
+---
+
+## Examples
+
+### Feature Release
+
+```yaml
+---
+my-app: minor
+my-utils: patch
+---
+Add dark mode support and fix timezone bug
+```
+
+### Breaking Change
+
+```yaml
+---
+api-client: major:feat
+---
+Complete rewrite of API client with new interface
+```
+
+### Bug Fix Release
+
+```yaml
+---
+utils: patch:fix
+---
+Fix memory leak in cache implementation
+```
+
+### Multiple Changes
+
+```yaml
+---
+core: minor:feat
+cli: minor:feat
+docs: patch:chore
+---
+Add interactive CLI mode and update documentation
+```
+
+---
+
+## Changeset Naming
+
+Changeset filenames should be unique and descriptive:
+
+```
+.changes/
+├── add-dark-mode.md
+├── fix-timezone-bug.md
+├── rewrite-api-client.md
+└── improve-cache-performance.md
+```
+
+### Naming Rules
+
+- Must be unique (no duplicate filenames)
+- Lowercase letters, numbers, and hyphens only
+- No spaces or special characters
+- Should describe the change briefly
+
+---
+
+## How Changesets Work
+
+### Creation
+
+1. Run `smif commit` to create a changeset interactively
+2. Or manually create a `.md` file with proper format
+
+### Processing
+
+1. `smif version` reads all changesets
+2. Determines bump level for each package (highest wins)
+3. Updates package versions
+4. Generates changelog entries
+5. Deletes processed changesets
+
+### Bump Level Priority
+
+When multiple changesets affect the same package:
+
+| Changeset A | Changeset B | Final Bump |
+|------------|-------------|------------|
+| patch | patch | patch |
+| patch | minor | **minor** |
+| minor | patch | **minor** |
+| minor | major | **major** |
+| patch | major | **major** |
+
+---
+
+## Changelog Generation
+
+The `smif version` command generates changelogs based on:
+
+1. Changesets affecting each package
+2. Tags defined in config
+3. Git history (commit hashes, PR info)
+
+Example generated changelog:
+
+```markdown
+## v1.2.0
+
+### New Features
+
+- [`abc1234`](https://github.com/owner/repo/commit/abc1234): Add dark mode support (#45)
+
+### Bug Fixes
+
+- [`def5678`](https://github.com/owner/repo/commit/def5678): Fix timezone bug (#46)
+```
+
+---
+
+## See Also
+
+- [Commit Command](../commands/commit.mdx) - Creating changesets
+- [Version Command](../commands/version.mdx) - Processing changesets
+- [Configuration Reference](../configuration/config-file.mdx) - Tag configuration

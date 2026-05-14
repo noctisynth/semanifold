@@ -1,0 +1,83 @@
+# Version
+
+Bump versions based on changesets.
+
+## Synopsis
+
+```bash
+smif version [options]
+```
+
+## Description
+
+The `version` command reads all changeset files and bumps package versions accordingly. It:
+
+1. Reads all changesets from `.changes/` or `.changesets/`
+2. Determines the bump level for each package (highest level wins when multiple changesets affect the same package)
+3. Updates version numbers in package manifest files
+4. Updates dependencies that reference bumped packages
+5. Generates changelog entries from changesets
+6. Runs `post-version` commands (if configured)
+7. Cleans up consumed changeset files
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `--allow-dirty` | Allow git repository with uncommitted changes |
+
+## Requirements
+
+- Semifold must be initialized (`smif init` previously run)
+- Git repository should be clean (all changes committed), or use `--allow-dirty`
+
+## Version Bumping Logic
+
+When multiple changesets affect the same package, the highest bump level is used:
+
+| Changesets | Final Bump |
+|------------|------------|
+| patch + patch | patch |
+| patch + minor | minor |
+| minor + patch | minor |
+| major + minor | major |
+
+## Examples
+
+### Standard Usage
+
+```bash
+smif version
+```
+
+### Allow Dirty Repository
+
+```bash
+smif version --allow-dirty
+```
+
+## Output
+
+The command displays:
+
+- Packages being bumped
+- Old version → New version for each package
+- Post-version commands being executed
+- Warnings for unchanged packages
+
+## Post-Version Commands
+
+After bumping versions, Semifold runs configured `post-version` commands. For example, for Rust packages:
+
+```toml
+[resolver.rust]
+post-version = [
+  { command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }
+]
+```
+
+## See Also
+
+- [Commit Command](./commit.mdx) - Creating changesets
+- [Publish Command](./publish.mdx) - Publishing bumped packages
+- [Configuration Reference](../configuration/config-file.mdx)

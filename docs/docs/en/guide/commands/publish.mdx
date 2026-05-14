@@ -1,0 +1,107 @@
+# Publish
+
+Publish packages to registries.
+
+## Synopsis
+
+```bash
+smif publish [options]
+```
+
+## Description
+
+The `publish` command publishes packages to their respective registries. It:
+
+1. **Pre-check**: Verifies the version doesn't already exist on the registry
+2. **Skips private packages**: Packages marked as private are skipped
+3. **Runs prepublish commands**: Executes any configured pre-publish steps
+4. **Publishes packages**: Runs the configured publish command (e.g., `cargo publish`, `npm publish`)
+5. **Creates GitHub Releases**: In CI environment, creates a GitHub release with changelog
+6. **Uploads assets**: Uploads configured release assets
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--github-release <BOOL>` | `-r` | Create GitHub release (default: `true`) |
+| `--allow-dirty` | `-d` | Allow git repository with uncommitted changes |
+
+## Pre-Check
+
+Before publishing, Semifold checks if the version already exists on the registry using the configured `pre-check.url`:
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+```
+
+If the version exists, publishing is skipped with a warning.
+
+## Publishing Process
+
+### For Rust Packages
+
+```toml
+[resolver.rust]
+publish = [{ command = "cargo", args = ["publish"] }]
+```
+
+### For Node.js Packages
+
+```toml
+[resolver.nodejs]
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### For Python Packages
+
+```toml
+[resolver.python]
+publish = [{ command = "uv", args = ["publish"] }]
+```
+
+## GitHub Releases
+
+When running in CI with `--github-release` (default: true):
+
+- Creates a GitHub release with tag `{package-name}-{version}`
+- Includes changelog in the release body
+- Uploads configured assets to the release
+
+## Examples
+
+### Standard Usage
+
+```bash
+smif publish
+```
+
+### Skip GitHub Release
+
+```bash
+smif publish --github-release false
+```
+
+### Allow Dirty Repository
+
+```bash
+smif publish --allow-dirty
+```
+
+## Requirements
+
+- Semifold must be initialized
+- Git repository should be clean (or use `--allow-dirty`)
+- Appropriate credentials should be configured for the package registry
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_TOKEN` | GitHub token for creating releases (required in CI) |
+
+## See Also
+
+- [Version Command](./version.mdx) - Bumping versions first
+- [CI Command](./ci.mdx) - Automated CI pipeline
+- [Configuration Reference](../configuration/config-file.mdx)

@@ -1,0 +1,202 @@
+# Changeset 格式
+
+Changeset 文件格式的详细参考。
+
+## 概述
+
+Changesets 是带有 YAML front matter 的 Markdown 文件，描述包的版本提升。它们存储在 `.changes` 或 `.changesets` 目录中。
+
+## 文件结构
+
+```
+.changes/
+├── config.toml
+└── add-awesome-feature.md   # 每个 changeset 一个文件
+```
+
+## Changeset 文件格式
+
+```yaml
+---
+semifold: minor
+my-library: patch:fix
+---
+为 semifold 添加酷炫新功能并修复 my-library 中的 bug
+```
+
+### 组成部分
+
+1. **`---`** - YAML 文档开始标记
+2. **Front matter** - 包版本提升规范
+3. **`---`** - Front matter 分隔符
+4. **摘要** - 变更的 Markdown 描述
+
+---
+
+## Front Matter 格式
+
+### 基本格式
+
+```
+package-name: bump-level
+```
+
+### 带标签
+
+```
+package-name: bump-level:tag
+```
+
+### 多包
+
+```yaml
+---
+package-a: major
+package-b: minor
+package-c: patch:feat
+---
+影响所有三个包的变更摘要
+```
+
+---
+
+## 版本提升级别
+
+| 级别 | SemVer | 说明 |
+|------|--------|------|
+| `major` | X.Y.Z → X+1.0.0 | 破坏性变更 |
+| `minor` | X.Y.Z → X.Y+1.0 | 新功能 |
+| `patch` | X.Y.Z → X.Y.Z+1 | Bug 修复 |
+
+---
+
+## 标签
+
+标签对 changesets 进行分类以生成变更日志。标签必须在 `config.toml` 中定义：
+
+```toml
+[tags]
+feat = "New Features"
+fix = "Bug Fixes"
+chore = "Chores"
+refactor = "Refactors"
+perf = "Performance Improvements"
+```
+
+### 使用标签
+
+```yaml
+---
+my-package: minor:feat
+---
+添加新 API 端点
+```
+
+未指定标签时，默认标签为 "Changes"。
+
+---
+
+## 示例
+
+### 功能发布
+
+```yaml
+---
+my-app: minor
+my-utils: patch
+---
+添加深色模式支持并修复时区 bug
+```
+
+### 破坏性变更
+
+```yaml
+---
+api-client: major:feat
+---
+使用新接口完全重写 API 客户端
+```
+
+### Bug 修复发布
+
+```yaml
+---
+utils: patch:fix
+---
+修复缓存实现中的内存泄漏
+```
+
+---
+
+## Changeset 命名
+
+Changeset 文件名应该唯一且有描述性：
+
+```
+.changes/
+├── add-dark-mode.md
+├── fix-timezone-bug.md
+├── rewrite-api-client.md
+└── improve-cache-performance.md
+```
+
+---
+
+## Changesets 如何工作
+
+### 创建
+
+1. 运行 `smif commit` 交互式创建 changeset
+2. 或手动创建具有正确格式的 `.md` 文件
+
+### 处理
+
+1. `smif version` 读取所有 changesets
+2. 确定每个包的版本提升级别（相同时取最高）
+3. 更新包版本
+4. 生成变更日志条目
+5. 删除已处理的 changesets
+
+### 版本提升级别优先级
+
+当多个 changesets 影响同一包时：
+
+| Changeset A | Changeset B | 最终提升 |
+|------------|-------------|----------|
+| patch | patch | patch |
+| patch | minor | **minor** |
+| minor | patch | **minor** |
+| minor | major | **major** |
+| patch | major | **major** |
+
+---
+
+## 变更日志生成
+
+`smif version` 命令基于以下内容生成变更日志：
+
+1. 影响每个包的 changesets
+2. 配置中的标签
+3. Git 历史记录（提交哈希、PR 信息）
+
+生成的变更日志示例：
+
+```markdown
+## v1.2.0
+
+### New Features
+
+- [`abc1234`](https://github.com/owner/repo/commit/abc1234): 添加深色模式支持 (#45)
+
+### Bug Fixes
+
+- [`def5678`](https://github.com/owner/repo/commit/def5678): 修复时区 bug (#46)
+```
+
+---
+
+## 相关链接
+
+- [Commit 命令](../commands/commit.mdx) - 创建 changesets
+- [Version 命令](../commands/version.mdx) - 处理 changesets
+- [配置参考](../configuration/config-file.mdx) - 标签配置

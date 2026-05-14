@@ -1,0 +1,225 @@
+# Configuration Reference
+
+Complete reference for the `config.toml` configuration file.
+
+## Overview
+
+The `config.toml` file is created by `smif init` and stored in the changeset directory (`.changes/config.toml` or `.changesets/config.toml`). It configures branches, tags, packages, and resolver-specific settings.
+
+## Complete Example
+
+```toml title=".changes/config.toml"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+
+[packages]
+my-rust-lib = { path = "crates/my-rust-lib", resolver = "rust" }
+my-node-lib = { path = "packages/node-lib", resolver = "nodejs" }
+my-python-lib = { path = "packages/python-lib", resolver = "python" }
+my-cpp-lib = { path = "libs/cpp-lib", resolver = "cpp" }
+
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+publish = [{ command = "uv", args = ["publish"] }]
+
+[resolver.cpp]
+pre-check.url = ""
+publish = []
+```
+
+---
+
+## `[branches]` Section
+
+Configures Git branch names for the release workflow.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `base` | string | `"main"` | Base branch for releases |
+| `release` | string | `"release"` | Release branch name |
+
+---
+
+## `[tags]` Section
+
+Maps tag keys to human-readable descriptions for changelog categorization.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `<key>` | string | Tag key used in changesets (e.g., `feat`, `fix`) |
+| `<value>` | string | Description shown in changelog (e.g., `New Features`) |
+
+### Default Tags
+
+```toml
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+```
+
+---
+
+## `[packages]` Section
+
+Defines all packages in the workspace that Semifold manages.
+
+### Package Configuration
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `path` | string | Yes | Path to the package root directory |
+| `resolver` | string | Yes | Resolver type (`rust`, `nodejs`, `python`, `cpp`) |
+| `version-mode` | string | No | Version mode (`semantic` or `pre-release`) |
+| `assets` | array | No | Assets to upload during publish |
+
+### Version Modes
+
+**Semantic (default)**:
+```toml
+my-package = { path = "packages/my-package", resolver = "nodejs" }
+```
+
+**Pre-release**:
+```toml
+my-package = { path = "packages/my-package", resolver = "nodejs", "version-mode" = { "pre-release" = { tag = "beta" } } }
+```
+
+### Package with Assets
+
+```toml
+[packages.my-package]
+path = "packages/my-package"
+resolver = "nodejs"
+assets = [
+  { path = "dist/bundle.js", name = "bundle.js" },
+  "build/*.wasm"
+]
+```
+
+---
+
+## `[resolver.<type>]` Sections
+
+Configures resolver-specific settings for publishing and version checks.
+
+### Common Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pre-check` | object | Version existence check settings |
+| `prepublish` | array | Commands to run before publishing |
+| `publish` | array | Commands to run for publishing |
+| `post-version` | array | Commands to run after version bump |
+
+---
+
+### Pre-Check Configuration
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+pre-check.extra-headers = { "User-Agent" = "Semifold/0.2.0" }
+```
+
+#### Template Variables
+
+| Variable | Description |
+|----------|-------------|
+| `{{ package.name }}` | Package name |
+| `{{ package.version }}` | Package version |
+
+---
+
+### Command Configuration
+
+Each command in `prepublish`, `publish`, or `post-version` can have:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `command` | string | Executable command |
+| `args` | array | Command arguments |
+| `extra-env` | object | Environment variables |
+| `stdout` | string | stdout handling (`inherit`, `pipe`, `null`) |
+| `stderr` | string | stderr handling (`inherit`, `pipe`, `null`) |
+| `dry_run` | boolean | Skip this command in dry-run mode |
+
+#### Example
+
+```toml
+[resolver.nodejs]
+prepublish = [
+  { command = "npm", args = ["run", "build"] }
+]
+publish = [
+  { command = "npm", args = ["publish", "--provenance", "--access", "public"] }
+]
+post-version = [
+  { command = "git", args = ["add", "package.json"], stdout = "pipe" },
+  { command = "git", args = ["commit", "-m", "chore: bump version"] }
+]
+```
+
+---
+
+## Resolver-Specific Defaults
+
+### Rust
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+```
+
+### Node.js
+
+```toml
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### Python
+
+```toml
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+publish = []  # Must be configured manually
+```
+
+### C++
+
+```toml
+[resolver.cpp]
+pre-check.url = ""
+publish = []  # Must be configured manually
+```
+
+---
+
+## See Also
+
+- [Init Command](../commands/init.mdx) - Initializing with configuration
+- [Resolvers Reference](./resolvers.mdx) - Detailed resolver configuration
+- [Changeset Format](../advanced/changeset-format.mdx) - How changesets use tags

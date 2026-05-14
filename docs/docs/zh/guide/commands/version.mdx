@@ -1,0 +1,83 @@
+# Version
+
+根据 changesets 提升版本。
+
+## 概要
+
+```bash
+smif version [选项]
+```
+
+## 描述
+
+`version` 命令读取所有 changeset 文件并相应地提升包版本。它会：
+
+1. 从 `.changes/` 或 `.changesets/` 读取所有 changesets
+2. 确定每个包的版本提升级别（当多个 changesets 影响同一包时取最高级别）
+3. 更新包清单文件中的版本号
+4. 更新引用已提升包的依赖项
+5. 从 changesets 生成变更日志条目
+6. 运行 `post-version` 命令（如果已配置）
+7. 清理已消费的 changeset 文件
+
+## 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--allow-dirty` | 允许有未提交更改的 git 仓库 |
+
+## 要求
+
+- Semifold 必须已初始化（之前运行过 `smif init`）
+- Git 仓库应该是干净的（所有更改已提交），或使用 `--allow-dirty`
+
+## 版本提升逻辑
+
+当多个 changesets 影响同一包时，使用最高版本提升级别：
+
+| Changesets | 最终提升 |
+|------------|----------|
+| patch + patch | patch |
+| patch + minor | **minor** |
+| minor + patch | **minor** |
+| major + minor | **major** |
+
+## 示例
+
+### 标准用法
+
+```bash
+smif version
+```
+
+### 允许脏仓库
+
+```bash
+smif version --allow-dirty
+```
+
+## 输出
+
+命令显示：
+
+- 正在提升的包
+- 每个包的旧版本 → 新版本
+- 正在执行的 post-version 命令
+- 未变更包的警告
+
+## Post-Version 命令
+
+提升版本后，Semifold 运行配置的 `post-version` 命令。例如，对于 Rust 包：
+
+```toml
+[resolver.rust]
+post-version = [
+  { command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }
+]
+```
+
+## 相关链接
+
+- [Commit 命令](./commit.mdx) - 创建 changesets
+- [Publish 命令](./publish.mdx) - 发布已提升的包
+- [配置参考](../configuration/config-file.mdx)

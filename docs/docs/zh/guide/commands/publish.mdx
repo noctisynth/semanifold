@@ -1,0 +1,107 @@
+# Publish
+
+发布包到注册表。
+
+## 概要
+
+```bash
+smif publish [选项]
+```
+
+## 描述
+
+`publish` 命令将包发布到各自的注册表。它会：
+
+1. **预检查**：验证版本是否已存在于注册表中
+2. **跳过私有包**：跳过标记为私有的包
+3. **运行 prepublish 命令**：执行任何配置的预发布步骤
+4. **发布包**：运行配置的发布命令（如 `cargo publish`、`npm publish`）
+5. **创建 GitHub Release**：在 CI 环境中创建带有变更日志的 GitHub release
+6. **上传资源**：上传配置的发版资源
+
+## 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--github-release <布尔值>` | `-r` | 创建 GitHub release（默认：`true`） |
+| `--allow-dirty` | `-d` | 允许有未提交更改的 git 仓库 |
+
+## 预检查
+
+发布前，Semifold 使用配置的 `pre-check.url` 检查版本是否已存在：
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+```
+
+如果版本已存在，将跳过发布并显示警告。
+
+## 发布流程
+
+### Rust 包
+
+```toml
+[resolver.rust]
+publish = [{ command = "cargo", args = ["publish"] }]
+```
+
+### Node.js 包
+
+```toml
+[resolver.nodejs]
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### Python 包
+
+```toml
+[resolver.python]
+publish = [{ command = "uv", args = ["publish"] }]
+```
+
+## GitHub Releases
+
+在 CI 中运行且 `--github-release`（默认：true）时：
+
+- 创建 GitHub release，标签为 `{package-name}-{version}`
+- 在 release 正文中包含变更日志
+- 上传配置的资源到 release
+
+## 示例
+
+### 标准用法
+
+```bash
+smif publish
+```
+
+### 跳过 GitHub Release
+
+```bash
+smif publish --github-release false
+```
+
+### 允许脏仓库
+
+```bash
+smif publish --allow-dirty
+```
+
+## 要求
+
+- Semifold 必须已初始化
+- Git 仓库应该是干净的（或使用 `--allow-dirty`）
+- 应为包注册表配置适当的凭据
+
+## 环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `GITHUB_TOKEN` | 用于创建 release 的 GitHub token（CI 中必需） |
+
+## 相关链接
+
+- [Version 命令](./version.mdx) - 先提升版本
+- [CI 命令](./ci.mdx) - 自动化 CI 流水线
+- [配置参考](../configuration/config-file.mdx)

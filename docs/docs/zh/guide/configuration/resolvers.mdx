@@ -1,0 +1,130 @@
+# 解析器
+
+工作区解析器配置的详细参考。
+
+## 概述
+
+解析器是语言特定的组件，处理包发现、版本管理和发布。Semifold 支持多个解析器，可以在一起用于跨语言仓库。
+
+## 支持的解析器
+
+| 解析器 | 包管理器 | 状态 |
+|--------|----------|------|
+| `rust` | Cargo | ✅ 稳定 |
+| `nodejs` | npm | ✅ 稳定 |
+| `python` | pip、uv、pdm | ✅ 稳定 |
+| `cpp` | 自定义 | ✅ 稳定 |
+| `go` | Go modules | 🔜 计划中 |
+| `java` | Maven | 🔜 计划中 |
+| `kotlin` | Gradle | 🔜 计划中 |
+
+---
+
+## Rust 解析器
+
+### 功能
+
+- 从 Cargo 工作区发现包
+- 从 `Cargo.toml` 读取版本
+- 在 `Cargo.toml` 中更新版本
+- 运行 `cargo publish` 发布
+- 支持 `cargo generate-lockfile` 作为 post-version
+
+### 配置
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+```
+
+---
+
+## Node.js 解析器
+
+### 功能
+
+- 从 package.json 文件发现包
+- 从 package.json 读取版本
+- 在 package.json 中更新版本
+- 运行 `npm publish` 发布
+- 支持作用域包
+
+### 配置
+
+```toml
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+---
+
+## Python 解析器
+
+### 功能
+
+- 通过查找 `pyproject.toml`、`setup.py` 或 `setup.cfg` 发现包
+- 从 `pyproject.toml` 或 `setup.*` 读取版本
+- 在配置文件中更新版本
+- 不包含默认发布命令（必须配置）
+
+### 配置
+
+Python 包通常需要手动配置发布命令：
+
+```toml
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+
+# 使用 uv
+[[resolver.python.publish]]
+command = "uv"
+args = ["publish"]
+
+# 使用 pip
+[[resolver.python.publish]]
+command = "pip"
+args = ["install", "build", "&&", "twine", "upload", "dist/*"]
+```
+
+---
+
+## C++ 解析器
+
+### 功能
+
+- 基本包发现支持
+- 不包含默认发布命令（必须配置）
+- 适用于自定义构建和发布流程
+
+### 配置
+
+```toml
+[resolver.cpp]
+pre-check.url = ""
+publish = [
+  { command = "cmake", args = ["--build", "build"] },
+  { command = "make", args = ["package"] }
+]
+```
+
+---
+
+## 模板变量
+
+所有解析器配置支持模板变量：
+
+| 变量 | 说明 |
+|------|------|
+| `{{ package.name }}` | 配置中的包名称 |
+| `{{ package.version }}` | 当前/新版本 |
+| `{{ package.path }}` | 包目录路径 |
+
+---
+
+## 相关链接
+
+- [配置参考](./config-file.mdx)
+- [Init 命令](../commands/init.mdx)

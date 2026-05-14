@@ -1,0 +1,138 @@
+# MCP
+
+Start MCP server for AI tool integration.
+
+## Synopsis
+
+```bash
+smif mcp [options]
+```
+
+## Description
+
+The `mcp` command starts a Model Context Protocol (MCP) server that exposes Semifold tools to AI assistants. This enables AI tools to interact with Semifold programmatically.
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--current-dir <DIR>` | `-C` | Change to directory before starting |
+
+## MCP Tools
+
+The Semifold MCP server provides the following tools:
+
+### get_tags
+
+Get all available tags from the Semifold configuration.
+
+**Returns**: JSON object mapping tag keys to descriptions
+
+```json
+{
+  "feat": "New Features",
+  "fix": "Bug Fixes",
+  "chore": "Chores"
+}
+```
+
+### get_packages
+
+Get all packages from the Semifold configuration with their paths and resolvers.
+
+**Returns**: JSON object with package details
+
+```json
+{
+  "semifold": {
+    "path": "crates/semifold",
+    "resolver": "Rust"
+  },
+  "my-library": {
+    "path": "packages/my-library",
+    "resolver": "Nodejs"
+  }
+}
+```
+
+### create_changeset
+
+Create a new changeset programmatically.
+
+**Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | string | Changeset filename |
+| `packages` | string[] | List of package names to include |
+| `level` | string | Bump level: "major", "minor", or "patch" |
+| `summary` | string | Changeset summary/description |
+| `tag` | string (optional) | Tag category |
+
+## Examples
+
+### Start MCP Server
+
+```bash
+smif mcp
+```
+
+### Start in Specific Directory
+
+```bash
+smif mcp --current-dir /path/to/project
+```
+
+## MCP Client Configuration
+
+The server communicates over stdio. Configure your MCP client to spawn `smif mcp` as a subprocess.
+
+### Claude Code / Claude Desktop
+
+Add to your Claude config file:
+
+```json
+{
+  "mcpServers": {
+    "semifold": {
+      "command": "smif",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+### OpenCode
+
+Add to your OpenCode config file (`~/.config/opencode/opencode.json` or `./opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "semifold": {
+      "type": "local",
+      "command": ["smif", "mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### Other MCP Clients
+
+The server communicates over stdio. Configure your MCP client to spawn `smif mcp` as a subprocess.
+
+## Use Cases
+
+- AI-assisted changeset creation
+- Automated release management
+- Integration with AI code review tools
+
+## Requirements
+
+- Semifold must be initialized in the project
+
+## See Also
+
+- [Commit Command](./commit.mdx) - Manual changeset creation
+- [Configuration Reference](../configuration/config-file.mdx)

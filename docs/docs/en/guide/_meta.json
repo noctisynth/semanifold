@@ -3,5 +3,20 @@
     "type": "dir",
     "name": "start",
     "label": "Start"
+  },
+  {
+    "type": "dir",
+    "name": "commands",
+    "label": "Commands"
+  },
+  {
+    "type": "dir",
+    "name": "configuration",
+    "label": "Configuration"
+  },
+  {
+    "type": "dir",
+    "name": "advanced",
+    "label": "Advanced"
   }
 ]

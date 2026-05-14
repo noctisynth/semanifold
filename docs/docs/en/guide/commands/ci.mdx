@@ -1,0 +1,122 @@
+# CI
+
+CI-friendly release pipeline for GitHub Actions.
+
+## Synopsis
+
+```bash
+smif ci
+```
+
+## Description
+
+The `ci` command provides a complete release pipeline designed for GitHub Actions. It handles both cases: when there are pending changesets and when there are none.
+
+## Pipeline Flow
+
+```
+On base branch push:
+├── Check for changesets
+│   ├── No changesets → Run publish directly
+│   └── Has changesets → Run version → Create release branch → Create PR
+└── Post results
+```
+
+### When No Changesets Exist
+
+If no changesets are found, it directly calls `publish` to check and publish all unpublished packages.
+
+### When Changesets Exist
+
+1. **Run version**: Bump versions based on changesets
+2. **Create release branch**: Create a commit on the release branch with version updates
+3. **Force-push release branch**: Push the release branch
+4. **Create/Update PR**: Create a pull request with changelogs, or update existing PR
+
+## Environment Variables
+
+The following environment variables are required:
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_TOKEN` | GitHub authentication token |
+| `GITHUB_REF_NAME` | Current branch reference name |
+| `GITHUB_REPOSITORY` | Repository in `owner/repo` format |
+
+## GitHub Actions Setup
+
+### Recommended Workflow
+
+```yaml title=".github/workflows/release.yml"
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Semifold
+        run: cargo install semifold
+
+      - name: Run Release Pipeline
+        run: smif ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### With semifold init
+
+When you run `smif init`, it can automatically generate these workflow files:
+
+- `.github/workflows/semifold-ci.yaml` - Main release pipeline
+- `.github/workflows/semifold-status.yaml` - PR status comment workflow
+
+## Behavior Details
+
+### Branch Detection
+
+- Only runs on the configured base branch (default: `main`)
+- Skips execution on other branches (release branch, feature branches, etc.)
+
+### Git Configuration
+
+The command configures git user for commits:
+
+```toml
+user.name = "github-actions[bot]"
+user.email = "github-actions[bot]@users.noreply.github.com"
+```
+
+### Release Branch
+
+- Branch name: configured release branch (default: `release`)
+- Commit message: `chore(release): bump versions`
+- Force-pushes to ensure consistency
+
+### Pull Request
+
+- Creates PR from release branch to base branch
+- PR title: `chore(release): bump versions`
+- PR body: Contains changelogs for all affected packages
+
+## Examples
+
+### Local Testing (not recommended)
+
+```bash
+GITHUB_ACTIONS=true GITHUB_TOKEN=xxx GITHUB_REF_NAME=main GITHUB_REPOSITORY=owner/repo smif ci
+```
+
+## See Also
+
+- [Init Command](./init.mdx) - Generating workflow files
+- [Publish Command](./publish.mdx) - Direct publish
+- [GitHub Actions Integration](../integration/github-actions.mdx)

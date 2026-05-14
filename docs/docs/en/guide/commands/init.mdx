@@ -1,0 +1,128 @@
+# Init
+
+Initialize Semifold in a repository.
+
+## Synopsis
+
+```bash
+smif init [options]
+```
+
+## Description
+
+The `init` command initializes Semifold in the current repository. It creates the configuration file and optionally generates GitHub Actions workflows.
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--target <PATH>` | `-t` | Changeset directory path (default: `.changes`) |
+| `--resolvers <TYPE>` | `-r` | Resolver types to enable (rust/nodejs/python/cpp) |
+| `--force` | `-f` | Force reinitialize (overwrite existing config) |
+| `--base-branch <NAME>` | - | Base branch name (default: `main`) |
+| `--release-branch <NAME>` | - | Release branch name (default: `release`) |
+
+## Options Details
+
+### `--resolvers`
+
+Specifies which workspace resolvers to enable. Multiple resolvers can be specified:
+
+```bash
+smif init --resolvers rust --resolvers nodejs
+```
+
+Available resolvers:
+- `rust` - Rust/Cargo workspaces
+- `nodejs` - Node.js/npm workspaces
+- `python` - Python packages
+- `cpp` - C++ projects
+
+### `--force`
+
+When used, will overwrite any existing `config.toml` file. Use with caution.
+
+## Generated Files
+
+Running `init` creates the following:
+
+### `.changes/config.toml`
+
+The main configuration file:
+
+```toml
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+
+[packages]
+# Package configurations are auto-detected
+
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### `.github/workflows/semifold-ci.yaml` (optional)
+
+CI workflow for releases.
+
+### `.github/workflows/semifold-status.yaml` (optional)
+
+CI workflow for PR status comments.
+
+## Interactive Prompts
+
+1. **Changeset Directory**: Choose between `.changes` or `.changesets`
+2. **Resolvers**: Multi-select workspace resolvers
+3. **Tags**: Whether to include default tags
+4. **Base Branch**: Name of the base branch (default: `main`)
+5. **Release Branch**: Name of the release branch (default: `release`)
+6. **GitHub Actions**: Whether to generate workflow files
+
+## Examples
+
+### Basic Initialization
+
+```bash
+smif init
+```
+
+### With Specific Resolvers
+
+```bash
+smif init --resolvers rust --resolvers nodejs
+```
+
+### With Custom Branches
+
+```bash
+smif init --base-branch develop --release-branch releases
+```
+
+### Force Reinitialize
+
+```bash
+smif init --force
+```
+
+## Requirements
+
+- Must be run inside a Git repository
+- Git repository must be clean (no uncommitted changes), or use `--force`
+
+## See Also
+
+- [Configuration Reference](../configuration/config-file.mdx)
+- [GitHub Actions Integration](../integration/github-actions.mdx)

@@ -1,0 +1,120 @@
+# CI
+
+适用于 GitHub Actions 的 CI 友好发布流水线。
+
+## 概要
+
+```bash
+smif ci
+```
+
+## 描述
+
+`ci` 命令提供专为 GitHub Actions 设计的完整发布流水线。它处理两种情况：有待处理的 changesets 和没有 changesets。
+
+## 流水线流程
+
+```
+在基础分支推送时：
+├── 检查 changesets
+│   ├── 没有 changesets → 直接运行 publish
+│   └── 有 changesets → 运行 version → 创建 release 分支 → 创建 PR
+└── 发布结果
+```
+
+### 没有 Changesets 时
+
+如果没有找到 changesets，直接调用 `publish` 来检查并发布所有未发布的包。
+
+### 有 Changesets 时
+
+1. **运行 version**：根据 changesets 提升版本
+2. **创建 release 分支**：在 release 分支上创建带有版本更新的提交
+3. **强制推送 release 分支**：推送 release 分支
+4. **创建/更新 PR**：创建带有变更日志的 pull request，或更新现有 PR
+
+## 环境变量
+
+需要以下环境变量：
+
+| 变量 | 说明 |
+|------|------|
+| `GITHUB_TOKEN` | GitHub 认证 token |
+| `GITHUB_REF_NAME` | 当前分支引用名称 |
+| `GITHUB_REPOSITORY` | 格式为 `owner/repo` 的仓库 |
+
+## GitHub Actions 设置
+
+### 推荐工作流
+
+```yaml title=".github/workflows/release.yml"
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Semifold
+        run: cargo install semifold
+
+      - name: Run Release Pipeline
+        run: smif ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### 使用 semifold init
+
+运行 `smif init` 时，它可以自动生成这些工作流文件：
+
+- `.github/workflows/semifold-ci.yaml` - 主要发布流水线
+- `.github/workflows/semifold-status.yaml` - PR 状态评论工作流
+
+## 行为详情
+
+### 分支检测
+
+- 仅在配置的基础分支（默认：`main`）上运行
+- 跳过其他分支（release 分支、功能分支等）的执行
+
+### Git 配置
+
+命令配置用于提交的 git 用户：
+
+```toml
+user.name = "github-actions[bot]"
+user.email = "github-actions[bot]@users.noreply.github.com"
+```
+
+### Release 分支
+
+- 分支名称：配置的 release 分支（默认：`release`）
+- 提交信息：`chore(release): bump versions`
+- 强制推送以确保一致性
+
+### Pull Request
+
+- 从 release 分支到基础分支创建 PR
+- PR 标题：`chore(release): bump versions`
+- PR 正文：包含所有受影响包的变更日志
+
+## 本地测试（不推荐）
+
+```bash
+GITHUB_ACTIONS=true GITHUB_TOKEN=xxx GITHUB_REF_NAME=main GITHUB_REPOSITORY=owner/repo smif ci
+```
+
+## 相关链接
+
+- [Init 命令](./init.mdx) - 生成工作流文件
+- [Publish 命令](./publish.mdx) - 直接发布
+- [GitHub Actions 集成](../integration/github-actions.mdx)

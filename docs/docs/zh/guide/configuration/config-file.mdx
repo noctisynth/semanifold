@@ -1,0 +1,225 @@
+# 配置参考
+
+`config.toml` 配置文件的完整参考。
+
+## 概述
+
+`config.toml` 文件由 `smif init` 创建，存储在 changeset 目录（`.changes/config.toml` 或 `.changesets/config.toml`）。它配置分支、标签、包和解析器特定设置。
+
+## 完整示例
+
+```toml title=".changes/config.toml"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+
+[packages]
+my-rust-lib = { path = "crates/my-rust-lib", resolver = "rust" }
+my-node-lib = { path = "packages/node-lib", resolver = "nodejs" }
+my-python-lib = { path = "packages/python-lib", resolver = "python" }
+my-cpp-lib = { path = "libs/cpp-lib", resolver = "cpp" }
+
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+publish = [{ command = "uv", args = ["publish"] }]
+
+[resolver.cpp]
+pre-check.url = ""
+publish = []
+```
+
+---
+
+## `[branches]` 部分
+
+配置发布流水线的 Git 分支名称。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `base` | string | `"main"` | 发布的基础分支 |
+| `release` | string | `"release"` | Release 分支名称 |
+
+---
+
+## `[tags]` 部分
+
+映射标签键到人类可读的描述，用于变更日志分类。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `<key>` | string | 在 changesets 中使用的标签键（如 `feat`、`fix`） |
+| `<value>` | string | 在变更日志中显示的描述（如 `New Features`） |
+
+### 默认标签
+
+```toml
+[tags]
+chore = "Chores"
+feat = "New Features"
+fix = "Bug Fixes"
+perf = "Performance Improvements"
+refactor = "Refactors"
+```
+
+---
+
+## `[packages]` 部分
+
+定义 Semifold 管理的仓库中的所有包。
+
+### 包配置
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `path` | string | 是 | 包根目录的路径 |
+| `resolver` | string | 是 | 解析器类型（`rust`、`nodejs`、`python`、`cpp`） |
+| `version-mode` | string | 否 | 版本模式（`semantic` 或 `pre-release`） |
+| `assets` | array | 否 | 发布时要上传的资源 |
+
+### 版本模式
+
+**Semantic（默认）**：
+```toml
+my-package = { path = "packages/my-package", resolver = "nodejs" }
+```
+
+**Pre-release**：
+```toml
+my-package = { path = "packages/my-package", resolver = "nodejs", "version-mode" = { "pre-release" = { tag = "beta" } } }
+```
+
+### 带资源的包
+
+```toml
+[packages.my-package]
+path = "packages/my-package"
+resolver = "nodejs"
+assets = [
+  { path = "dist/bundle.js", name = "bundle.js" },
+  "build/*.wasm"
+]
+```
+
+---
+
+## `[resolver.<type>]` 部分
+
+配置发布和版本检查的解析器特定设置。
+
+### 通用字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `pre-check` | object | 版本存在性检查设置 |
+| `prepublish` | array | 发布前运行的命令 |
+| `publish` | array | 用于发布的命令 |
+| `post-version` | array | 版本提升后运行的命令 |
+
+---
+
+### 预检查配置
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+pre-check.extra-headers = { "User-Agent" = "Semifold/0.2.0" }
+```
+
+#### 模板变量
+
+| 变量 | 说明 |
+|------|------|
+| `{{ package.name }}` | 包名称 |
+| `{{ package.version }}` | 包版本 |
+
+---
+
+### 命令配置
+
+`prepublish`、`publish` 或 `post-version` 中的每个命令可以包含：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `command` | string | 可执行命令 |
+| `args` | array | 命令参数 |
+| `extra-env` | object | 环境变量 |
+| `stdout` | string | stdout 处理（`inherit`、`pipe`、`null`） |
+| `stderr` | string | stderr 处理（`inherit`、`pipe`、`null`） |
+| `dry_run` | boolean | 在 dry-run 模式下跳过此命令 |
+
+#### 示例
+
+```toml
+[resolver.nodejs]
+prepublish = [
+  { command = "npm", args = ["run", "build"] }
+]
+publish = [
+  { command = "npm", args = ["publish", "--provenance", "--access", "public"] }
+]
+post-version = [
+  { command = "git", args = ["add", "package.json"], stdout = "pipe" },
+  { command = "git", args = ["commit", "-m", "chore: bump version"] }
+]
+```
+
+---
+
+## 解析器特定默认值
+
+### Rust
+
+```toml
+[resolver.rust]
+pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "cargo", args = ["publish"] }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+```
+
+### Node.js
+
+```toml
+[resolver.nodejs]
+pre-check.url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+publish = [{ command = "npm", args = ["publish", "--provenance", "--access", "public"] }]
+```
+
+### Python
+
+```toml
+[resolver.python]
+pre-check.url = "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
+publish = []  # 必须手动配置
+```
+
+### C++
+
+```toml
+[resolver.cpp]
+pre-check.url = ""
+publish = []  # 必须手动配置
+```
+
+---
+
+## 相关链接
+
+- [Init 命令](../commands/init.mdx) - 使用配置初始化
+- [Resolvers 参考](./resolvers.mdx) - 详细解析器配置
+- [Changeset 格式](../advanced/changeset-format.mdx) - Changesets 如何使用标签

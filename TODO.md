@@ -18,8 +18,12 @@
 - [x] 为 changeset 解析、序列化和清理建立测试
 - [x] 覆盖多个 changeset 的 bump level 合并
 - [x] 覆盖 semantic major、minor、patch 计算
-- [x] 覆盖 prerelease 初次生成、递增、切换 tag 和退出 prerelease
+- [x] 覆盖当前 prerelease 初次生成、递增、切换 tag 和退出 prerelease 行为
 - [ ] 记录当前已知缺陷，避免将错误行为固化为新规范
+- [ ] 为通用 `ReleaseChannel::{Stable, Named}` 建立领域测试
+- [ ] 覆盖缺省 `channel` 与 `channel = "stable"` 的等价性
+- [ ] 覆盖命名通道的序号推进、通道切换和 `Unchanged` 不推进
+- [ ] 覆盖 changeset changelog tag 不影响版本通道
 
 ### Ecosystem fixtures
 
@@ -67,7 +71,7 @@
 - [ ] 实现纯 `ReleasePlanner`
 - [ ] 合并多个 changeset 的发布原因和 bump level
 - [ ] 在写文件前计算所有包的下一版本
-- [ ] 明确 prerelease 与依赖传播规则
+- [ ] 明确 stable / 命名版本通道与依赖传播规则
 - [ ] 为 `Package`、`SharedVersion`、`Static` 和 `Fingerprint` identity 建立解析与校验规则
 - [ ] 单包仓库自动形成 package identity release unit
 - [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
@@ -117,7 +121,12 @@
 - [ ] 只更新 `[packages]` 下需要变化的 table
 - [ ] 保留 `[release]`、`[[release.units]]` 和其他发布策略配置
 - [ ] 保留注释、空行、字段顺序和未知字段
-- [ ] 保留 `assets`、`version-mode` 和 `depends-on` 等手工字段
+- [ ] 保留 `assets`、`channel` 和 `depends-on` 等手工字段
+- [ ] 在配置模型中以 `ReleaseChannel::{Stable, Named}` 取代 `VersionMode`
+- [ ] 读取时接受缺省 `channel` 和 `channel = "stable"`，并将二者解析为 stable
+- [ ] 新增 stable package 时省略 `channel`，无关同步时保留用户显式的 `channel = "stable"`
+- [ ] 将 `channel` 与 changeset / changelog 的 tag 完全分离
+- [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
 - [ ] 新增 package 时只写入最小默认配置
 - [ ] 新增条目采用确定性顺序，但不重排现有条目
 - [ ] 默认只报告缺失 package

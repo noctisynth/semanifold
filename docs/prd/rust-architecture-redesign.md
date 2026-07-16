@@ -103,7 +103,7 @@ A → B → C
 当前 Rust 源码中基本没有针对以下核心行为的自动化测试：
 
 - changeset 解析和合并；
-- prerelease 版本规则；
+- 版本通道与版本序号规则；
 - 依赖传播和拓扑顺序；
 - 各生态 manifest 的解析与重写；
 - dry-run 与真实执行的一致性；
@@ -697,7 +697,7 @@ pub struct ConfigSyncPlan {
 
 Rename 时应尽量移动原有 TOML table，而不是重新创建，以保留：
 
-- `version-mode`；
+- `channel`；
 - `assets`；
 - `depends-on`；
 - 未来新增的未知字段；
@@ -717,9 +717,50 @@ path = "packages/example"
 resolver = "rust"
 ```
 
-`VersionMode::Semantic` 为默认值时不显式写入 `version-mode`。`assets`、`depends-on` 等无法从 manifest 推导的字段不自动生成。
+稳定通道为默认值时不显式写入 `channel`。`assets`、`depends-on` 等无法从 manifest 推导的字段不自动生成。
 
 新条目采用确定性顺序插入。建议在 `[packages]` 内按 `PackageId` 排序新增条目，但不重排现有条目，避免产生大面积无意义 diff。
+
+### 13.6 版本通道
+
+包的发布状态由可选的 `channel` 表达，而不是由 `VersionMode` 或 `pre-release` 概念表达：
+
+```toml
+[packages.semifold]
+path = "crates/semifold"
+resolver = "rust"
+channel = "alpha"
+```
+
+`channel` 的规则如下：
+
+- 缺省 `channel` 与 `channel = "stable"` 等价，均表示稳定通道；
+- `stable` 是保留关键字，不能作为自定义通道；
+- 任何其他非空值都是命名发布通道，例如 `alpha`、`beta`、`next`、`nightly` 或 `internal.2026`；
+- `[tags]` 和 changeset 中的 tag 仅用于 changelog 分类，绝不决定版本通道或版本号；
+- 包进入某个通道不会自行改变 major、minor 或 patch 基准版本。基准版本由用户显式决定，changeset 仍只表达 `major`、`minor` 或 `patch`。
+
+领域层使用下列抽象：
+
+```rust
+pub enum ReleaseChannel {
+    Stable,
+    Named(String),
+}
+```
+
+配置加载时，缺省值和 `stable` 都解析为 `ReleaseChannel::Stable`；其余值解析为 `ReleaseChannel::Named`。配置同步对新 stable package 省略 `channel`，但不应因无关同步操作删除用户显式写入的 `channel = "stable"`。
+
+`ReleaseChannel` 是发布流程概念，不是 SemVer 的 `Prerelease` 概念。核心仅处理通道状态与序号推进，具体版本字符串由 ecosystem adapter 按各自版本规范编码和验证：
+
+| 生态 | `channel = "alpha"` 的一种编码 | `channel = "post"` 的一种编码 |
+| --- | --- | --- |
+| Rust / Node（SemVer） | `1.0.0-alpha.1` | `1.0.0-post.1` |
+| Python（PEP 440） | `1.0.0a1` 或项目约定格式 | `1.0.0.post1` |
+
+因此，`channel` 的字符串不在 core 中按 SemVer 限制；adapter 必须在规划阶段验证该通道能否表示为对应生态的合法版本，并在无法表示时返回结构化错误。
+
+对当前处于命名通道的包，存在任意非 `Unchanged` changeset 时推进该通道的序号；例如 `1.0.0-alpha → 1.0.0-alpha.1 → 1.0.0-alpha.2`。stable 包的 major/minor/patch 计算保持现有语义。通道切换或手工设定基准版本后的首次序号规则必须由各 adapter 明确实现并测试，不能从 changelog tag 推断。
 
 #### 删除包
 
@@ -745,7 +786,7 @@ resolver = "rust"
 
 同一路径从一种生态变成另一种生态时，不应自动覆盖 `resolver`。这通常意味着项目结构发生重大变化或发现器判断错误，必须作为冲突要求用户确认。
 
-### 13.6 使用 `toml_edit` 保格式更新
+### 13.7 使用 `toml_edit` 保格式更新
 
 当前 `save_config()` 将强类型 `Config` 整体重新序列化，会丢失用户原有格式选择和部分注释。`config sync` 不应调用该路径。
 
@@ -783,7 +824,7 @@ let packages = document["packages"]
 - 使用临时文件与 rename 原子替换；
 - 文件内容未变化时不执行写入。
 
-### 13.7 与 `init` 的关系
+### 13.8 与 `init` 的关系
 
 `init` 和 `config sync` 应共享：
 
@@ -801,7 +842,7 @@ let packages = document["packages"]
 
 长期可将 `init` 的配置生成实现为“创建最小文档后应用一次完整 `ConfigSyncPlan`”，避免两套包发现和配置生成逻辑再次分叉。
 
-### 13.8 输出示例
+### 13.9 输出示例
 
 ```text
 Configuration drift detected:
@@ -898,7 +939,7 @@ CLI 负责将这些错误转换成本地化用户消息，不应让翻译宏进�
 ### 16.1 领域单元测试
 
 - changeset 的 bump level 合并；
-- semantic 和 prerelease 版本计算；
+- stable 与命名通道的版本计算；
 - 依赖传播；
 - 确定性拓扑排序；
 - 依赖环诊断；

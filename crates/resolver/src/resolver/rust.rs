@@ -284,3 +284,145 @@ impl Resolver for RustResolver {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{
+        config::{PackageConfig, VersionMode},
+        context::Context,
+        resolver::{ResolvedPackage, Resolver, ResolverType},
+    };
+
+    use super::RustResolver;
+
+    fn temp_dir(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "semifold-rust-resolver-{test_name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Rust,
+            version_mode: VersionMode::Semantic,
+            assets: vec![],
+        }
+    }
+
+    fn write_package(
+        root: &Path,
+        path: &str,
+        name: &str,
+        version: &str,
+        publish: Option<bool>,
+        dependencies: Option<&str>,
+    ) {
+        let package_root = root.join(path);
+        fs::create_dir_all(&package_root).unwrap();
+        let publish = publish
+            .map(|value| format!("publish = {value}\n"))
+            .unwrap_or_default();
+        let dependencies = dependencies
+            .map(|value| format!("\n[dependencies]\n{value}\n"))
+            .unwrap_or_default();
+        fs::write(
+            package_root.join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"{version}\"\n{publish}{dependencies}"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn resolves_a_single_package() {
+        let root = temp_dir("single-package");
+        write_package(&root, ".", "single", "1.2.3", None, None);
+
+        let package = RustResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "single");
+        assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
+        assert!(!package.private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_workspace_members_and_private_packages() {
+        let root = temp_dir("workspace");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        write_package(&root, "crates/core", "core", "1.0.0", None, None);
+        write_package(
+            &root,
+            "crates/internal",
+            "internal",
+            "1.0.0",
+            Some(false),
+            None,
+        );
+
+        let mut packages = RustResolver.resolve_all(&root).unwrap();
+        packages.sort_by(|left, right| left.name.cmp(&right.name));
+
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0].name, "core");
+        assert_eq!(packages[0].path, PathBuf::from("crates/core"));
+        assert!(!packages[0].private);
+        assert_eq!(packages[1].name, "internal");
+        assert_eq!(packages[1].path, PathBuf::from("crates/internal"));
+        assert!(packages[1].private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_a_package_and_its_inline_internal_dependency() {
+        let root = temp_dir("bump");
+        write_package(&root, "crates/core", "core", "1.0.0", None, None);
+        write_package(
+            &root,
+            "crates/app",
+            "app",
+            "1.0.0",
+            None,
+            Some("core = { version = \"1.0.0\", path = \"../core\" }"),
+        );
+
+        let ctx = Context::default();
+        ctx.version_bumps
+            .borrow_mut()
+            .insert("core".to_string(), semver::Version::parse("1.1.0").unwrap());
+        let app = ResolvedPackage {
+            name: "app".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("crates/app"),
+            private: false,
+        };
+
+        RustResolver
+            .bump(&ctx, &root, &app, &semver::Version::parse("1.0.1").unwrap())
+            .unwrap();
+
+        let manifest = fs::read_to_string(root.join("crates/app/Cargo.toml")).unwrap();
+        assert!(manifest.contains("version = \"1.0.1\""));
+        assert!(manifest.contains("core = { version = \"1.1.0\", path = \"../core\" }"));
+        fs::remove_dir_all(root).unwrap();
+    }
+}

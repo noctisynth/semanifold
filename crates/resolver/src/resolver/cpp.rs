@@ -277,3 +277,154 @@ impl Resolver for CppResolver {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{
+        config::{PackageConfig, VersionMode},
+        context::Context,
+        resolver::{ResolvedPackage, Resolver, ResolverType},
+    };
+
+    use super::CppResolver;
+
+    fn temp_dir(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "semifold-cpp-resolver-{test_name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Cpp,
+            version_mode: VersionMode::Semantic,
+            assets: vec![],
+        }
+    }
+
+    fn write_cmake_project(root: &Path, path: &str, name: &str, version: &str) {
+        let package_root = root.join(path);
+        fs::create_dir_all(&package_root).unwrap();
+        fs::write(
+            package_root.join("CMakeLists.txt"),
+            format!(
+                "cmake_minimum_required(VERSION 3.20)\nproject({name} VERSION {version} LANGUAGES CXX)\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn resolves_a_single_cmake_project() {
+        let root = temp_dir("single-package");
+        write_cmake_project(&root, ".", "demo_library", "1.2.3-alpha.1+build.7");
+
+        let package = CppResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "demo_library");
+        assert_eq!(
+            package.version,
+            semver::Version::parse("1.2.3-alpha.1+build.7").unwrap()
+        );
+        assert_eq!(package.path, PathBuf::from("."));
+        assert!(!package.private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_the_root_cmake_project_only() {
+        let root = temp_dir("root-discovery");
+        write_cmake_project(&root, ".", "root-project", "1.0.0");
+        write_cmake_project(&root, "libraries/child", "child-project", "2.0.0");
+
+        let packages = CppResolver.resolve_all(&root).unwrap();
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name, "root-project");
+        assert_eq!(packages[0].path, PathBuf::from("."));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_cmake_and_vcpkg_versions_without_removing_vcpkg_fields() {
+        let root = temp_dir("bump-with-vcpkg");
+        write_cmake_project(&root, "library", "demo-library", "1.0.0");
+        fs::write(
+            root.join("library/vcpkg.json"),
+            r#"{
+  "name": "demo-library",
+  "version": "1.0.0",
+  "dependencies": ["fmt"],
+  "custom": { "preserved": true }
+}
+"#,
+        )
+        .unwrap();
+        let package = ResolvedPackage {
+            name: "demo-library".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("library"),
+            private: false,
+        };
+
+        CppResolver
+            .bump(
+                &Context::default(),
+                &root,
+                &package,
+                &semver::Version::parse("1.1.0").unwrap(),
+            )
+            .unwrap();
+
+        let cmake = fs::read_to_string(root.join("library/CMakeLists.txt")).unwrap();
+        assert!(cmake.contains("project(demo-library VERSION 1.1.0 LANGUAGES CXX)"));
+        let vcpkg = serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(root.join("library/vcpkg.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(vcpkg["version"], "1.1.0");
+        assert_eq!(vcpkg["dependencies"], serde_json::json!(["fmt"]));
+        assert_eq!(vcpkg["custom"]["preserved"], true);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_a_cmake_project_without_an_optional_vcpkg_manifest() {
+        let root = temp_dir("bump-without-vcpkg");
+        write_cmake_project(&root, ".", "standalone", "1.0.0");
+        let package = ResolvedPackage {
+            name: "standalone".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("."),
+            private: false,
+        };
+
+        CppResolver
+            .bump(
+                &Context::default(),
+                &root,
+                &package,
+                &semver::Version::parse("1.0.1").unwrap(),
+            )
+            .unwrap();
+
+        let cmake = fs::read_to_string(root.join("CMakeLists.txt")).unwrap();
+        assert!(cmake.contains("VERSION 1.0.1"));
+        assert!(!root.join("vcpkg.json").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}

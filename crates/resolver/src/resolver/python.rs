@@ -763,3 +763,261 @@ impl Resolver for PythonResolver {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{
+        config::{PackageConfig, VersionMode},
+        context::Context,
+        resolver::{ResolvedPackage, Resolver, ResolverType},
+    };
+
+    use super::PythonResolver;
+
+    fn temp_dir(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "semifold-python-resolver-{test_name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Python,
+            version_mode: VersionMode::Semantic,
+            assets: vec![],
+        }
+    }
+
+    fn write_pyproject(root: &Path, path: &str, content: &str) {
+        let package_root = root.join(path);
+        fs::create_dir_all(&package_root).unwrap();
+        fs::write(package_root.join("pyproject.toml"), content).unwrap();
+    }
+
+    #[test]
+    fn resolves_pep_621_project_metadata() {
+        let root = temp_dir("pep-621");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"example\"\nversion = \"1.2.3\"\n",
+        );
+
+        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "example");
+        assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
+        assert_eq!(package.path, PathBuf::from("."));
+        assert!(!package.private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_poetry_project_metadata() {
+        let root = temp_dir("poetry");
+        write_pyproject(
+            &root,
+            ".",
+            "[tool.poetry]\nname = \"poetry-example\"\nversion = \"2.3.4\"\n",
+        );
+
+        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "poetry-example");
+        assert_eq!(package.version, semver::Version::parse("2.3.4").unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_hatch_dynamic_version_from_configured_source_file() {
+        let root = temp_dir("hatch-dynamic-version");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"hatch-example\"\ndynamic = [\"version\"]\n\n[tool.hatch.version]\npath = \"src/hatch_example/__init__.py\"\n",
+        );
+        let source_dir = root.join("src/hatch_example");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(
+            source_dir.join("__init__.py"),
+            "__version__: str = \"3.4.5\"\n",
+        )
+        .unwrap();
+
+        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "hatch-example");
+        assert_eq!(package.version, semver::Version::parse("3.4.5").unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn falls_back_to_setup_cfg_metadata() {
+        let root = temp_dir("setup-cfg");
+        fs::write(
+            root.join("setup.cfg"),
+            "[metadata]\nname = cfg-example\nversion = 4.5.6\n\n[options]\npackages = find:\n",
+        )
+        .unwrap();
+
+        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "cfg-example");
+        assert_eq!(package.version, semver::Version::parse("4.5.6").unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_root_and_common_monorepo_directories() {
+        let root = temp_dir("monorepo");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"root\"\nversion = \"1.0.0\"\n",
+        );
+        write_pyproject(
+            &root,
+            "packages/core",
+            "[project]\nname = \"core\"\nversion = \"1.0.0\"\n",
+        );
+        write_pyproject(
+            &root,
+            "libs/helpers",
+            "[project]\nname = \"helpers\"\nversion = \"1.0.0\"\n",
+        );
+        let app_dir = root.join("apps/cli");
+        fs::create_dir_all(&app_dir).unwrap();
+        fs::write(
+            app_dir.join("setup.cfg"),
+            "[metadata]\nname = cli\nversion = 1.0.0\n",
+        )
+        .unwrap();
+
+        let mut packages = PythonResolver.resolve_all(&root).unwrap();
+        packages.sort_by(|left, right| left.name.cmp(&right.name));
+
+        assert_eq!(packages.len(), 4);
+        assert_eq!(packages[0].name, "cli");
+        assert_eq!(packages[0].path, PathBuf::from("apps/cli"));
+        assert_eq!(packages[1].name, "core");
+        assert_eq!(packages[1].path, PathBuf::from("packages/core"));
+        assert_eq!(packages[2].name, "helpers");
+        assert_eq!(packages[2].path, PathBuf::from("libs/helpers"));
+        assert_eq!(packages[3].name, "root");
+        assert_eq!(packages[3].path, PathBuf::from("."));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parses_pep_621_and_poetry_internal_dependencies() {
+        let root = temp_dir("dependencies");
+        write_pyproject(
+            &root,
+            "packages/pep",
+            "[project]\nname = \"pep\"\nversion = \"1.0.0\"\ndependencies = [\"core>=1.0.0\", \"helpers ~= 2.0\"]\n",
+        );
+        write_pyproject(
+            &root,
+            "packages/poetry",
+            "[tool.poetry]\nname = \"poetry\"\nversion = \"1.0.0\"\n\n[tool.poetry.dependencies]\npython = \"^3.11\"\ncore = \"^1.0.0\"\nhelpers = { path = \"../helpers\" }\n",
+        );
+
+        let resolver = PythonResolver;
+        assert_eq!(
+            resolver
+                .parse_dependencies(&root, Path::new("packages/pep"))
+                .unwrap(),
+            vec!["core", "helpers"]
+        );
+        assert_eq!(
+            resolver
+                .parse_dependencies(&root, Path::new("packages/poetry"))
+                .unwrap(),
+            vec!["core", "helpers"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_pyproject_and_static_init_version_without_removing_other_fields() {
+        let root = temp_dir("bump-pyproject");
+        write_pyproject(
+            &root,
+            "packages/example",
+            "[project]\nname = \"example\"\nversion = \"1.0.0\"\ndependencies = [\"requests>=2\"]\n\n[tool.custom]\npreserved = true\n",
+        );
+        let source_dir = root.join("packages/example/src/example");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::write(source_dir.join("__init__.py"), "__version__ = '1.0.0'\n").unwrap();
+        let package = ResolvedPackage {
+            name: "example".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("packages/example"),
+            private: false,
+        };
+
+        PythonResolver
+            .bump(
+                &Context::default(),
+                &root,
+                &package,
+                &semver::Version::parse("1.1.0").unwrap(),
+            )
+            .unwrap();
+
+        let pyproject = fs::read_to_string(root.join("packages/example/pyproject.toml")).unwrap();
+        assert!(pyproject.contains("version = \"1.1.0\""));
+        assert!(pyproject.contains("dependencies = [\"requests>=2\"]"));
+        assert!(pyproject.contains("[tool.custom]"));
+        assert!(pyproject.contains("preserved = true"));
+        assert_eq!(
+            fs::read_to_string(source_dir.join("__init__.py")).unwrap(),
+            "__version__ = \"1.1.0\"\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_setup_cfg_version() {
+        let root = temp_dir("bump-setup-cfg");
+        fs::write(
+            root.join("setup.cfg"),
+            "[metadata]\nname = cfg-example\nversion = 1.0.0\n\n[options]\npackages = find:\n",
+        )
+        .unwrap();
+        let package = ResolvedPackage {
+            name: "cfg-example".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("."),
+            private: false,
+        };
+
+        PythonResolver
+            .bump(
+                &Context::default(),
+                &root,
+                &package,
+                &semver::Version::parse("1.0.1").unwrap(),
+            )
+            .unwrap();
+
+        let setup_cfg = fs::read_to_string(root.join("setup.cfg")).unwrap();
+        assert!(setup_cfg.contains("name = cfg-example"));
+        assert!(setup_cfg.contains("version = 1.0.1"));
+        fs::remove_dir_all(root).unwrap();
+    }
+}

@@ -309,3 +309,146 @@ impl Resolver for NodejsResolver {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{
+        config::{PackageConfig, VersionMode},
+        context::Context,
+        resolver::{ResolvedPackage, Resolver, ResolverType},
+    };
+
+    use super::NodejsResolver;
+
+    fn temp_dir(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "semifold-nodejs-resolver-{test_name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Nodejs,
+            version_mode: VersionMode::Semantic,
+            assets: vec![],
+        }
+    }
+
+    fn write_package(
+        root: &Path,
+        path: &str,
+        name: &str,
+        version: &str,
+        private: bool,
+        extra: &str,
+    ) {
+        let package_root = root.join(path);
+        fs::create_dir_all(&package_root).unwrap();
+        fs::write(
+            package_root.join("package.json"),
+            format!(
+                "{{\n  \"name\": \"{name}\",\n  \"version\": \"{version}\",\n  \"private\": {private}{extra}\n}}\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn resolves_a_single_package() {
+        let root = temp_dir("single-package");
+        write_package(&root, ".", "single", "1.2.3", false, "");
+
+        let package = NodejsResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "single");
+        assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
+        assert!(!package.private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_pnpm_workspace_packages_and_private_members() {
+        let root = temp_dir("pnpm-workspace");
+        write_package(
+            &root,
+            ".",
+            "root",
+            "1.0.0",
+            true,
+            ",\n  \"workspaces\": [\"ignored/*\"]",
+        );
+        fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages:\n  - 'packages/*'\n",
+        )
+        .unwrap();
+        write_package(&root, "packages/core", "core", "1.0.0", false, "");
+        write_package(&root, "packages/internal", "internal", "1.0.0", true, "");
+
+        let mut packages = NodejsResolver.resolve_all(&root).unwrap();
+        packages.sort_by(|left, right| left.name.cmp(&right.name));
+
+        assert_eq!(packages.len(), 3);
+        assert_eq!(packages[0].name, "core");
+        assert_eq!(packages[0].path, PathBuf::from("packages/core"));
+        assert!(!packages[0].private);
+        assert_eq!(packages[1].name, "internal");
+        assert_eq!(packages[1].path, PathBuf::from("packages/internal"));
+        assert!(packages[1].private);
+        assert_eq!(packages[2].name, "root");
+        assert_eq!(packages[2].path, PathBuf::from("."));
+        assert!(packages[2].private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bumps_package_version_without_removing_other_json_fields() {
+        let root = temp_dir("bump");
+        write_package(
+            &root,
+            "packages/app",
+            "app",
+            "1.0.0",
+            false,
+            ",\n  \"dependencies\": { \"core\": \"^1.0.0\" },\n  \"custom\": { \"preserved\": true }",
+        );
+        let app = ResolvedPackage {
+            name: "app".to_string(),
+            version: semver::Version::parse("1.0.0").unwrap(),
+            path: PathBuf::from("packages/app"),
+            private: false,
+        };
+
+        NodejsResolver
+            .bump(
+                &Context::default(),
+                &root,
+                &app,
+                &semver::Version::parse("1.0.1").unwrap(),
+            )
+            .unwrap();
+
+        let package_json = serde_json::from_str::<serde_json::Value>(
+            &fs::read_to_string(root.join("packages/app/package.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(package_json["version"], "1.0.1");
+        assert_eq!(package_json["dependencies"]["core"], "^1.0.0");
+        assert_eq!(package_json["custom"]["preserved"], true);
+        fs::remove_dir_all(root).unwrap();
+    }
+}

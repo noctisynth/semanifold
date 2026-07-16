@@ -148,3 +148,97 @@ pub fn run_command(command: &CommandConfig, cwd: &Path) -> Result<(), ResolveErr
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use semver::Version;
+
+    use crate::{
+        changeset::{BumpLevel, Changeset},
+        config::VersionMode,
+        error::ResolveError,
+    };
+
+    use super::{bump_version, get_bump_level};
+
+    #[test]
+    fn bumps_semantic_versions() {
+        let cases = [
+            (BumpLevel::Major, "1.2.3", "2.0.0"),
+            (BumpLevel::Minor, "1.2.3", "1.3.0"),
+            (BumpLevel::Patch, "1.2.3", "1.2.4"),
+            (BumpLevel::Unchanged, "1.2.3", "1.2.3"),
+        ];
+
+        for (level, current, expected) in cases {
+            let mut version = Version::parse(current).unwrap();
+            bump_version(&mut version, level, &VersionMode::Semantic).unwrap();
+            assert_eq!(version, Version::parse(expected).unwrap());
+        }
+    }
+
+    #[test]
+    fn semantic_bump_finalizes_a_prerelease_without_incrementing() {
+        let mut version = Version::parse("1.2.3-beta.4").unwrap();
+
+        bump_version(&mut version, BumpLevel::Patch, &VersionMode::Semantic).unwrap();
+
+        assert_eq!(version, Version::parse("1.2.3").unwrap());
+    }
+
+    #[test]
+    fn prerelease_bump_initializes_increments_and_replaces_tags() {
+        let mut version = Version::parse("1.2.3").unwrap();
+        let beta = VersionMode::PreRelease {
+            tag: "beta".to_string(),
+        };
+
+        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
+        assert_eq!(version, Version::parse("1.2.3-beta.0").unwrap());
+
+        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
+        assert_eq!(version, Version::parse("1.2.3-beta.1").unwrap());
+
+        bump_version(
+            &mut version,
+            BumpLevel::Patch,
+            &VersionMode::PreRelease {
+                tag: "rc".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(version, Version::parse("1.2.3-rc.0").unwrap());
+    }
+
+    #[test]
+    fn prerelease_bump_rejects_an_empty_tag() {
+        let mut version = Version::parse("1.2.3").unwrap();
+
+        let error = bump_version(
+            &mut version,
+            BumpLevel::Patch,
+            &VersionMode::PreRelease { tag: String::new() },
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, ResolveError::PreReleaseTagInvalid { .. }));
+    }
+
+    #[test]
+    fn selects_the_highest_bump_for_the_requested_package() {
+        let root = std::path::Path::new(".");
+        let mut first = Changeset::new("first".to_string(), root);
+        first.add_package("api".to_string(), BumpLevel::Patch, None);
+        first.add_package("web".to_string(), BumpLevel::Major, None);
+
+        let mut second = Changeset::new("second".to_string(), root);
+        second.add_package("api".to_string(), BumpLevel::Minor, None);
+
+        assert_eq!(get_bump_level(&[first, second], "api"), BumpLevel::Minor);
+        assert_eq!(get_bump_level(&[], "api"), BumpLevel::Unchanged);
+        assert_eq!(
+            get_bump_level(&[Changeset::new("other".to_string(), root)], "unknown"),
+            BumpLevel::Unchanged
+        );
+    }
+}

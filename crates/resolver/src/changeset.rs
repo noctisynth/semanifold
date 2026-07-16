@@ -195,3 +195,132 @@ impl Changeset {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{
+        config::{BranchesConfig, Config, PackageConfig, VersionMode},
+        context::Context,
+        error::ResolveError,
+        resolver::ResolverType,
+    };
+
+    use super::{BumpLevel, Changeset};
+
+    fn temp_dir(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "semifold-resolver-{test_name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn context_with_packages(packages: &[&str]) -> Context {
+        let packages = packages
+            .iter()
+            .map(|name| {
+                (
+                    (*name).to_string(),
+                    PackageConfig {
+                        path: PathBuf::from(name),
+                        resolver: ResolverType::Rust,
+                        version_mode: VersionMode::Semantic,
+                        assets: vec![],
+                    },
+                )
+            })
+            .collect();
+
+        Context {
+            config: Some(Config {
+                branches: BranchesConfig {
+                    base: "main".to_string(),
+                    release: "release".to_string(),
+                },
+                tags: BTreeMap::new(),
+                packages,
+                resolver: BTreeMap::new(),
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn writes_and_reads_a_changeset_with_tags() {
+        let root = temp_dir("roundtrip");
+        let ctx = context_with_packages(&["api", "web"]);
+        let mut changeset = Changeset::new("add-api".to_string(), &root);
+        changeset.add_package(
+            "api".to_string(),
+            BumpLevel::Minor,
+            Some("feat".to_string()),
+        );
+        changeset.add_package("web".to_string(), BumpLevel::Patch, None);
+        changeset.summary("Add the new API.".to_string());
+
+        changeset.commit().unwrap();
+
+        let path = root.join("add-api.md");
+        let parsed = Changeset::from_file(&ctx, &path).unwrap();
+
+        assert_eq!(parsed.name, "add-api");
+        assert_eq!(parsed.summary, "Add the new API.");
+        assert_eq!(parsed.packages.len(), 2);
+        assert_eq!(parsed.packages[0].name, "api");
+        assert_eq!(parsed.packages[0].level, BumpLevel::Minor);
+        assert_eq!(parsed.packages[0].tag.as_deref(), Some("feat"));
+        assert_eq!(parsed.packages[1].name, "web");
+        assert_eq!(parsed.packages[1].level, BumpLevel::Patch);
+        assert_eq!(parsed.packages[1].tag, None);
+
+        parsed.clean().unwrap();
+        assert!(!path.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_changesets_for_unknown_packages() {
+        let root = temp_dir("unknown-package");
+        let path = root.join("invalid.md");
+        fs::write(&path, "---\nmissing: patch\n---\n\nUnknown package.\n").unwrap();
+
+        let error = Changeset::from_file(&context_with_packages(&["api"]), &path).unwrap_err();
+
+        assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_unknown_bump_levels() {
+        let root = temp_dir("unknown-level");
+        let path = root.join("invalid.md");
+        fs::write(&path, "---\napi: breaking\n---\n\nUnknown level.\n").unwrap();
+
+        let error = Changeset::from_file(&context_with_packages(&["api"]), &path).unwrap_err();
+
+        assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stores_the_configured_changeset_root() {
+        let root = temp_dir("root-path");
+        let changeset = Changeset::new("sample".to_string(), Path::new(&root));
+
+        assert_eq!(changeset.root_path, root);
+
+        fs::remove_dir_all(changeset.root_path).unwrap();
+    }
+}

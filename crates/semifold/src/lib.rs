@@ -19,12 +19,12 @@ pub fn run() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
-    log::debug!("Parsed CLI arguments: {:?}", &cli);
+    log::debug!("Parsed CLI arguments: {:?}", cli);
 
     let mut ctx = context::Context::create()?;
     ctx.dry_run(cli.dry_run);
 
-    log::debug!("Loaded config: {:?}", &ctx.config);
+    log::debug!("Loaded config: {:?}", ctx.config);
 
     match &cli.command {
         Some(Commands::Commit(commit)) => cli::commit::run(commit, &ctx)?,

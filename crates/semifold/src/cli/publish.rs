@@ -52,7 +52,7 @@ pub(crate) async fn create_github_release(
     if !changelog_path.exists() {
         log::warn!(
             "Changelog file not found for package {}, skip create GitHub release",
-            &package_name.cyan()
+            package_name.cyan()
         );
         return Ok(None);
     }
@@ -62,8 +62,8 @@ pub(crate) async fn create_github_release(
     let release_title = format!("{} {}", package_name, changelog.version);
     let version = semver::Version::parse(&changelog.version[1..])?;
 
-    log::debug!("Tag name: {}", &tag_name);
-    log::debug!("Changelog for {}:\n\n{}", &package_name, &changelog.body);
+    log::debug!("Tag name: {}", tag_name);
+    log::debug!("Changelog for {}:\n\n{}", package_name, changelog.body);
 
     match octocrab
         .repos(&repo_info.owner, &repo_info.repo_name)
@@ -103,7 +103,7 @@ pub(crate) async fn pre_check(
         &resolver_config.pre_check.url,
         package => &resolved_package,
     );
-    log::debug!("Pre-check URL: {}", &url);
+    log::debug!("Pre-check URL: {}", url);
     let client = reqwest::Client::new();
     let headers = resolver_config.pre_check.extra_headers.iter().try_fold(
         HeaderMap::new(),
@@ -117,7 +117,7 @@ pub(crate) async fn pre_check(
         },
     )?;
     let resp = client.get(url).headers(headers).send().await?;
-    log::debug!("Pre-check response: {:?}", &resp);
+    log::debug!("Pre-check response: {:?}", resp);
     Ok(resp.status() == StatusCode::OK)
 }
 
@@ -126,7 +126,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
 
     log::debug!(
         "Packages to publish: {:?}",
-        &config.packages.keys().collect::<Vec<_>>()
+        config.packages.keys().collect::<Vec<_>>()
     );
 
     let should_create_github_release = ctx.is_ci() && github_release;
@@ -145,7 +145,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
         ctx.create_resolver(*resolver)
             .sort_packages(&root, &mut sorted_packages)?;
     }
-    log::debug!("Sorted packages: {:?}", &sorted_packages);
+    log::debug!("Sorted packages: {:?}", sorted_packages);
 
     for (package_name, package) in &sorted_packages {
         let resolver_config = config
@@ -153,13 +153,13 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
             .get(&package.resolver)
             .ok_or(anyhow::anyhow!(
                 "Config for resolver {} not found",
-                &package.resolver
+                package.resolver
             ))?;
-        log::debug!("Resolver config: {:?}", &resolver_config);
+        log::debug!("Resolver config: {:?}", resolver_config);
 
         let mut resolver = ctx.create_resolver(package.resolver);
         let resolved_package = resolver.resolve(&root, package)?;
-        log::debug!("Resolved package: {}", &resolved_package.name);
+        log::debug!("Resolved package: {}", resolved_package.name);
 
         if pre_check(resolver_config, &resolved_package).await? {
             log::warn!(
@@ -200,8 +200,8 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                 else {
                     log::warn!(
                         "Failed to create GitHub release for {} {}",
-                        &package_name.cyan(),
-                        &format!("v{}", resolved_package.version).green()
+                        package_name.cyan(),
+                        format!("v{}", resolved_package.version).green()
                     );
                     continue;
                 };
@@ -209,8 +209,8 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                 for asset in assets {
                     log::info!(
                         "Uploading asset: {} from {}",
-                        &asset.name,
-                        &asset.path.display()
+                        asset.name,
+                        asset.path.display()
                     );
                     if asset.path.exists() && asset.path.is_file() {
                         let mut file = fs::File::open(&asset.path)?;
@@ -224,18 +224,18 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                             .send()
                             .await?;
                     } else if !asset.path.is_file() {
-                        log::warn!("Asset {} is not a file, skip upload", &asset.path.display());
+                        log::warn!("Asset {} is not a file, skip upload", asset.path.display());
                     } else {
-                        log::warn!("Asset {} not found, skip upload", &asset.path.display());
+                        log::warn!("Asset {} not found, skip upload", asset.path.display());
                     }
                 }
             } else {
                 log::warn!(
                     "Skipped creating GitHub release for {} {} due to dry run",
-                    &package_name.cyan(),
-                    &format!("v{}", resolved_package.version).green()
+                    package_name.cyan(),
+                    format!("v{}", resolved_package.version).green()
                 );
-                log::warn!("Skipped uploading assets: {:?}", &assets);
+                log::warn!("Skipped uploading assets: {:?}", assets);
             }
         }
     }

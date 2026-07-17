@@ -55,7 +55,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let ref_name = env::var("GITHUB_REF_NAME").context("GITHUB_REF_NAME is not set")?;
     let github_repo = env::var("GITHUB_REPOSITORY").context("GITHUB_REPOSITORY is not set")?;
 
-    log::debug!("GITHUB_REF_NAME: {}", &ref_name);
+    log::debug!("GITHUB_REF_NAME: {}", ref_name);
 
     let Some(repo) = ctx.git_repo.as_ref() else {
         return Err(anyhow::anyhow!(t!("cli.ci.git_repo_not_initialized")));

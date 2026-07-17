@@ -1,0 +1,14 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "fs::read_to_string(vcpkg).unwrap()"
+---
+{
+  "name": "example",
+  "version": "1.0.1",
+  "dependencies": [
+    "fmt"
+  ],
+  "custom": {
+    "preserved": true
+  }
+}

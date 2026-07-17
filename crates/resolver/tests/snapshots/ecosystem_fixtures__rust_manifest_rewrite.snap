@@ -1,0 +1,16 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "fs::read_to_string(manifest).unwrap()"
+---
+# Package metadata must survive a version rewrite.
+[package]
+name = "app"
+version = "1.0.1"
+edition = "2024"
+
+[dependencies]
+core = { version = "1.1.0", path = "../core" }
+serde = "1"
+
+[dev-dependencies]
+core = { version = "1.1.0", path = "../core" }

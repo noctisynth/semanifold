@@ -31,8 +31,8 @@
 - [ ] 建立 Node.js fixture：单包、npm workspace、pnpm workspace、dependencies、peerDependencies（已覆盖单包、pnpm workspace、private package 与版本重写）
 - [ ] 建立 Python fixture：PEP 621、Poetry、Hatch、setup.cfg、常见 monorepo 目录（已覆盖 PEP 621、Poetry、Hatch dynamic version.path、setup.cfg、常见目录、依赖解析与版本重写）
 - [ ] 建立 C++ fixture：CMakeLists.txt、vcpkg.json（已覆盖根项目发现、CMake 版本提取，以及 CMake/vcpkg 版本重写）
-- [ ] 为 manifest 解析结果建立 snapshot/golden tests
-- [ ] 为版本重写后的完整 manifest 建立 golden tests
+- [x] 为 manifest 解析结果建立 snapshot/golden tests
+- [x] 为版本重写后的完整 manifest 建立 golden tests
 - [ ] 确保与版本无关的字段和格式不会被破坏
 
 ### 阶段完成条件

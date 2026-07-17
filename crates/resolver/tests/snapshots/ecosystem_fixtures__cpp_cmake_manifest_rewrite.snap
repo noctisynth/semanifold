@@ -1,0 +1,6 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "fs::read_to_string(cmake).unwrap()"
+---
+cmake_minimum_required(VERSION 3.20)
+project(example VERSION 1.0.1 LANGUAGES CXX)

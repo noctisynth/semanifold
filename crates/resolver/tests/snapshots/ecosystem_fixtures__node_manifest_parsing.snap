@@ -1,0 +1,8 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "render_packages(vec![NodejsResolver.resolve(&root,\n&config(\".\", ResolverType::Nodejs)).unwrap()])"
+---
+name = app
+version = 1.0.0
+path = .
+private = false

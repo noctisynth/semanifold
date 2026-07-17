@@ -1,0 +1,5 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "fs::read_to_string(init).unwrap()"
+---
+__version__ = "1.0.1"

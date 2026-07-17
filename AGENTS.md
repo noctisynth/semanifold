@@ -25,6 +25,12 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 - 领域设计优先：先生成或更新计划、接口和测试策略，再引入副作用。
 - 新设计中不恢复全局可变万能 `Context`；渲染使用不可变、按作用域构造的 `ReleaseContext`、`PackageContext`、`ChangelogContext` 与 `TemplateContext`。
 
+## Changeset
+
+- 完成会影响任一已发布 package 的功能、修复、重构、依赖或测试能力变更后，必须在 `.changes/` 生成对应 changeset；纯文档或不影响 package 的维护工作除外。
+- changeset 必须使用 `.changes/config.toml` 中已配置的 package 名称，并选择与变更性质一致的 bump level 和 tag。
+- 生成 changeset 后，运行 `cargo run -p semifold --bin smif -- status`，确认其能被解析且发布计划符合预期。
+
 ## 国际化（i18n）
 
 - 所有面向用户的 CLI 文案（命令描述、flag help、成功/错误/状态输出和交互提示）必须通过 `rust-i18n` 的 `t!` 宏提供；不得在 Rust 源码中新增硬编码的自然语言文本。

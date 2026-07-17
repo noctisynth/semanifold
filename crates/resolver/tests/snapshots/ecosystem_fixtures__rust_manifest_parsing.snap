@@ -1,0 +1,13 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: render_packages(RustResolver.resolve_all(&root).unwrap())
+---
+name = app
+version = 1.0.0
+path = crates/app
+private = false
+
+name = core
+version = 1.0.0
+path = crates/core
+private = false

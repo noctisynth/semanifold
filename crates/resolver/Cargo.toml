@@ -23,3 +23,6 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.142", features = ["preserve_order"] }
 thiserror = "2.0.15"
 toml_edit = { version = "0.23.3", features = ["serde"] }
+
+[dev-dependencies]
+insta = "1.48.0"

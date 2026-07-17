@@ -1,0 +1,8 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "render_packages(vec![CppResolver.resolve(&root,\n&config(\".\", ResolverType::Cpp)).unwrap()])"
+---
+name = example
+version = 1.0.0
+path = .
+private = false

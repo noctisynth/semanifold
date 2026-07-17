@@ -1,0 +1,11 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "fs::read_to_string(manifest).unwrap()"
+---
+[project]
+name = "app"
+version = "1.0.1"
+dependencies = ["core>=1"]
+
+[tool.custom]
+preserved = true

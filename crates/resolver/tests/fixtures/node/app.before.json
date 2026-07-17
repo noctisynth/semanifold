@@ -1,0 +1,14 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": {
+    "core": "^1.0.0"
+  },
+  "peerDependencies": {
+    "plugin-api": "^1.0.0"
+  },
+  "custom": {
+    "preserved": true
+  }
+}
+

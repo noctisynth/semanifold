@@ -1,0 +1,6 @@
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+core = { version = "1.0.0", path = "crates/core" }
+

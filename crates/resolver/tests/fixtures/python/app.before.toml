@@ -1,0 +1,8 @@
+[project]
+name = "app"
+version = "1.0.0"
+dependencies = ["core>=1"]
+
+[tool.custom]
+preserved = true
+

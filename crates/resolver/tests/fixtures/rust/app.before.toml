@@ -1,0 +1,13 @@
+# Package metadata must survive a version rewrite.
+[package]
+name = "app"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+core = { version = "1.0.0", path = "../core" }
+serde = "1"
+
+[dev-dependencies]
+core = { version = "1.0.0", path = "../core" }
+

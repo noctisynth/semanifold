@@ -1,0 +1,8 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "render_packages(vec![PythonResolver.resolve(&root,\n&config(\".\", ResolverType::Python)).unwrap()])"
+---
+name = app
+version = 1.0.0
+path = .
+private = false

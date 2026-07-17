@@ -24,6 +24,7 @@
 - [x] 覆盖缺省 `channel` 与 `channel = "stable"` 的等价性
 - [x] 覆盖首次进入命名通道的 stable 基准提升、通道内序号推进、通道切换和 `Unchanged` 不推进
 - [x] 覆盖 changeset changelog tag 不影响版本通道
+- [x] Rust 运行时内部依赖仅在计划新版本不满足 manifest 约束时传播 patch bump
 
 ### Ecosystem fixtures
 

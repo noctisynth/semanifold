@@ -403,6 +403,8 @@ Adapter 可以：
 - 提取包名、版本、发布属性和内部依赖；
 - 根据完整 `VersionMap` 生成新文件内容。
 
+对于 manifest 内部依赖，adapter 必须同时提供依赖类别与可发布版本约束。`ReleasePlanner` 只在依赖的计划新版本不满足该约束时，才将运行时依赖方自动加入发布闭包并规划 manifest 版本更新；约束仍满足时，依赖方不因该依赖单独发布。首版只将 Rust `[dependencies]` 视为运行时依赖，`dev-dependencies`、`build-dependencies`、Node peer/optional 及其他生态依赖类别必须在对应传播策略确定前保持不自动传播。
+
 Adapter 不可以：
 
 - 持有或读取全局 `Context`；
@@ -1179,9 +1181,9 @@ fixtures/rust/
 
 实施前还需要确定：
 
-1. [已决定] 内部依赖包未在 changeset 中时，自动触发 patch bump；显式 changeset 的更高 bump 优先。
-2. dev dependency 是否影响发布拓扑顺序和版本传播。
-3. peer、optional 和 build dependency 分别采用什么传播策略。
+1. [已决定] 运行时内部依赖的新版本不满足依赖方 manifest 约束时，才自动触发依赖方 patch bump；显式 changeset 的更高 bump 优先。约束仍满足时不自动发布依赖方。
+2. [已决定] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播。
+3. peer、optional 和其他生态依赖类别分别采用什么传播策略。
 4. 不同生态包名相同时，`PackageId` 是否需要 `ecosystem:name` namespace。
 5. post-version 命令失败后，是自动恢复已修改文件，还是保留工作区并输出结构化恢复指引。
 6. GitHub PR 元数据查询失败时，是否默认降级为无 PR 信息的 changelog，而不中断 `version`。

@@ -22,7 +22,9 @@ struct CargoPackage {
 
 #[derive(Deserialize)]
 struct CargoWorkspace {
+    #[serde(default)]
     pub members: Vec<String>,
+    pub dependencies: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +39,12 @@ struct CargoToml {
 }
 
 pub struct RustResolver;
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct RuntimeDependency {
+    pub name: String,
+    pub version_requirement: Option<semver::VersionReq>,
+}
 
 impl RustResolver {
     pub fn internal_dependencies(
@@ -60,6 +68,65 @@ impl RustResolver {
         .flatten()
         .flat_map(|dependencies| dependencies.into_keys())
         .collect())
+    }
+
+    pub fn runtime_dependencies(
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<RuntimeDependency>, ResolveError> {
+        let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
+        let cargo_toml: CargoToml =
+            toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
+                ResolveError::ParseError {
+                    path: cargo_toml_path,
+                    reason: e.to_string(),
+                }
+            })?;
+        let workspace_manifest_path = root.join("Cargo.toml");
+        let workspace_dependencies = if workspace_manifest_path.exists() {
+            let workspace_manifest: CargoToml =
+                toml_edit::de::from_str(&std::fs::read_to_string(&workspace_manifest_path)?)
+                    .map_err(|e| ResolveError::ParseError {
+                        path: workspace_manifest_path,
+                        reason: e.to_string(),
+                    })?;
+            workspace_manifest
+                .workspace
+                .and_then(|workspace| workspace.dependencies)
+        } else {
+            None
+        };
+
+        cargo_toml
+            .dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, dependency)| {
+                let workspace_dependency = dependency
+                    .get("workspace")
+                    .and_then(serde_json::Value::as_bool)
+                    .filter(|workspace| *workspace)
+                    .and_then(|_| {
+                        workspace_dependencies
+                            .as_ref()
+                            .and_then(|dependencies| dependencies.get(&name))
+                    });
+                let dependency = workspace_dependency.unwrap_or(&dependency);
+                let version_requirement = dependency
+                    .as_str()
+                    .or_else(|| {
+                        dependency
+                            .get("version")
+                            .and_then(serde_json::Value::as_str)
+                    })
+                    .map(semver::VersionReq::parse)
+                    .transpose()?;
+                Ok(RuntimeDependency {
+                    name,
+                    version_requirement,
+                })
+            })
+            .collect()
     }
 }
 

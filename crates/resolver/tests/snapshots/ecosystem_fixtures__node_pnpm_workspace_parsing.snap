@@ -1,0 +1,18 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "render_packages(NodejsResolver.resolve_all(&root.join(\"pnpm\")).unwrap())"
+---
+name = core
+version = 1.0.0
+path = packages/core
+private = false
+
+name = pnpm-root
+version = 1.0.0
+path = .
+private = true
+
+name = private
+version = 1.0.0
+path = packages/private
+private = true

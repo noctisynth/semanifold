@@ -1,0 +1,13 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: "render_packages(vec![RustResolver.resolve(&root,\n&config(\"single\", ResolverType::Rust)).unwrap(),\nRustResolver.resolve(&root,\n&config(\"private\", ResolverType::Rust)).unwrap(),])"
+---
+name = private
+version = 2.0.0
+path = private
+private = true
+
+name = single
+version = 1.2.3
+path = single
+private = false

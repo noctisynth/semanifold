@@ -1,0 +1,28 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: render_packages(PythonResolver.resolve_all(&root).unwrap())
+---
+name = cfg
+version = 4.5.6
+path = packages/cfg
+private = false
+
+name = hatch
+version = 3.4.5
+path = apps/hatch
+private = false
+
+name = pep
+version = 1.2.3
+path = packages/pep
+private = false
+
+name = poetry
+version = 2.3.4
+path = libs/poetry
+private = false
+
+name = root
+version = 1.0.0
+path = .
+private = false

@@ -2,4 +2,4 @@ semifold-resolver: patch:chore
 
 ---
 
-Add ecosystem manifest fixture snapshots for resolver regression coverage.
+Add ecosystem manifest fixtures and snapshots for resolver regression coverage.

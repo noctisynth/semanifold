@@ -1,0 +1,6 @@
+[package]
+name = "private"
+version = "2.0.0"
+publish = false
+edition = "2024"
+

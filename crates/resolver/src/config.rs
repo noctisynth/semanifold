@@ -244,13 +244,20 @@ pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
 
 pub fn load_config(config_path: &Path) -> Result<Config, ResolveError> {
     let config_content = std::fs::read_to_string(config_path)?;
+    load_config_from_str(config_path, &config_content)
+}
+
+pub fn load_config_from_str(
+    config_path: &Path,
+    config_content: &str,
+) -> Result<Config, ResolveError> {
     let config = if config_path.extension() == Some(OsStr::new("toml")) {
-        toml_edit::de::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
+        toml_edit::de::from_str(config_content).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?
     } else {
-        serde_json::from_str(&config_content).map_err(|e| ResolveError::InvalidConfig {
+        serde_json::from_str(config_content).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?

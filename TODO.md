@@ -95,6 +95,8 @@
 
 ### CLI
 
+- [x] 新增 `smif config migrate`
+- [x] 新增 `smif config migrate --check`
 - [ ] 新增 `smif config sync`
 - [ ] 新增 `smif config sync --check`
 - [ ] 新增 `smif config sync --prune`
@@ -115,6 +117,8 @@
 
 ### TOML 增量编辑
 
+- [x] 将 legacy `version-mode` 增量迁移为 `channel`，并保留无关字段和注释
+- [x] `channel` 与 `version-mode` 同时存在时停止并报告冲突
 - [ ] 实现 `TomlConfigEditor`
 - [ ] 使用 `toml_edit::DocumentMut` 读取和修改原始文档
 - [ ] 修改前将文档反序列化为强类型 `Config` 并验证
@@ -148,6 +152,8 @@
 
 ### 测试
 
+- [x] `config migrate --check` 检测到旧字段时返回非零且不写文件
+- [x] 连续执行两次 `config migrate` 时第二次无 diff
 - [ ] 新增 package 只产生最小 TOML diff
 - [ ] 缺失 package 默认保留
 - [ ] `--prune` 显式删除缺失 package

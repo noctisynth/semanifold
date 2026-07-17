@@ -652,6 +652,26 @@ smif config sync --resolver rust --resolver nodejs
 
 第一版只更新 `.changes/config.toml` 或 `.changesets/config.toml`。如果当前项目使用 JSON 配置，命令返回明确的 `UnsupportedConfigFormat`，避免 JSON 重写造成无关格式变化。未来如需支持 JSON，应单独定义格式保留策略。
 
+### 13.2.1 旧配置迁移
+
+为使仓库能够从旧的 `version-mode` 过渡到 `channel`，提供独立且不执行 workspace discovery 的入口：
+
+```text
+smif config migrate
+smif config migrate --check
+```
+
+迁移只处理 `[packages.*]` 中的版本通道字段，并使用 `toml_edit::DocumentMut` 保留其余内容：
+
+- `version-mode = "semantic"` 或缺省语义模式迁移为缺省 `channel`（删除旧字段，不写入 `channel = "stable"`）；
+- `version-mode = { pre-release = { tag = "alpha" } }` 迁移为 `channel = "alpha"`；
+- 已使用 `channel` 的 package 保持不变；同一 package 同时设置 `channel` 与 `version-mode` 时停止并报告冲突；
+- JSON 配置返回明确的不支持错误；
+- `--check` 在存在可迁移条目时返回非零且不写文件；全局 `--dry-run` 只报告将要迁移的条目，退出成功；
+- 成功迁移后再次运行不得产生 diff。
+
+该命令是格式迁移工具，不替代 `config sync`，也不自动将 stable package 显式改写为 `channel = "stable"`。
+
 ### 13.3 同步计划
 
 与 release 流程相同，配置更新也采用 Plan/Validate/Apply：
@@ -996,6 +1016,9 @@ fixtures/rust/
 - 已有 package table 不因为新增包而被整体重排；
 - JSON 配置返回明确的不支持错误；
 - 修改后的文档再次同步是幂等的。
+- `config migrate` 将 legacy `version-mode` 转换为 `channel`，保留无关字段与注释；
+- `config migrate --check` 在存在迁移项时不写文件并返回非零；
+- 同时存在 `channel` 与 `version-mode` 时迁移拒绝写入。
 
 ## 17. 迁移计划
 

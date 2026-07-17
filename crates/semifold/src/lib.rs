@@ -29,6 +29,7 @@ pub fn run() -> anyhow::Result<()> {
     match &cli.command {
         Some(Commands::Commit(commit)) => cli::commit::run(commit, &ctx)?,
         Some(Commands::Init(init)) => cli::init::run(init, &ctx)?,
+        Some(Commands::Config(config)) => cli::config::run(config, &ctx)?,
         Some(Commands::Version(version)) => utils::run_async(cli::version::run(version, &ctx))?,
         Some(Commands::Publish(publish)) => utils::run_async(cli::publish::run(publish, &ctx))?,
         Some(Commands::CI(ci)) => utils::run_async(cli::ci::run(ci, &ctx))?,

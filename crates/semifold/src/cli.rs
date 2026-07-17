@@ -3,6 +3,7 @@ use rust_i18n::t;
 
 pub mod ci;
 pub mod commit;
+pub mod config;
 pub mod init;
 pub mod mcp;
 pub mod publish;
@@ -15,6 +16,8 @@ pub(crate) enum Commands {
     Commit(commit::Commit),
     #[command(about = t!("cli.commands.init"))]
     Init(init::Init),
+    #[command(about = "Migrate and maintain Semifold configuration")]
+    Config(config::Config),
     #[command(about = t!("cli.commands.version"))]
     Version(version::Version),
     #[command(about = t!("cli.commands.publish"))]

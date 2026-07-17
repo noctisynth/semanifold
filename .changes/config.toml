@@ -16,6 +16,7 @@ resolver = "nodejs"
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
+channel = "alpha"
 assets = ["artifacts/*"]
 
 [packages.semifold-changelog]

@@ -3,7 +3,7 @@ use std::path::Path;
 use regex::Regex;
 
 use crate::{
-    config::{PackageConfig, ResolverConfig, VersionMode},
+    config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
@@ -183,7 +183,7 @@ impl Resolver for CppResolver {
             &PackageConfig {
                 path: ".".into(),
                 resolver: ResolverType::Cpp,
-                version_mode: VersionMode::Semantic,
+                channel: ReleaseChannel::Stable,
                 assets: vec![],
             },
         )?;
@@ -287,7 +287,7 @@ mod tests {
     };
 
     use crate::{
-        config::{PackageConfig, VersionMode},
+        config::{PackageConfig, ReleaseChannel},
         context::Context,
         resolver::{ResolvedPackage, Resolver, ResolverType},
     };
@@ -311,7 +311,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Cpp,
-            version_mode: VersionMode::Semantic,
+            channel: ReleaseChannel::Stable,
             assets: vec![],
         }
     }

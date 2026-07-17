@@ -92,7 +92,7 @@ pub(crate) async fn version(
         }
 
         let mut bumped_version = resolved_package.version.clone();
-        utils::bump_version(&mut bumped_version, level, &package_config.version_mode)?;
+        utils::bump_version(&mut bumped_version, level, &package_config.channel)?;
         resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
         ctx.version_bumps
             .borrow_mut()

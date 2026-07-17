@@ -7,7 +7,7 @@ use saphyr::LoadableYamlNode;
 use serde::Deserialize;
 
 use crate::{
-    config::{PackageConfig, ResolverConfig, VersionMode},
+    config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
     resolver::{ResolvedPackage, Resolver, ResolverType},
@@ -104,7 +104,7 @@ impl Resolver for NodejsResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: ResolverType::Nodejs,
-                    version_mode: VersionMode::Semantic,
+                    channel: ReleaseChannel::Stable,
                     assets: vec![],
                 },
             )?;
@@ -119,7 +119,7 @@ impl Resolver for NodejsResolver {
             &PackageConfig {
                 path: ".".into(),
                 resolver: ResolverType::Nodejs,
-                version_mode: VersionMode::Semantic,
+                channel: ReleaseChannel::Stable,
                 assets: vec![],
             },
         ) {
@@ -150,7 +150,7 @@ impl Resolver for NodejsResolver {
                         &PackageConfig {
                             path: rel_path,
                             resolver: ResolverType::Nodejs,
-                            version_mode: VersionMode::Semantic,
+                            channel: ReleaseChannel::Stable,
                             assets: vec![],
                         },
                     ) {
@@ -319,7 +319,7 @@ mod tests {
     };
 
     use crate::{
-        config::{PackageConfig, VersionMode},
+        config::{PackageConfig, ReleaseChannel},
         context::Context,
         resolver::{ResolvedPackage, Resolver, ResolverType},
     };
@@ -343,7 +343,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Nodejs,
-            version_mode: VersionMode::Semantic,
+            channel: ReleaseChannel::Stable,
             assets: vec![],
         }
     }

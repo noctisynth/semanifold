@@ -6,7 +6,7 @@ use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
 use semifold_resolver::{
-    changeset::BumpLevel, config::VersionMode, context::Context, resolver, utils,
+    changeset::BumpLevel, config::ReleaseChannel, context::Context, resolver, utils,
 };
 use serde::{Deserialize, Serialize};
 
@@ -81,9 +81,9 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(&root, package_config)?;
         let mut bumped_version = resolved_package.version.clone();
-        utils::bump_version(&mut bumped_version, level, &package_config.version_mode)?;
+        utils::bump_version(&mut bumped_version, level, &package_config.channel)?;
 
-        if matches!(package_config.version_mode, VersionMode::Semantic)
+        if matches!(package_config.channel, ReleaseChannel::Stable)
             && !resolved_package.version.pre.is_empty()
             && level != BumpLevel::Unchanged
             && level != BumpLevel::Patch

@@ -206,7 +206,7 @@ mod tests {
     };
 
     use crate::{
-        config::{BranchesConfig, Config, PackageConfig, VersionMode},
+        config::{BranchesConfig, Config, PackageConfig, ReleaseChannel},
         context::Context,
         error::ResolveError,
         resolver::ResolverType,
@@ -236,7 +236,7 @@ mod tests {
                     PackageConfig {
                         path: PathBuf::from(name),
                         resolver: ResolverType::Rust,
-                        version_mode: VersionMode::Semantic,
+                        channel: ReleaseChannel::Stable,
                         assets: vec![],
                     },
                 )

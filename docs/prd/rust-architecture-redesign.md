@@ -44,6 +44,8 @@ Semifold 的核心定位是管理跨语言 monorepo 中的 changeset、版本、
 
 `RefCell<HashMap<String, Version>>` 使版本修改依赖包处理顺序。Resolver 只能看到此前已经写入缓存的新版本，无法在修改文件前检查完整结果。
 
+当前 `VersionMode::PreRelease` 还将发布通道直接绑定到 SemVer prerelease 字符串：它会在没有 changeset 时推进序号，并以 resolver 的 SemVer 表达作为所有生态的共同规则。这个行为不应成为新设计的兼容目标；新的 `ReleaseChannel` 必须以 changeset 为驱动，并由各生态 adapter 负责版本编码与校验。
+
 ### 3.2 `Resolver` 的职责边界错误
 
 当前 `Resolver` trait 同时负责：

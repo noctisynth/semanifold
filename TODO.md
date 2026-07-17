@@ -19,11 +19,11 @@
 - [x] 覆盖多个 changeset 的 bump level 合并
 - [x] 覆盖 semantic major、minor、patch 计算
 - [x] 覆盖当前 prerelease 初次生成、递增、切换 tag 和退出 prerelease 行为
-- [ ] 记录当前已知缺陷，避免将错误行为固化为新规范
-- [ ] 为通用 `ReleaseChannel::{Stable, Named}` 建立领域测试
-- [ ] 覆盖缺省 `channel` 与 `channel = "stable"` 的等价性
-- [ ] 覆盖命名通道的序号推进、通道切换和 `Unchanged` 不推进
-- [ ] 覆盖 changeset changelog tag 不影响版本通道
+- [x] 记录当前已知缺陷，避免将错误行为固化为新规范
+- [x] 为通用 `ReleaseChannel::{Stable, Named}` 建立领域测试
+- [x] 覆盖缺省 `channel` 与 `channel = "stable"` 的等价性
+- [x] 覆盖命名通道的序号推进、通道切换和 `Unchanged` 不推进
+- [x] 覆盖 changeset changelog tag 不影响版本通道
 
 ### Ecosystem fixtures
 

@@ -1,8 +1,8 @@
 repos:
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.48.0
     hooks:
-      - id: codespell
+      - id: typos
   - repo: local
     hooks:
       - id: cargo-format

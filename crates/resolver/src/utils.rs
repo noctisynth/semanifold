@@ -7,7 +7,7 @@ use semver::Version;
 
 use crate::{
     changeset::{BumpLevel, Changeset},
-    config::{CommandConfig, VersionMode},
+    config::{CommandConfig, ReleaseChannel},
     error::ResolveError,
 };
 
@@ -48,13 +48,13 @@ pub fn list_files<F: Fn(&Path) -> bool>(
     Ok(files)
 }
 
-fn bump_prerelease(version: &mut Version, tag: &str) -> Result<(), ResolveError> {
+fn bump_named_channel(version: &mut Version, channel: &str) -> Result<(), ResolveError> {
     if version.pre.is_empty() {
-        version.pre = semver::Prerelease::new(&format!("{tag}.0"))?;
+        version.pre = semver::Prerelease::new(&format!("{channel}.1"))?;
     } else {
         let pre = version.pre.clone();
         let mut parts: Vec<String> = pre.as_str().split('.').map(String::from).collect();
-        if let Some(idx) = parts.iter().position(|s| s == tag) {
+        if let Some(idx) = parts.iter().position(|s| s == channel) {
             if let Some(pre_patch) = parts.get(idx + 1) {
                 let pre_patch =
                     pre_patch
@@ -68,7 +68,7 @@ fn bump_prerelease(version: &mut Version, tag: &str) -> Result<(), ResolveError>
                 parts.insert(idx + 1, "1".to_string());
             }
         } else {
-            parts = vec![tag.to_string(), "0".to_string()];
+            parts = vec![channel.to_string(), "1".to_string()];
         }
         version.pre = semver::Prerelease::new(&parts.join("."))?;
     }
@@ -78,10 +78,10 @@ fn bump_prerelease(version: &mut Version, tag: &str) -> Result<(), ResolveError>
 pub fn bump_version<'a>(
     version: &'a mut Version,
     level: BumpLevel,
-    mode: &VersionMode,
+    channel: &ReleaseChannel,
 ) -> Result<&'a mut Version, ResolveError> {
-    match mode {
-        VersionMode::Semantic => {
+    match channel {
+        ReleaseChannel::Stable => {
             if version.pre.is_empty() {
                 match level {
                     BumpLevel::Major => {
@@ -103,14 +103,10 @@ pub fn bump_version<'a>(
                 version.pre = semver::Prerelease::EMPTY;
             }
         }
-        VersionMode::PreRelease { tag } => {
-            if tag.is_empty() {
-                return Err(ResolveError::PreReleaseTagInvalid {
-                    tag: tag.to_string(),
-                    message: "Pre-release tag is empty".to_string(),
-                });
+        ReleaseChannel::Named(name) => {
+            if level != BumpLevel::Unchanged {
+                bump_named_channel(version, name)?;
             }
-            bump_prerelease(version, tag)?;
         }
     }
     Ok(version)
@@ -155,8 +151,7 @@ mod tests {
 
     use crate::{
         changeset::{BumpLevel, Changeset},
-        config::VersionMode,
-        error::ResolveError,
+        config::ReleaseChannel,
     };
 
     use super::{bump_version, get_bump_level};
@@ -172,7 +167,7 @@ mod tests {
 
         for (level, current, expected) in cases {
             let mut version = Version::parse(current).unwrap();
-            bump_version(&mut version, level, &VersionMode::Semantic).unwrap();
+            bump_version(&mut version, level, &ReleaseChannel::Stable).unwrap();
             assert_eq!(version, Version::parse(expected).unwrap());
         }
     }
@@ -181,47 +176,64 @@ mod tests {
     fn semantic_bump_finalizes_a_prerelease_without_incrementing() {
         let mut version = Version::parse("1.2.3-beta.4").unwrap();
 
-        bump_version(&mut version, BumpLevel::Patch, &VersionMode::Semantic).unwrap();
+        bump_version(&mut version, BumpLevel::Patch, &ReleaseChannel::Stable).unwrap();
 
         assert_eq!(version, Version::parse("1.2.3").unwrap());
     }
 
     #[test]
-    fn prerelease_bump_initializes_increments_and_replaces_tags() {
+    fn named_channel_bump_initializes_increments_and_switches_channels() {
         let mut version = Version::parse("1.2.3").unwrap();
-        let beta = VersionMode::PreRelease {
-            tag: "beta".to_string(),
-        };
-
-        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
-        assert_eq!(version, Version::parse("1.2.3-beta.0").unwrap());
+        let beta = ReleaseChannel::Named("beta".to_string());
 
         bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
         assert_eq!(version, Version::parse("1.2.3-beta.1").unwrap());
 
+        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
+        assert_eq!(version, Version::parse("1.2.3-beta.2").unwrap());
+
         bump_version(
             &mut version,
             BumpLevel::Patch,
-            &VersionMode::PreRelease {
-                tag: "rc".to_string(),
-            },
+            &ReleaseChannel::Named("rc".to_string()),
         )
         .unwrap();
-        assert_eq!(version, Version::parse("1.2.3-rc.0").unwrap());
+        assert_eq!(version, Version::parse("1.2.3-rc.1").unwrap());
     }
 
     #[test]
-    fn prerelease_bump_rejects_an_empty_tag() {
+    fn unchanged_named_channel_does_not_advance() {
         let mut version = Version::parse("1.2.3").unwrap();
 
-        let error = bump_version(
+        bump_version(
             &mut version,
-            BumpLevel::Patch,
-            &VersionMode::PreRelease { tag: String::new() },
+            BumpLevel::Unchanged,
+            &ReleaseChannel::Named("beta".to_string()),
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert!(matches!(error, ResolveError::PreReleaseTagInvalid { .. }));
+        assert_eq!(version, Version::parse("1.2.3").unwrap());
+    }
+
+    #[test]
+    fn changeset_tags_do_not_change_the_release_channel() {
+        let root = std::path::Path::new(".");
+        let mut changeset = Changeset::new("feature".to_string(), root);
+        changeset.add_package(
+            "api".to_string(),
+            BumpLevel::Patch,
+            Some("breaking-change".to_string()),
+        );
+        let mut version = Version::parse("1.2.3").unwrap();
+
+        bump_version(
+            &mut version,
+            get_bump_level(&[changeset], "api"),
+            &ReleaseChannel::Named("beta".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(version, Version::parse("1.2.3-beta.1").unwrap());
     }
 
     #[test]

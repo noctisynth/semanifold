@@ -5,8 +5,8 @@ use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_resolver::{
     config::{
-        self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ResolverConfig,
-        VersionMode,
+        self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
+        ResolverConfig,
     },
     context,
     error::ResolveError,
@@ -168,7 +168,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Rust,
-                        version_mode: VersionMode::Semantic,
+                        channel: ReleaseChannel::Stable,
                         assets: vec![],
                     });
                 });
@@ -181,7 +181,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Nodejs,
-                        version_mode: VersionMode::Semantic,
+                        channel: ReleaseChannel::Stable,
                         assets: vec![],
                     });
                 });
@@ -194,7 +194,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Python,
-                        version_mode: VersionMode::Semantic,
+                        channel: ReleaseChannel::Stable,
                         assets: vec![],
                     });
                 });
@@ -207,7 +207,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
                     acc.entry(pkg.name.clone()).or_insert(PackageConfig {
                         path: pkg.path.clone(),
                         resolver: resolver::ResolverType::Cpp,
-                        version_mode: VersionMode::Semantic,
+                        channel: ReleaseChannel::Stable,
                         assets: vec![],
                     });
                 });

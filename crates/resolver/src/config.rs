@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{error::ResolveError, resolver};
 
@@ -27,7 +27,7 @@ pub enum Asset {
     String(String),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum VersionMode {
     /// Semantic versioning mode.
@@ -40,28 +40,92 @@ pub enum VersionMode {
     },
 }
 
-impl VersionMode {
-    pub fn is_semantic(&self) -> bool {
-        matches!(self, Self::Semantic)
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum ReleaseChannel {
+    #[default]
+    Stable,
+    Named(String),
+}
+
+impl ReleaseChannel {
+    pub fn is_stable(&self) -> bool {
+        matches!(self, Self::Stable)
+    }
+
+    fn from_config_value(value: String) -> Result<Self, String> {
+        match value.as_str() {
+            "stable" => Ok(Self::Stable),
+            "" => Err("release channel must not be empty".to_string()),
+            _ => Ok(Self::Named(value)),
+        }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+impl Serialize for ReleaseChannel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Stable => serializer.serialize_str("stable"),
+            Self::Named(name) => serializer.serialize_str(name),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ReleaseChannel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)
+            .and_then(|value| Self::from_config_value(value).map_err(serde::de::Error::custom))
+    }
+}
+
+#[derive(Serialize, Debug, Clone)]
 pub struct PackageConfig {
     /// Path to the package root directory.
     pub path: PathBuf,
     /// Resolver type to use.
     pub resolver: resolver::ResolverType,
-    /// Versioning mode to use.
-    #[serde(
-        default,
-        rename = "version-mode",
-        skip_serializing_if = "VersionMode::is_semantic"
-    )]
-    pub version_mode: VersionMode,
+    /// Release channel to use. Stable is the default and is omitted when saved.
+    #[serde(default, skip_serializing_if = "ReleaseChannel::is_stable")]
+    pub channel: ReleaseChannel,
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
+}
+
+#[derive(Deserialize)]
+struct PackageConfigInput {
+    path: PathBuf,
+    resolver: resolver::ResolverType,
+    #[serde(default)]
+    channel: Option<ReleaseChannel>,
+    #[serde(default, rename = "version-mode")]
+    legacy_version_mode: Option<VersionMode>,
+    #[serde(default)]
+    assets: Vec<Asset>,
+}
+
+impl<'de> Deserialize<'de> for PackageConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let input = PackageConfigInput::deserialize(deserializer)?;
+        let channel = input.channel.unwrap_or(match input.legacy_version_mode {
+            Some(VersionMode::PreRelease { tag }) => ReleaseChannel::Named(tag),
+            Some(VersionMode::Semantic) | None => ReleaseChannel::Stable,
+        });
+        Ok(Self {
+            path: input.path,
+            resolver: input.resolver,
+            channel,
+            assets: input.assets,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
@@ -214,4 +278,54 @@ pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveErr
     };
     std::fs::write(config_path, config_content)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PackageConfig, ReleaseChannel};
+
+    #[test]
+    fn missing_and_explicit_stable_channels_are_equivalent() {
+        let missing: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+"#,
+        )
+        .unwrap();
+        let explicit: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+channel = "stable"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(missing.channel, ReleaseChannel::Stable);
+        assert_eq!(missing.channel, explicit.channel);
+    }
+
+    #[test]
+    fn named_channel_is_loaded_and_legacy_version_mode_is_migrated() {
+        let named: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+channel = "alpha"
+"#,
+        )
+        .unwrap();
+        let legacy: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+version-mode = { pre-release = { tag = "beta" } }
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(named.channel, ReleaseChannel::Named("alpha".to_string()));
+        assert_eq!(legacy.channel, ReleaseChannel::Named("beta".to_string()));
+    }
 }

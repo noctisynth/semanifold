@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0-alpha.0
+
+### New Features
+
+- [`7b59b5d`](https://github.com/noctisynth/semifold/commit/7b59b5dea42b8e4feeb9c3d3887e06c0c8ce950d): Generate Dependencies changelog entries for packages automatically released because an internal dependency changed.
+
 ## v0.2.1
 
 ### New Features

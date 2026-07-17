@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0-alpha.0
+
+### Bug Fixes
+
+- [`334977f`](https://github.com/noctisynth/semifold/commit/334977ff31af0b0a0858a82c1e9c383e5f333069): Automatically include transitive Rust dependents in version releases and rewrite their internal dependency versions before post-version commands run.
+- [`8a9a56e`](https://github.com/noctisynth/semifold/commit/8a9a56ea402c1e4364c2ed210b3696a3d0b37f73): Fix formatting lint violations reported by Rust 1.97.
+
+### New Features
+
+- [`1f2498c`](https://github.com/noctisynth/semifold/commit/1f2498cf34d99663199d49a1ab9bbc7d88a34c1c): Add alpha release-channel lifecycle support, including stable-base selection, in-channel sequencing, and channel switching.
+
 ## v0.3.5
 
 ### Bug Fixes

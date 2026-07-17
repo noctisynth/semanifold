@@ -22,7 +22,7 @@
 - [x] 记录当前已知缺陷，避免将错误行为固化为新规范
 - [x] 为通用 `ReleaseChannel::{Stable, Named}` 建立领域测试
 - [x] 覆盖缺省 `channel` 与 `channel = "stable"` 的等价性
-- [x] 覆盖命名通道的序号推进、通道切换和 `Unchanged` 不推进
+- [x] 覆盖首次进入命名通道的 stable 基准提升、通道内序号推进、通道切换和 `Unchanged` 不推进
 - [x] 覆盖 changeset changelog tag 不影响版本通道
 
 ### Ecosystem fixtures

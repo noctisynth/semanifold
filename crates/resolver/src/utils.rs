@@ -48,31 +48,49 @@ pub fn list_files<F: Fn(&Path) -> bool>(
     Ok(files)
 }
 
-fn bump_named_channel(version: &mut Version, channel: &str) -> Result<(), ResolveError> {
-    if version.pre.is_empty() {
-        version.pre = semver::Prerelease::new(&format!("{channel}.1"))?;
-    } else {
-        let pre = version.pre.clone();
-        let mut parts: Vec<String> = pre.as_str().split('.').map(String::from).collect();
-        if let Some(idx) = parts.iter().position(|s| s == channel) {
-            if let Some(pre_patch) = parts.get(idx + 1) {
-                let pre_patch =
-                    pre_patch
-                        .parse::<u64>()
-                        .map_err(|e| ResolveError::InvalidVersion {
-                            version: version.to_string(),
-                            reason: e.to_string(),
-                        })?;
-                parts[idx + 1] = format!("{}", pre_patch + 1);
-            } else {
-                parts.insert(idx + 1, "1".to_string());
-            }
-        } else {
-            parts = vec![channel.to_string(), "1".to_string()];
+fn bump_stable_base(version: &mut Version, level: BumpLevel) {
+    match level {
+        BumpLevel::Major => {
+            version.major += 1;
+            version.minor = 0;
+            version.patch = 0;
         }
-        version.pre = semver::Prerelease::new(&parts.join("."))?;
+        BumpLevel::Minor => {
+            version.minor += 1;
+            version.patch = 0;
+        }
+        BumpLevel::Patch => version.patch += 1,
+        BumpLevel::Unchanged => {}
     }
+}
+
+fn set_named_channel(
+    version: &mut Version,
+    channel: &str,
+    sequence: u64,
+) -> Result<(), ResolveError> {
+    version.pre = semver::Prerelease::new(&format!("{channel}.{sequence}"))?;
     Ok(())
+}
+
+fn advance_named_channel(version: &mut Version, channel: &str) -> Result<(), ResolveError> {
+    let prefix = format!("{channel}.");
+    let sequence = version
+        .pre
+        .as_str()
+        .strip_prefix(&prefix)
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .map(|sequence| sequence + 1)
+                .map_err(|error| ResolveError::InvalidVersion {
+                    version: version.to_string(),
+                    reason: error.to_string(),
+                })
+        })
+        .transpose()?
+        .unwrap_or(0);
+    set_named_channel(version, channel, sequence)
 }
 
 pub fn bump_version<'a>(
@@ -83,21 +101,7 @@ pub fn bump_version<'a>(
     match channel {
         ReleaseChannel::Stable => {
             if version.pre.is_empty() {
-                match level {
-                    BumpLevel::Major => {
-                        version.major += 1;
-                        version.minor = 0;
-                        version.patch = 0;
-                    }
-                    BumpLevel::Minor => {
-                        version.minor += 1;
-                        version.patch = 0;
-                    }
-                    BumpLevel::Patch => {
-                        version.patch += 1;
-                    }
-                    BumpLevel::Unchanged => {}
-                }
+                bump_stable_base(version, level);
             } else {
                 // If the version is a pre-release, bumping semantic version resets pre-release
                 version.pre = semver::Prerelease::EMPTY;
@@ -105,7 +109,12 @@ pub fn bump_version<'a>(
         }
         ReleaseChannel::Named(name) => {
             if level != BumpLevel::Unchanged {
-                bump_named_channel(version, name)?;
+                if version.pre.is_empty() {
+                    bump_stable_base(version, level);
+                    set_named_channel(version, name, 0)?;
+                } else {
+                    advance_named_channel(version, name)?;
+                }
             }
         }
     }
@@ -182,15 +191,15 @@ mod tests {
     }
 
     #[test]
-    fn named_channel_bump_initializes_increments_and_switches_channels() {
+    fn named_channel_sets_a_stable_base_then_advances_or_switches() {
         let mut version = Version::parse("1.2.3").unwrap();
         let beta = ReleaseChannel::Named("beta".to_string());
 
-        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
-        assert_eq!(version, Version::parse("1.2.3-beta.1").unwrap());
+        bump_version(&mut version, BumpLevel::Major, &beta).unwrap();
+        assert_eq!(version, Version::parse("2.0.0-beta.0").unwrap());
 
-        bump_version(&mut version, BumpLevel::Patch, &beta).unwrap();
-        assert_eq!(version, Version::parse("1.2.3-beta.2").unwrap());
+        bump_version(&mut version, BumpLevel::Major, &beta).unwrap();
+        assert_eq!(version, Version::parse("2.0.0-beta.1").unwrap());
 
         bump_version(
             &mut version,
@@ -198,7 +207,7 @@ mod tests {
             &ReleaseChannel::Named("rc".to_string()),
         )
         .unwrap();
-        assert_eq!(version, Version::parse("1.2.3-rc.1").unwrap());
+        assert_eq!(version, Version::parse("2.0.0-rc.0").unwrap());
     }
 
     #[test]
@@ -233,7 +242,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(version, Version::parse("1.2.3-beta.1").unwrap());
+        assert_eq!(version, Version::parse("1.2.4-beta.0").unwrap());
     }
 
     #[test]

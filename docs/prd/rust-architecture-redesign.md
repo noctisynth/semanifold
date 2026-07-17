@@ -760,7 +760,7 @@ channel = "alpha"
 - `stable` 是保留关键字，不能作为自定义通道；
 - 任何其他非空值都是命名发布通道，例如 `alpha`、`beta`、`next`、`nightly` 或 `internal.2026`；
 - `[tags]` 和 changeset 中的 tag 仅用于 changelog 分类，绝不决定版本通道或版本号；
-- 包进入某个通道不会自行改变 major、minor 或 patch 基准版本。基准版本由用户显式决定，changeset 仍只表达 `major`、`minor` 或 `patch`。
+- 包从 stable 首次进入某个命名通道时，changeset 的最高 `major`、`minor` 或 `patch` 决定该通道周期对应的下一稳定基准版本；该基准版本不需要额外的手工设定。
 
 领域层使用下列抽象：
 
@@ -782,7 +782,15 @@ pub enum ReleaseChannel {
 
 因此，`channel` 的字符串不在 core 中按 SemVer 限制；adapter 必须在规划阶段验证该通道能否表示为对应生态的合法版本，并在无法表示时返回结构化错误。
 
-对当前处于命名通道的包，存在任意非 `Unchanged` changeset 时推进该通道的序号；例如 `1.0.0-alpha → 1.0.0-alpha.1 → 1.0.0-alpha.2`。stable 包的 major/minor/patch 计算保持现有语义。通道切换或手工设定基准版本后的首次序号规则必须由各 adapter 明确实现并测试，不能从 changelog tag 推断。
+版本通道的状态完全由当前版本和当前 `channel` 决定，不能依赖已经被 version 命令消费的 changeset。规则如下：
+
+- stable 包首次进入命名通道时，先按 changeset 计算下一稳定基准，再生成 `<base>-<channel>.0`；例如 `0.2.16 + major + alpha` 生成 `1.0.0-alpha.0`；
+- 当前包已处于相同命名通道时，任意非 `Unchanged` changeset 都只推进通道序号；例如 `1.0.0-alpha.0 + major` 生成 `1.0.0-alpha.1`。这代表同一个待发布稳定版本周期内的后续变更，不重复提升 stable 基准；
+- 切换到另一个命名通道时保留稳定基准并将序号重置为 `.0`；例如 `1.0.0-alpha.2 → beta` 生成 `1.0.0-beta.0`；
+- `Unchanged` 不生成新版本；
+- 从命名通道回到 stable 时移除 prerelease 后缀并发布当前基准，例如 `1.0.0-alpha.2 → 1.0.0`。
+
+stable 包的 major/minor/patch 计算保持现有语义。上述规则不能从 changelog tag 推断，adapter 仍负责将领域通道编码为所属生态的合法版本。
 
 #### 删除包
 

@@ -30,9 +30,38 @@ struct CargoToml {
     pub package: Option<CargoPackage>,
     pub workspace: Option<CargoWorkspace>,
     pub dependencies: Option<BTreeMap<String, serde_json::Value>>,
+    #[serde(rename = "dev-dependencies")]
+    pub dev_dependencies: Option<BTreeMap<String, serde_json::Value>>,
+    #[serde(rename = "build-dependencies")]
+    pub build_dependencies: Option<BTreeMap<String, serde_json::Value>>,
 }
 
 pub struct RustResolver;
+
+impl RustResolver {
+    pub fn internal_dependencies(
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<String>, ResolveError> {
+        let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
+        let cargo_toml: CargoToml =
+            toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
+                ResolveError::ParseError {
+                    path: cargo_toml_path,
+                    reason: e.to_string(),
+                }
+            })?;
+        Ok([
+            cargo_toml.dependencies,
+            cargo_toml.dev_dependencies,
+            cargo_toml.build_dependencies,
+        ]
+        .into_iter()
+        .flatten()
+        .flat_map(|dependencies| dependencies.into_keys())
+        .collect())
+    }
+}
 
 impl Resolver for RustResolver {
     fn resolve(
@@ -163,12 +192,14 @@ impl Resolver for RustResolver {
             })?;
         package_table["version"] = toml_edit::value(&bumped_version);
 
-        if let Some(deps_table) = toml_doc["dependencies"].as_table_mut() {
-            for (name, bumped_version) in ctx.version_bumps.borrow().iter() {
-                if let Some(dep) = deps_table.get_mut(name)
-                    && dep.get("version").is_some_and(|version| version.is_str())
-                {
-                    dep["version"] = toml_edit::value(bumped_version.to_string());
+        for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(deps_table) = toml_doc[dependency_table].as_table_mut() {
+                for (name, bumped_version) in ctx.version_bumps.borrow().iter() {
+                    if let Some(dep) = deps_table.get_mut(name)
+                        && dep.get("version").is_some_and(|version| version.is_str())
+                    {
+                        dep["version"] = toml_edit::value(bumped_version.to_string());
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use clap::Parser;
 use colored::Colorize;
@@ -6,9 +6,10 @@ use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
 use semifold_resolver::{
     changeset::{BumpLevel, Changeset},
-    config::ResolverConfig,
+    config::{Config, ResolverConfig},
     context::Context,
-    resolver, utils,
+    resolver::{self, ResolverType, rust::RustResolver},
+    utils,
 };
 
 #[derive(Parser, Debug)]
@@ -76,11 +77,27 @@ pub(crate) async fn version(
         ctx.create_resolver(*resolver)
             .sort_packages(root, &mut sorted_packages)?;
     }
+    let bump_levels = release_bump_levels(root, config, changesets)?;
+    let mut resolved_packages = HashMap::new();
+    let mut version_map = HashMap::new();
+    for (package_name, package_config) in &sorted_packages {
+        let mut resolver = ctx.create_resolver(package_config.resolver);
+        let resolved_package = resolver.resolve(root, package_config)?;
+        let level = bump_levels[package_name];
+        if level != BumpLevel::Unchanged {
+            let mut next_version = resolved_package.version.clone();
+            utils::bump_version(&mut next_version, level, &package_config.channel)?;
+            version_map.insert(package_name.clone(), next_version);
+        }
+        resolved_packages.insert(package_name.clone(), resolved_package);
+    }
+    *ctx.version_bumps.borrow_mut() = version_map.clone();
+
     for (package_name, package_config) in &sorted_packages {
         log::debug!("Processing package: {}", package_name);
         let mut resolver = ctx.create_resolver(package_config.resolver);
-        let resolved_package = resolver.resolve(root, package_config)?;
-        let level = utils::get_bump_level(changesets, package_name);
+        let resolved_package = resolved_packages.remove(package_name).unwrap();
+        let level = bump_levels[package_name];
 
         // Skip unchanged packages
         if matches!(level, BumpLevel::Unchanged) {
@@ -91,13 +108,8 @@ pub(crate) async fn version(
             continue;
         }
 
-        let mut bumped_version = resolved_package.version.clone();
-        utils::bump_version(&mut bumped_version, level, &package_config.channel)?;
+        let bumped_version = version_map[package_name].clone();
         resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
-        ctx.version_bumps
-            .borrow_mut()
-            .entry(package_name.clone())
-            .or_insert(bumped_version.clone());
 
         let changelog = generate_changelog(
             ctx,
@@ -120,12 +132,53 @@ pub(crate) async fn version(
         }
     }
 
+    post_version(ctx)?;
     if !ctx.dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
     }
-    post_version(ctx)?;
 
     Ok(changelogs_map)
+}
+
+pub(crate) fn release_bump_levels(
+    root: &std::path::Path,
+    config: &Config,
+    changesets: &[Changeset],
+) -> anyhow::Result<HashMap<String, BumpLevel>> {
+    let mut levels = config
+        .packages
+        .keys()
+        .map(|name| (name.clone(), utils::get_bump_level(changesets, name)))
+        .collect::<HashMap<_, _>>();
+    let mut dependents = HashMap::<String, Vec<String>>::new();
+    for (package_name, package_config) in &config.packages {
+        if package_config.resolver != ResolverType::Rust {
+            continue;
+        }
+        for dependency in RustResolver::internal_dependencies(root, package_config)? {
+            if config.packages.contains_key(&dependency) {
+                dependents
+                    .entry(dependency)
+                    .or_default()
+                    .push(package_name.clone());
+            }
+        }
+    }
+
+    let mut pending = levels
+        .iter()
+        .filter_map(|(name, level)| (*level != BumpLevel::Unchanged).then_some(name.clone()))
+        .collect::<VecDeque<_>>();
+    while let Some(package_name) = pending.pop_front() {
+        for dependent in dependents.get(&package_name).into_iter().flatten() {
+            let level = levels.get_mut(dependent).unwrap();
+            if *level == BumpLevel::Unchanged {
+                *level = BumpLevel::Patch;
+                pending.push_back(dependent.clone());
+            }
+        }
+    }
+    Ok(levels)
 }
 
 pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
@@ -146,4 +199,89 @@ pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     version(ctx, &changesets).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use semifold_resolver::{
+        changeset::Changeset,
+        config::{BranchesConfig, Config, PackageConfig, ReleaseChannel},
+        resolver::ResolverType,
+    };
+
+    use super::{BumpLevel, release_bump_levels};
+
+    fn temporary_root() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "semifold-version-closure-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn package_config(path: &str) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Rust,
+            channel: ReleaseChannel::Named("alpha".to_string()),
+            assets: vec![],
+        }
+    }
+
+    #[test]
+    fn adds_transitive_rust_dependents_to_the_release_closure() {
+        let root = temporary_root();
+        for (path, manifest) in [
+            (
+                "resolver",
+                "[package]\nname = \"resolver\"\nversion = \"0.3.5\"\n",
+            ),
+            (
+                "changelog",
+                "[package]\nname = \"changelog\"\nversion = \"0.2.1\"\n\n[dependencies]\nresolver = { version = \"0.3.5\", path = \"../resolver\" }\n",
+            ),
+            (
+                "cli",
+                "[package]\nname = \"cli\"\nversion = \"0.2.16\"\n\n[dependencies]\nchangelog = { version = \"0.2.1\", path = \"../changelog\" }\n",
+            ),
+        ] {
+            let package_root = root.join(path);
+            fs::create_dir_all(&package_root).unwrap();
+            fs::write(package_root.join("Cargo.toml"), manifest).unwrap();
+        }
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("resolver".to_string(), package_config("resolver")),
+                ("changelog".to_string(), package_config("changelog")),
+                ("cli".to_string(), package_config("cli")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("resolver-feature".to_string(), &root);
+        changeset.add_package("resolver".to_string(), BumpLevel::Minor, None);
+
+        let levels = release_bump_levels(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(levels["resolver"], BumpLevel::Minor);
+        assert_eq!(levels["changelog"], BumpLevel::Patch);
+        assert_eq!(levels["cli"], BumpLevel::Patch);
+        fs::remove_dir_all(root).unwrap();
+    }
 }

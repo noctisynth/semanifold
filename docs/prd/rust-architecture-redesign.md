@@ -235,6 +235,8 @@ pub struct PackageRelease {
 
 `ReleasePlan` 构建完成后必须包含所有包的新版本。生态 adapter 因此可以一次获得完整 `VersionMap`，不再需要 `Context.version_bumps`。
 
+changeset 只能在 manifest、changelog 和 post-version 命令均成功后删除。post-version 失败时必须保留 changeset；后续阶段再将整个流程收敛为原子 `Plan → Validate → Apply`。
+
 `status` 只渲染该计划，`version` 验证并应用该计划。
 
 ### 6.4 `FileEdit`
@@ -1155,7 +1157,7 @@ fixtures/rust/
 
 实施前还需要确定：
 
-1. 内部依赖包未在 changeset 中时，是自动触发 patch bump，还是仅在版本约束不再满足时触发。
+1. [已决定] 内部依赖包未在 changeset 中时，自动触发 patch bump；显式 changeset 的更高 bump 优先。
 2. dev dependency 是否影响发布拓扑顺序和版本传播。
 3. peer、optional 和 build dependency 分别采用什么传播策略。
 4. 不同生态包名相同时，`PackageId` 是否需要 `ecosystem:name` namespace。

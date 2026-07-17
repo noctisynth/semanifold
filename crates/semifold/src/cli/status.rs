@@ -10,6 +10,8 @@ use semifold_resolver::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::version::release_bump_levels;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RepoOwner {
     pub login: String,
@@ -60,6 +62,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let config = ctx.config.as_ref().unwrap();
 
     let changesets = resolver::get_changesets(ctx)?;
+    let bump_levels = release_bump_levels(&root, config, &changesets)?;
     let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
 
     println!(
@@ -73,7 +76,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let mut bump_map = HashMap::new();
     let mut warnings = vec![];
     for (package_name, package_config) in &config.packages {
-        let level = utils::get_bump_level(&changesets, package_name);
+        let level = bump_levels[package_name];
         if matches!(level, BumpLevel::Unchanged) {
             continue;
         }

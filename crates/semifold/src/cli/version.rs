@@ -77,13 +77,13 @@ pub(crate) async fn version(
         ctx.create_resolver(*resolver)
             .sort_packages(root, &mut sorted_packages)?;
     }
-    let bump_levels = release_bump_levels(root, config, changesets)?;
+    let release_plan = release_bump_plan(root, config, changesets)?;
     let mut resolved_packages = HashMap::new();
     let mut version_map = HashMap::new();
     for (package_name, package_config) in &sorted_packages {
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolver.resolve(root, package_config)?;
-        let level = bump_levels[package_name];
+        let level = release_plan.levels[package_name];
         if level != BumpLevel::Unchanged {
             let mut next_version = resolved_package.version.clone();
             utils::bump_version(&mut next_version, level, &package_config.channel)?;
@@ -97,7 +97,7 @@ pub(crate) async fn version(
         log::debug!("Processing package: {}", package_name);
         let mut resolver = ctx.create_resolver(package_config.resolver);
         let resolved_package = resolved_packages.remove(package_name).unwrap();
-        let level = bump_levels[package_name];
+        let level = release_plan.levels[package_name];
 
         // Skip unchanged packages
         if matches!(level, BumpLevel::Unchanged) {
@@ -111,12 +111,25 @@ pub(crate) async fn version(
         let bumped_version = version_map[package_name].clone();
         resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
 
+        let dependency_updates = release_plan
+            .propagated_dependencies
+            .get(package_name)
+            .into_iter()
+            .flatten()
+            .filter_map(|dependency| {
+                version_map
+                    .get(dependency)
+                    .map(|version| (dependency.clone(), version.to_string()))
+            })
+            .collect::<Vec<_>>();
+
         let changelog = generate_changelog(
             ctx,
             repo,
             changesets,
             package_name,
             &bumped_version.to_string(),
+            &dependency_updates,
         )
         .await?;
         changelogs_map.insert(package_name.to_string(), changelog.clone());
@@ -140,17 +153,24 @@ pub(crate) async fn version(
     Ok(changelogs_map)
 }
 
-pub(crate) fn release_bump_levels(
+#[derive(Debug, Default, Eq, PartialEq)]
+pub(crate) struct ReleaseBumpPlan {
+    pub levels: HashMap<String, BumpLevel>,
+    pub propagated_dependencies: HashMap<String, Vec<String>>,
+}
+
+pub(crate) fn release_bump_plan(
     root: &std::path::Path,
     config: &Config,
     changesets: &[Changeset],
-) -> anyhow::Result<HashMap<String, BumpLevel>> {
+) -> anyhow::Result<ReleaseBumpPlan> {
     let mut levels = config
         .packages
         .keys()
         .map(|name| (name.clone(), utils::get_bump_level(changesets, name)))
         .collect::<HashMap<_, _>>();
     let mut dependents = HashMap::<String, Vec<String>>::new();
+    let mut propagated_dependencies = HashMap::<String, Vec<String>>::new();
     for (package_name, package_config) in &config.packages {
         if package_config.resolver != ResolverType::Rust {
             continue;
@@ -174,11 +194,26 @@ pub(crate) fn release_bump_levels(
             let level = levels.get_mut(dependent).unwrap();
             if *level == BumpLevel::Unchanged {
                 *level = BumpLevel::Patch;
+                propagated_dependencies
+                    .entry(dependent.clone())
+                    .or_default()
+                    .push(package_name.clone());
                 pending.push_back(dependent.clone());
             }
         }
     }
-    Ok(levels)
+    Ok(ReleaseBumpPlan {
+        levels,
+        propagated_dependencies,
+    })
+}
+
+pub(crate) fn release_bump_levels(
+    root: &std::path::Path,
+    config: &Config,
+    changesets: &[Changeset],
+) -> anyhow::Result<HashMap<String, BumpLevel>> {
+    Ok(release_bump_plan(root, config, changesets)?.levels)
 }
 
 pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
@@ -216,7 +251,7 @@ mod tests {
         resolver::ResolverType,
     };
 
-    use super::{BumpLevel, release_bump_levels};
+    use super::{BumpLevel, release_bump_plan};
 
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
@@ -277,11 +312,16 @@ mod tests {
         let mut changeset = Changeset::new("resolver-feature".to_string(), &root);
         changeset.add_package("resolver".to_string(), BumpLevel::Minor, None);
 
-        let levels = release_bump_levels(&root, &config, &[changeset]).unwrap();
+        let release_plan = release_bump_plan(&root, &config, &[changeset]).unwrap();
 
-        assert_eq!(levels["resolver"], BumpLevel::Minor);
-        assert_eq!(levels["changelog"], BumpLevel::Patch);
-        assert_eq!(levels["cli"], BumpLevel::Patch);
+        assert_eq!(release_plan.levels["resolver"], BumpLevel::Minor);
+        assert_eq!(release_plan.levels["changelog"], BumpLevel::Patch);
+        assert_eq!(release_plan.levels["cli"], BumpLevel::Patch);
+        assert_eq!(
+            release_plan.propagated_dependencies["changelog"],
+            ["resolver"]
+        );
+        assert_eq!(release_plan.propagated_dependencies["cli"], ["changelog"]);
         fs::remove_dir_all(root).unwrap();
     }
 }

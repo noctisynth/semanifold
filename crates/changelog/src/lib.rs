@@ -47,6 +47,7 @@ pub async fn generate_changelog(
     changesets: &[changeset::Changeset],
     package_name: &str,
     package_version: &str,
+    dependency_updates: &[(String, String)],
 ) -> Result<String, ResolveError> {
     let mut changes_map = HashMap::new();
 
@@ -101,13 +102,30 @@ pub async fn generate_changelog(
     }
 
     let header = format!("## v{package_version}\n\n");
-    let body = changes_map
+    let changes_body = changes_map
         .iter()
         .map(|(tag, lines)| format!("### {tag}\n\n{}", lines.join("\n")))
         .collect::<Vec<_>>()
         .join("\n\n");
+    let dependencies_body = format_dependency_updates(dependency_updates);
+    let body = [changes_body, dependencies_body]
+        .into_iter()
+        .filter(|section| !section.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
 
     Ok(header + &body)
+}
+
+pub fn format_dependency_updates(dependency_updates: &[(String, String)]) -> String {
+    if dependency_updates.is_empty() {
+        return String::new();
+    }
+    let lines = dependency_updates
+        .iter()
+        .map(|(dependency, version)| format!("- Update {dependency} to {version}."))
+        .collect::<Vec<_>>();
+    format!("### Dependencies\n\n{}", lines.join("\n"))
 }
 
 pub async fn read_latest_changelog<P: AsRef<Path>>(
@@ -157,4 +175,20 @@ pub async fn read_latest_changelog<P: AsRef<Path>>(
         version,
         body: body.trim().to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_dependency_updates;
+
+    #[test]
+    fn formats_propagated_dependency_updates_as_a_separate_section() {
+        assert_eq!(
+            format_dependency_updates(&[(
+                "semifold-resolver".to_string(),
+                "0.4.0-alpha.0".to_string(),
+            )]),
+            "### Dependencies\n\n- Update semifold-resolver to 0.4.0-alpha.0."
+        );
+    }
 }

@@ -604,6 +604,16 @@ Changelog 生成应分为两部分：
 
 格式化器接收 `ChangelogContext` 或其序列化后的模板视图，不应持有 `Context`、`git2::Repository` 或自行创建 `Octocrab`。GitHub 查询失败是否中断版本流程也应是显式策略，而不是格式化函数的隐式行为。
 
+依赖传播而自动加入发布闭包的 package 仍会被发布，不能生成空 changelog。规划器必须为它记录 `ReleaseReason::DependencyPropagation { dependency, next_version }`；格式化器将该原因渲染为独立的 `Dependencies` 区段，例如：
+
+```markdown
+### Dependencies
+
+- Update semifold-resolver to 0.4.0-alpha.0.
+```
+
+该条目不伪装成用户 changeset，也不使用 changeset 的 changelog tag。只有实际会发布的 dependent 才生成该记录；dev、build 或其他不影响发布产物的依赖传播策略由 adapter 规则单独定义。
+
 ## 13. `config` 指令设计
 
 ### 13.1 目标

@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use regex::Regex;
 
@@ -14,6 +17,57 @@ use crate::{
 pub struct CppResolver;
 
 impl CppResolver {
+    fn direct_workspace_members(&self, root: &Path) -> Result<Vec<PathBuf>, ResolveError> {
+        let cmake_path = root.join("CMakeLists.txt");
+        let content = std::fs::read_to_string(&cmake_path)?;
+        let re =
+            Regex::new(r#"(?im)^\s*add_subdirectory\s*\(\s*["']?([^"'\s\)]+)"#).map_err(|e| {
+                ResolveError::ParseError {
+                    path: cmake_path.clone(),
+                    reason: format!("Invalid regex: {e}"),
+                }
+            })?;
+
+        Ok(re
+            .captures_iter(&content)
+            .filter_map(|captures| captures.get(1))
+            .map(|member| root.join(member.as_str()))
+            .filter(|member| member.join("CMakeLists.txt").exists())
+            .collect())
+    }
+
+    fn internal_dependencies(
+        &self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<String>, ResolveError> {
+        let cmake_path = root.join(&pkg_config.path).join("CMakeLists.txt");
+        let content = std::fs::read_to_string(&cmake_path)?;
+        let package_name = self.extract_name_from_content(&content, &cmake_path)?;
+        let re = Regex::new(&format!(
+            r"(?is)target_link_libraries\s*\(\s*{}\s+([^\)]*)\)",
+            regex::escape(&package_name)
+        ))
+        .map_err(|e| ResolveError::ParseError {
+            path: cmake_path.clone(),
+            reason: format!("Invalid regex: {e}"),
+        })?;
+
+        Ok(re
+            .captures_iter(&content)
+            .filter_map(|captures| captures.get(1))
+            .flat_map(|dependencies| {
+                dependencies
+                    .as_str()
+                    .split_whitespace()
+                    .map(|dependency| dependency.trim_matches(['\'', '"']))
+                    .filter(|dependency| !matches!(*dependency, "PUBLIC" | "PRIVATE" | "INTERFACE"))
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect())
+    }
+
     /// Extract version from CMakeLists.txt content
     fn extract_version_from_content(
         &self,
@@ -173,9 +227,7 @@ impl Resolver for CppResolver {
             return Ok(vec![]);
         }
 
-        // C++ projects typically don't have workspace concept like Rust/Node.js
-        // So we just resolve the single package at root
-        let package = self.resolve(
+        let root_package = self.resolve(
             root,
             &PackageConfig {
                 path: ".".into(),
@@ -185,7 +237,21 @@ impl Resolver for CppResolver {
             },
         )?;
 
-        Ok(vec![package])
+        let mut packages = vec![root_package];
+        for member in self.direct_workspace_members(root)? {
+            let relative_path = pathdiff::diff_paths(&member, root).unwrap_or(member);
+            packages.push(self.resolve(
+                root,
+                &PackageConfig {
+                    path: relative_path,
+                    resolver: ResolverType::Cpp,
+                    channel: ReleaseChannel::Stable,
+                    assets: vec![],
+                },
+            )?);
+        }
+
+        Ok(packages)
     }
 
     fn bump(
@@ -218,11 +284,39 @@ impl Resolver for CppResolver {
 
     fn sort_packages(
         &mut self,
-        _root: &Path,
-        _packages: &mut Vec<(String, PackageConfig)>,
+        root: &Path,
+        packages: &mut Vec<(String, PackageConfig)>,
     ) -> Result<(), ResolveError> {
-        // C++ projects don't typically have internal package dependencies
-        // that need sorting, so this is a no-op
+        let dependencies = packages
+            .iter()
+            .filter(|(_, config)| config.resolver == ResolverType::Cpp)
+            .try_fold(HashMap::new(), |mut dependencies, (name, config)| {
+                dependencies.insert(name.clone(), self.internal_dependencies(root, config)?);
+                Ok::<_, ResolveError>(dependencies)
+            })?;
+
+        packages.sort_by(|(left_name, left_config), (right_name, right_config)| {
+            if left_config.resolver == ResolverType::Cpp
+                && right_config.resolver == ResolverType::Cpp
+                && let (Some(left_dependencies), Some(right_dependencies)) =
+                    (dependencies.get(left_name), dependencies.get(right_name))
+            {
+                if left_dependencies
+                    .iter()
+                    .any(|dependency| dependency == right_name)
+                {
+                    return std::cmp::Ordering::Greater;
+                }
+                if right_dependencies
+                    .iter()
+                    .any(|dependency| dependency == left_name)
+                {
+                    return std::cmp::Ordering::Less;
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+
         Ok(())
     }
 

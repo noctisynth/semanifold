@@ -140,6 +140,45 @@ fn cpp_manifest_parsing_matches_snapshot() {
 }
 
 #[test]
+fn cpp_workspace_fixture_discovers_members_and_orders_dependencies() {
+    let root = temp_dir("cpp-workspace");
+    copy_fixture("cpp/workspace.CMakeLists.txt", &root.join("CMakeLists.txt"));
+    copy_fixture(
+        "cpp/core.CMakeLists.txt",
+        &root.join("libraries/core/CMakeLists.txt"),
+    );
+    copy_fixture(
+        "cpp/app.CMakeLists.txt",
+        &root.join("applications/app/CMakeLists.txt"),
+    );
+
+    assert_snapshot!(
+        "cpp_workspace_manifest_parsing",
+        render_packages(CppResolver.resolve_all(&root).unwrap())
+    );
+
+    let mut packages = vec![
+        (
+            "app".to_string(),
+            config("applications/app", ResolverType::Cpp),
+        ),
+        (
+            "core".to_string(),
+            config("libraries/core", ResolverType::Cpp),
+        ),
+    ];
+    CppResolver.sort_packages(&root, &mut packages).unwrap();
+    assert_eq!(
+        packages
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>(),
+        vec!["core", "app"]
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn rust_manifest_rewrite_matches_snapshot() {
     let root = temp_dir("rust-golden");
     let manifest = root.join("crates/app/Cargo.toml");

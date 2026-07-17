@@ -31,13 +31,14 @@
 - [x] 建立 Node.js fixture：单包、npm workspace、pnpm workspace、dependencies、peerDependencies
 - [x] 建立 Python fixture：PEP 621、Poetry、Hatch、setup.cfg、常见 monorepo 目录
 - [x] 建立 C++ fixture：CMakeLists.txt、vcpkg.json
+- [x] C++ 支持根 CMake workspace 的直接 `add_subdirectory` 成员发现与 `target_link_libraries` 内部依赖排序
 - [x] 为 manifest 解析结果建立 snapshot/golden tests
 - [x] 为版本重写后的完整 manifest 建立 golden tests
 - [x] 确保与版本无关的字段和格式不会被破坏
 
 ### 阶段完成条件
 
-- [ ] 四个生态均至少覆盖单包、工作区发现、内部依赖和版本重写
+- [x] 四个生态均至少覆盖单包、工作区发现、内部依赖和版本重写
 - [ ] 现有 CLI 核心行为具备可回归的基线
 
 ## 阶段 1：引入 `semifold-core`

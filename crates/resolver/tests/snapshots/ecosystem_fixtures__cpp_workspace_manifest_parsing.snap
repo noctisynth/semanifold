@@ -1,0 +1,18 @@
+---
+source: crates/resolver/tests/ecosystem_fixtures.rs
+expression: render_packages(CppResolver.resolve_all(&root).unwrap())
+---
+name = app
+version = 1.0.0
+path = applications/app
+private = false
+
+name = core
+version = 1.0.0
+path = libraries/core
+private = false
+
+name = root
+version = 1.0.0
+path = .
+private = false

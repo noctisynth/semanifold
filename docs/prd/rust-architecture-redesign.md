@@ -412,6 +412,18 @@ Adapter 不可以：
 - 访问 registry 或 GitHub；
 - 处理 dry-run。
 
+#### C++ workspace 与内部依赖（首版）
+
+阶段 0 为 CMake 项目采用可静态分析的最小规则，作为后续 `WorkspaceGraph` 的 fixture 基线：
+
+- 工作区根为包含 `project(... VERSION ...)` 的根 `CMakeLists.txt`；
+- 根文件中每个字面量 `add_subdirectory(path)` 声明一个直接成员；成员目录包含带版本的 `project(...)` 时，根项目与该成员均被发现为 package；
+- 不解析变量、generator expression、下载或运行时生成的子目录，嵌套 `add_subdirectory` 留待 adapter 迁移阶段扩展；
+- 当成员项目的 `CMakeLists.txt` 以自身 `project` 名称作为第一个参数调用 `target_link_libraries(...)`，且后续参数中出现同一工作区内另一个 `project` 名称时，建立该内部依赖边；`PUBLIC`、`PRIVATE` 与 `INTERFACE` 在阶段 0 均只影响排序，不改变版本传播；
+- 未匹配到上述静态形式的 CMake target 关系不推导为内部依赖，用户可在后续的可选 `depends-on` 配置中显式声明。
+
+该规则只用于发现和依赖排序；版本写入、发布传播和跨生态依赖仍由后续 `WorkspaceGraph` 与 `ReleasePlanner` 定义。
+
 ### 7.3 跨生态依赖
 
 某些跨生态依赖无法从 manifest 自动推导，例如 Node.js 包使用本地 Rust binding 产物。因此配置需要提供可选显式边：

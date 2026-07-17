@@ -16,7 +16,7 @@ pub(crate) enum Commands {
     Commit(commit::Commit),
     #[command(about = t!("cli.commands.init"))]
     Init(init::Init),
-    #[command(about = "Migrate and maintain Semifold configuration")]
+    #[command(about = t!("cli.commands.config"))]
     Config(config::Config),
     #[command(about = t!("cli.commands.version"))]
     Version(version::Version),
@@ -26,7 +26,7 @@ pub(crate) enum Commands {
     CI(ci::CI),
     #[command(about = t!("cli.commands.status"))]
     Status(status::Status),
-    #[command(about = "Start MCP server")]
+    #[command(about = t!("cli.commands.mcp"))]
     Mcp(mcp::McpCommand),
 }
 

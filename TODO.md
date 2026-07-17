@@ -97,6 +97,9 @@
 
 - [x] 新增 `smif config migrate`
 - [x] 新增 `smif config migrate --check`
+- [x] 新增 `smif config channel set <channel> --package <PackageId>` 与 `--all`
+- [x] 新增 `smif config channel clear --package <PackageId>` 与 `--all`
+- [x] 支持 `smif config channel ... --check`
 - [ ] 新增 `smif config sync`
 - [ ] 新增 `smif config sync --check`
 - [ ] 新增 `smif config sync --prune`
@@ -154,6 +157,8 @@
 
 - [x] `config migrate --check` 检测到旧字段时返回非零且不写文件
 - [x] 连续执行两次 `config migrate` 时第二次无 diff
+- [x] channel set、clear 与 `--all` 保留目标 table 的其他字段，并且重复执行无 diff
+- [x] channel `--check` 检测到状态不匹配时返回非零且不写文件
 - [ ] 新增 package 只产生最小 TOML diff
 - [ ] 缺失 package 默认保留
 - [ ] `--prune` 显式删除缺失 package

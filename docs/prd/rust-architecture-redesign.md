@@ -672,6 +672,23 @@ smif config migrate --check
 
 该命令是格式迁移工具，不替代 `config sync`，也不自动将 stable package 显式改写为 `channel = "stable"`。
 
+### 13.2.2 发布通道管理
+
+为显式管理已配置 package 的发布通道，提供以下命令：
+
+```text
+smif config channel set alpha --package semifold
+smif config channel set alpha --package semifold --package semifold-resolver
+smif config channel set alpha --all
+smif config channel clear --package semifold
+```
+
+`set` 只接受非空的命名通道；`stable` 是保留值，恢复 stable 必须使用 `clear`。命令必须指定一个或多个 `--package <PackageId>`，或显式指定 `--all`，两者不能同时使用。未知 package 是错误，避免因拼写失误产生无效配置。
+
+`set` 仅修改目标 package 的 `channel` 字段。`clear` 删除该字段，使 package 回到缺省 stable 状态。二者都使用 `toml_edit::DocumentMut` 与原子写回，保留目标 table 的其他字段、注释和所有非目标 package。无实际变化时不得写入文件。
+
+全局 `--dry-run` 只输出将修改的 package 而不写入；`--check` 断言目标已处于请求状态，存在需要修改的 package 时返回非零。JSON 配置不受支持。
+
 ### 13.3 同步计划
 
 与 release 流程相同，配置更新也采用 Plan/Validate/Apply：
@@ -1027,6 +1044,9 @@ fixtures/rust/
 - `config migrate` 将 legacy `version-mode` 转换为 `channel`，保留无关字段与注释；
 - `config migrate --check` 在存在迁移项时不写文件并返回非零；
 - 同时存在 `channel` 与 `version-mode` 时迁移拒绝写入。
+- `config channel set` 与 `clear` 仅修改指定 package 的 `channel` 字段，并保留 table 的其他内容；
+- `config channel --check` 在目标 channel 不匹配时不写入并返回非零；
+- `config channel --all` 显式应用至每个已配置 package，重复执行无 diff。
 
 ## 17. 迁移计划
 

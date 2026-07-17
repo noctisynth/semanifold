@@ -133,6 +133,106 @@ pub fn get_bump_level(changesets: &[Changeset], package_name: &str) -> BumpLevel
     level
 }
 
+/// Replaces a root-object JSON string field without reformatting unrelated content.
+pub fn replace_root_json_string_field(
+    content: &str,
+    field: &str,
+    replacement: &str,
+) -> Option<String> {
+    let bytes = content.as_bytes();
+    let mut index = skip_json_whitespace(bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return None;
+    }
+    index += 1;
+
+    loop {
+        index = skip_json_whitespace(bytes, index);
+        if bytes.get(index) == Some(&b'}') {
+            return None;
+        }
+        if bytes.get(index) != Some(&b'"') {
+            return None;
+        }
+
+        let key_start = index;
+        let key_end = scan_json_string(bytes, index)?;
+        let key = serde_json::from_str::<String>(&content[key_start..key_end]).ok()?;
+        index = skip_json_whitespace(bytes, key_end);
+        if bytes.get(index) != Some(&b':') {
+            return None;
+        }
+        index = skip_json_whitespace(bytes, index + 1);
+
+        if key == field && bytes.get(index) == Some(&b'"') {
+            let value_end = scan_json_string(bytes, index)?;
+            let replacement = serde_json::to_string(replacement).ok()?;
+            return Some(format!(
+                "{}{}{}",
+                &content[..index],
+                replacement,
+                &content[value_end..]
+            ));
+        }
+
+        index = scan_json_value(bytes, index)?;
+        index = skip_json_whitespace(bytes, index);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => return None,
+            _ => return None,
+        }
+    }
+}
+
+fn skip_json_whitespace(bytes: &[u8], mut index: usize) -> usize {
+    while bytes
+        .get(index)
+        .is_some_and(|byte| matches!(byte, b' ' | b'\n' | b'\r' | b'\t'))
+    {
+        index += 1;
+    }
+    index
+}
+
+fn scan_json_string(bytes: &[u8], start: usize) -> Option<usize> {
+    if bytes.get(start) != Some(&b'"') {
+        return None;
+    }
+
+    let mut index = start + 1;
+    while let Some(byte) = bytes.get(index) {
+        match byte {
+            b'\\' => index += 2,
+            b'"' => return Some(index + 1),
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+fn scan_json_value(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut index = start;
+    let mut depth = 0usize;
+
+    while let Some(byte) = bytes.get(index) {
+        match byte {
+            b'"' => index = scan_json_string(bytes, index)?,
+            b'{' | b'[' => {
+                depth += 1;
+                index += 1;
+            }
+            b'}' | b']' if depth > 0 => {
+                depth -= 1;
+                index += 1;
+            }
+            b',' | b'}' if depth == 0 => return Some(index),
+            _ => index += 1,
+        }
+    }
+    None
+}
+
 pub fn run_command(command: &CommandConfig, cwd: &Path) -> Result<(), ResolveError> {
     let mut cmd = std::process::Command::new(&command.command);
     if let Some(args) = &command.args {
@@ -163,7 +263,7 @@ mod tests {
         config::ReleaseChannel,
     };
 
-    use super::{bump_version, get_bump_level};
+    use super::{bump_version, get_bump_level, replace_root_json_string_field};
 
     #[test]
     fn bumps_semantic_versions() {
@@ -260,6 +360,31 @@ mod tests {
         assert_eq!(
             get_bump_level(&[Changeset::new("other".to_string(), root)], "unknown"),
             BumpLevel::Unchanged
+        );
+    }
+
+    #[test]
+    fn replaces_only_the_root_json_string_field_without_reformatting() {
+        let content = concat!(
+            "{\n",
+            "  \"metadata\": { \"version\": \"unchanged\" },\n",
+            "  \"version\" : \"1.0.0\",\n",
+            "  \"custom\": [1, 2]\n",
+            "}\n"
+        );
+
+        assert_eq!(
+            replace_root_json_string_field(content, "version", "1.0.1"),
+            Some(
+                concat!(
+                    "{\n",
+                    "  \"metadata\": { \"version\": \"unchanged\" },\n",
+                    "  \"version\" : \"1.0.1\",\n",
+                    "  \"custom\": [1, 2]\n",
+                    "}\n"
+                )
+                .to_string()
+            )
         );
     }
 }

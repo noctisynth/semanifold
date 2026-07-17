@@ -108,29 +108,26 @@ impl CppResolver {
         }
 
         let content = std::fs::read_to_string(&vcpkg_path)?;
-        let mut vcpkg_json: serde_json::Value =
+        let vcpkg_json: serde_json::Value =
             serde_json::from_str(&content).map_err(|e| ResolveError::ParseError {
                 path: vcpkg_path.clone(),
                 reason: e.to_string(),
             })?;
 
-        if let Some(obj) = vcpkg_json.as_object_mut() {
-            obj.insert(
-                "version".to_string(),
-                serde_json::Value::String(new_version.to_string()),
-            );
-        } else {
+        if vcpkg_json
+            .as_object()
+            .and_then(|object| object.get("version"))
+            .filter(|version| version.is_string())
+            .is_none()
+        {
             return Err(ResolveError::ParseError {
                 path: vcpkg_path.clone(),
                 reason: "vcpkg.json root must be an object".to_string(),
             });
         }
-
         let updated_content =
-            serde_json::to_string_pretty(&vcpkg_json).map_err(|e| ResolveError::ParseError {
-                path: vcpkg_path.clone(),
-                reason: e.to_string(),
-            })?;
+            utils::replace_root_json_string_field(&content, "version", new_version)
+                .expect("validated root version field must be replaceable");
 
         std::fs::write(&vcpkg_path, updated_content)?;
         log::info!("Updated {:?} to version {}", vcpkg_path, new_version);

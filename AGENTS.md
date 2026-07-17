@@ -29,6 +29,7 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 
 - 完成会影响任一已发布 package 的功能、修复、重构、依赖或测试能力变更后，必须在 `.changes/` 生成对应 changeset；纯文档或不影响 package 的维护工作除外。
 - changeset 必须使用 `.changes/config.toml` 中已配置的 package 名称，并选择与变更性质一致的 bump level 和 tag。
+- 默认一个独立任务对应一个独立 changeset；同一分支上的后续独立任务必须新建 changeset，不得修改、合并或复用已有任务的 changeset。只有用户明确要求将多个改动视为同一任务时，才可共享 changeset。
 - 生成 changeset 后，运行 `cargo run -p semifold --bin smif -- status`，确认其能被解析且发布计划符合预期。
 
 ## 国际化（i18n）

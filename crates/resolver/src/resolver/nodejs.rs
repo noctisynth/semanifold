@@ -177,23 +177,20 @@ impl Resolver for NodejsResolver {
         let package_json_path = root.join(&package.path).join("package.json");
         let package_json_str = std::fs::read_to_string(&package_json_path)?;
 
-        let mut package_json: serde_json::Value =
+        let package_json: serde_json::Value =
             serde_json::from_str(&package_json_str).map_err(|e| ResolveError::ParseError {
                 path: package_json_path.clone(),
                 reason: e.to_string(),
             })?;
 
-        if let Some(obj) = package_json.as_object_mut()
-            && let Some(version) = obj.get_mut("version")
-        {
-            *version = serde_json::Value::String(bumped_version.clone());
-        }
-
-        let package_json_content =
-            serde_json::to_string_pretty(&package_json).map_err(|e| ResolveError::ParseError {
-                path: package_json_path.clone(),
-                reason: e.to_string(),
-            })?;
+        let package_json_content = package_json
+            .as_object()
+            .and_then(|object| object.get("version"))
+            .filter(|version| version.is_string())
+            .and_then(|_| {
+                utils::replace_root_json_string_field(&package_json_str, "version", &bumped_version)
+            })
+            .unwrap_or(package_json_str);
         if !ctx.dry_run {
             std::fs::write(package_json_path, package_json_content)?;
         } else {

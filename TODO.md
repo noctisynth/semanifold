@@ -33,7 +33,7 @@
 - [x] 建立 C++ fixture：CMakeLists.txt、vcpkg.json
 - [x] 为 manifest 解析结果建立 snapshot/golden tests
 - [x] 为版本重写后的完整 manifest 建立 golden tests
-- [ ] 确保与版本无关的字段和格式不会被破坏
+- [x] 确保与版本无关的字段和格式不会被破坏
 
 ### 阶段完成条件
 

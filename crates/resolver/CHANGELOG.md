@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.0-alpha.1
+
+### New Features
+
+- [`ea7c693`](https://github.com/noctisynth/semifold/commit/ea7c693f4b0c3f9e6c44200bebc13f3febedf159): Discover direct CMake workspace members and order internal target dependencies.
+
+### Bug Fixes
+
+- [`945657b`](https://github.com/noctisynth/semifold/commit/945657baa2b2dcae3bad60f59cba2d1ab1d66568): Only release Rust runtime dependents when their internal dependency version constraints are no longer satisfied.
+- [`009d95d`](https://github.com/noctisynth/semifold/commit/009d95d59292f6db4cf7cf8bc2f486594cfeaa44): Preserve package.json and vcpkg.json formatting when updating package versions.
+
+### Chores
+
+- [`1860a03`](https://github.com/noctisynth/semifold/commit/1860a0304c443bfafdeeca349fbab3720c0ecd24): Add ecosystem manifest fixtures and snapshots for resolver regression coverage.
+
 ## v0.4.0-alpha.0
 
 ### Bug Fixes

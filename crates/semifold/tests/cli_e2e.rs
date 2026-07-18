@@ -41,6 +41,11 @@ fn run_smif(root: &Path, arguments: &[&str]) -> Output {
         .current_dir(root)
         .env("LC_ALL", "C")
         .env("LANG", "C")
+        .env_remove("GITHUB_ACTIONS")
+        .env_remove("GITHUB_EVENT_PATH")
+        .env_remove("GITHUB_REPOSITORY")
+        .env_remove("GITHUB_SERVER_URL")
+        .env_remove("GITHUB_TOKEN")
         .output()
         .unwrap()
 }

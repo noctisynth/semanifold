@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0-alpha.1
+
+### Chores
+
+- [`38d09ea`](https://github.com/noctisynth/semifold/commit/38d09ea43b7f7942307b3caabdae6a71e4279fcd): Add end-to-end CLI regression coverage for release planning and config updates.
+
+### Bug Fixes
+
+- [`b1bbd07`](https://github.com/noctisynth/semifold/commit/b1bbd0770cff5e1c998704761f34eabff0e7c997): Keep CLI end-to-end tests isolated from host GitHub Actions environment variables.
+- [`945657b`](https://github.com/noctisynth/semifold/commit/945657baa2b2dcae3bad60f59cba2d1ab1d66568): Only release Rust runtime dependents when their internal dependency version constraints are no longer satisfied.
+
 ## v0.3.0-alpha.0
 
 ### Bug Fixes

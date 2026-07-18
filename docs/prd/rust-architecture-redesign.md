@@ -188,6 +188,15 @@ pub struct Dependency {
     pub kind: DependencyKind,
     pub requirement: Option<String>,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DependencyKind {
+    Runtime,
+    Development,
+    Build,
+    Optional,
+    Peer,
+}
 ```
 
 `PackageId` 是 Semifold 配置和依赖图中的稳定身份，不应继续在所有层使用无约束 `String`。加载时应验证配置键、manifest 包名和依赖引用的关系。
@@ -211,6 +220,8 @@ pub struct WorkspaceGraph {
 - 为版本传播和发布顺序提供统一输入。
 
 拓扑排序由 core 一次完成，不再由各生态 adapter 修改同一个 `Vec`。对于无依赖关系的节点，使用 `PackageId` 排序保证输出稳定。
+
+首个切片以 `WorkspaceGraph::new(Vec<PackageSnapshot>)` 接收已发现的 package。构建时仅将指向图内 package 的依赖作为内部依赖边；引用未知 package 时返回包含依赖方与被引用 `PackageId` 的领域错误。重复 `PackageId` 同样返回领域错误。`topological_order()` 返回“依赖在前、依赖方在后”的稳定顺序；若存在环，错误携带首尾相连的完整 `PackageId` 环路，便于后续 CLI 渲染诊断。
 
 ### 6.3 `ReleasePlan`
 

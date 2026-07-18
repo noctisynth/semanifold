@@ -46,24 +46,24 @@
 
 ### Crate 与基础类型
 
-- [ ] 创建 `crates/semifold-core`
-- [ ] 定义 `PackageId` newtype
-- [ ] 定义 `Ecosystem`
-- [ ] 定义 `PackageSnapshot`
-- [ ] 定义 `Dependency` 和 `DependencyKind`
+- [x] 创建 `crates/semifold-core`
+- [x] 定义 `PackageId` newtype
+- [x] 定义 `Ecosystem`
+- [x] 定义 `PackageSnapshot`
+- [x] 定义 `Dependency` 和 `DependencyKind`
 - [ ] 定义 `ChangesetId`、`ReleaseReason` 和 `PlanWarning`
 - [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
 - [ ] 确保 core 不依赖 `git2`、`reqwest`、`octocrab`、`clap` 或 `inquire`
 
 ### Workspace graph
 
-- [ ] 实现 `WorkspaceGraph`
-- [ ] 验证重复 `PackageId`
-- [ ] 验证未知内部依赖
-- [ ] 实现确定性拓扑排序
-- [ ] 对无依赖节点使用稳定排序
-- [ ] 检测依赖环并返回完整环路
-- [ ] 为多层依赖、菱形依赖、无关节点和依赖环建立单元测试
+- [x] 实现 `WorkspaceGraph`
+- [x] 验证重复 `PackageId`
+- [x] 验证未知内部依赖
+- [x] 实现确定性拓扑排序
+- [x] 对无依赖节点使用稳定排序
+- [x] 检测依赖环并返回完整环路
+- [x] 为多层依赖、菱形依赖、无关节点和依赖环建立单元测试
 - [ ] 为单包、入口包、lockstep、静态分支和多 release unit 建立规划测试
 
 ### Release planner

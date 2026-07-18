@@ -25,6 +25,11 @@ path = "crates/changelog"
 resolver = "rust"
 channel = "alpha"
 
+[packages.semifold-core]
+path = "crates/semifold-core"
+resolver = "rust"
+channel = "alpha"
+
 [packages.semifold-resolver]
 path = "crates/resolver"
 resolver = "rust"

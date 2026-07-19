@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0-alpha.3
+
+### New Features
+
+- [`6bd8cac`](https://github.com/noctisynth/semifold/commit/6bd8cac90a389b81aa9eb5ef3a1b7e38fbe44cfb): Render status and CI pull request comments from the immutable core release plan.
+
 ## v0.3.0-alpha.2
 
 ### New Features

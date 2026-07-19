@@ -12,8 +12,8 @@ pub mod workspace;
 
 pub use changeset::{BumpLevel, ChangesetId, PlanWarning, ReleaseReason};
 pub use config_sync::{
-    ConfigConflict, ConfigSyncPlan, ConfigSyncPlanner, ConfiguredPackage, DiscoveredPackage,
-    PackageMove, PackageRename,
+    ChangesetReference, ConfigConflict, ConfigSyncPlan, ConfigSyncPlanner, ConfigSyncWarning,
+    ConfiguredPackage, DiscoveredPackage, PackageMove, PackageRename,
 };
 pub use dependency::{Dependency, DependencyKind};
 pub use file_edit::{EditSource, FileEdit, FileHash};

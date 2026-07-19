@@ -112,7 +112,7 @@
 - [x] 使用 package identity 匹配路径移动
 - [x] 多义匹配时停止写入并报告冲突
 - [x] Resolver 变化时要求显式处理，不自动覆盖
-- [ ] Rename 时检查现有 changeset 对旧包名的引用并警告
+- [x] Rename 时检查现有 changeset 对旧包名的引用并警告
 
 ### TOML 增量编辑
 
@@ -144,7 +144,7 @@
 - [x] 抽取统一 package discovery 服务
 - [x] 抽取 package path 规范化
 - [x] 抽取默认 `PackageConfig` 生成
-- [ ] 让 `init` 和 `config sync` 使用相同发现逻辑
+- [x] 让 `init` 和 `config sync` 使用相同发现逻辑
 - [ ] 将 `init --force` 从日常工作区同步路径中移除
 
 ### 测试

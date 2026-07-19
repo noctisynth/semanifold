@@ -798,6 +798,7 @@ pub struct ConfigSyncPlan {
     pub renamed: Vec<PackageRename>,
     pub moved: Vec<PackageMove>,
     pub conflicts: Vec<ConfigConflict>,
+    pub warnings: Vec<ConfigSyncWarning>,
 }
 ```
 
@@ -840,11 +841,24 @@ pub enum ConfigConflict {
         discovered: DiscoveredPackage,
     },
 }
+
+pub struct ChangesetReference {
+    pub changeset: ChangesetId,
+    pub packages: BTreeSet<PackageId>,
+}
+
+pub enum ConfigSyncWarning {
+    ChangesetReferencesRenamedPackage {
+        changeset: ChangesetId,
+        from: PackageId,
+        to: PackageId,
+    },
+}
 ```
 
-`ConfigSyncPlanner` 是纯函数式领域服务，接收 config 路径、已配置 package 快照和完整 discovery 快照。package path 在进入 planner 前必须已转换为相对项目根目录的规范化 UTF-8 路径；路径规范化失败属于应用层输入错误，不伪装为同步冲突。planner 不读取文件、不决定 `--prune`，也不修改配置。
+`ConfigSyncPlanner` 是纯函数式领域服务，接收 config 路径、已配置 package 快照、完整 discovery 快照和未消费 changeset 引用。package path 在进入 planner 前必须已转换为相对项目根目录的规范化 UTF-8 路径；路径规范化失败属于应用层输入错误，不伪装为同步冲突。planner 不读取文件、不决定 `--prune`，也不修改配置。
 
-输出使用 `missing` 而不是 `removed`：它只表示配置项未被发现；是否删除由应用阶段结合完整扫描状态和 `--prune` 决定。所有结果按 package id、路径和生态稳定排序。同一输入无论迭代顺序如何都必须产生相同计划。
+输出使用 `missing` 而不是 `removed`：它只表示配置项未被发现；是否删除由应用阶段结合完整扫描状态和 `--prune` 决定。rename 命中旧 package id 的未消费 changeset 时生成 `ChangesetReferencesRenamedPackage` warning，但不修改 changeset。所有结果按 package id、路径、生态和 changeset id 稳定排序。同一输入无论迭代顺序如何都必须产生相同计划。
 
 匹配前先验证 discovery 建议的 `PackageId` 唯一；同一 id 对应多个发现结果时分类为 `AmbiguousMatch`。随后严格分两轮匹配：第一轮匹配相同 ecosystem 与相同规范化 path，package id 不同时分类为 rename；第二轮在剩余项中匹配相同 `PackageId` 与相同 ecosystem，path 不同时分类为 move。相同路径或相同 `PackageId` 的 ecosystem 改变分类为 `ResolverChanged`。任一轮存在多对一或一对多候选时，将全部相关项分类为 `AmbiguousMatch`，不得同时把它们报告为 added 或 missing。剩余 discovery 项为 added，剩余 config 项为 missing。
 
@@ -1060,6 +1074,8 @@ impl PackageDiscoveryService {
 resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId`，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复 `PackageId` 保留在发现快照中，由 `ConfigSyncPlanner` 产生多义冲突，`init` 在无法生成唯一 package table key 时停止。
 
 一次 discovery 只有“完整成功”或“失败”两种结果：任一所选 resolver 的 glob 遍历、manifest 读取、package 解析或路径规范化失败时，整个调用返回结构化错误，不得返回看似完整的部分快照。未选择的 resolver 不属于扫描范围；应用层据此禁止在部分 resolver 模式下 prune 其他生态的配置。现有 `resolve_all` 中记录 warning 后跳过损坏 package 的路径必须改为传播错误，避免把扫描失败误判为 package 已删除。
+
+`plan_config_sync` 的首个应用层桥接默认选择配置中已启用的 resolver，将这些生态的 `[packages]` table 转换为 `ConfiguredPackage`，调用统一 discovery，并把未消费 changeset 转换为 `ChangesetReference` 后交给 `ConfigSyncPlanner`。未被本次 resolver 范围覆盖的配置项不得进入 `missing`。后续 CLI 的显式 `--resolver` 只改变该选择范围，不复制快照转换或匹配逻辑。
 
 区别仅在于：
 

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use camino::Utf8PathBuf;
 use serde::Serialize;
 
-use crate::{Ecosystem, PackageId};
+use crate::{ChangesetId, Ecosystem, PackageId};
 
 /// One package table read from the current Semifold configuration.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -50,6 +50,22 @@ pub enum ConfigConflict {
     },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ChangesetReference {
+    pub changeset: ChangesetId,
+    pub packages: BTreeSet<PackageId>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ConfigSyncWarning {
+    ChangesetReferencesRenamedPackage {
+        changeset: ChangesetId,
+        from: PackageId,
+        to: PackageId,
+    },
+}
+
 /// Deterministic, side-effect-free description of configuration drift.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ConfigSyncPlan {
@@ -59,6 +75,7 @@ pub struct ConfigSyncPlan {
     pub renamed: Vec<PackageRename>,
     pub moved: Vec<PackageMove>,
     pub conflicts: Vec<ConfigConflict>,
+    pub warnings: Vec<ConfigSyncWarning>,
 }
 
 impl ConfigSyncPlan {
@@ -81,6 +98,7 @@ impl ConfigSyncPlanner {
         config_path: Utf8PathBuf,
         configured: &[ConfiguredPackage],
         discovered: &[DiscoveredPackage],
+        changesets: &[ChangesetReference],
     ) -> ConfigSyncPlan {
         let mut configured = configured.to_vec();
         let mut discovered = discovered.to_vec();
@@ -281,6 +299,23 @@ impl ConfigSyncPlanner {
         renamed.sort();
         moved.sort();
         matches.conflicts.sort();
+        let warnings = renamed
+            .iter()
+            .flat_map(|rename| {
+                changesets
+                    .iter()
+                    .filter(|changeset| changeset.packages.contains(&rename.from))
+                    .map(
+                        |changeset| ConfigSyncWarning::ChangesetReferencesRenamedPackage {
+                            changeset: changeset.changeset.clone(),
+                            from: rename.from.clone(),
+                            to: rename.to.clone(),
+                        },
+                    )
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
 
         ConfigSyncPlan {
             config_path,
@@ -289,6 +324,7 @@ impl ConfigSyncPlanner {
             renamed,
             moved,
             conflicts: matches.conflicts,
+            warnings,
         }
     }
 }
@@ -348,6 +384,7 @@ mod tests {
             Utf8PathBuf::from(".changes/config.toml"),
             configured,
             discovered,
+            &[],
         )
     }
 
@@ -480,5 +517,29 @@ mod tests {
         let found = discovered("app", Ecosystem::Rust, "crates/app");
 
         assert!(!plan(&[current], &[found]).has_drift());
+    }
+
+    #[test]
+    fn warns_when_pending_changesets_reference_a_renamed_package() {
+        let changesets = [ChangesetReference {
+            changeset: ChangesetId::new("pending"),
+            packages: BTreeSet::from([PackageId::new("old-name")]),
+        }];
+
+        let plan = ConfigSyncPlanner::plan(
+            Utf8PathBuf::from(".changes/config.toml"),
+            &[configured("old-name", Ecosystem::Rust, "crates/app")],
+            &[discovered("new-name", Ecosystem::Rust, "crates/app")],
+            &changesets,
+        );
+
+        assert_eq!(
+            plan.warnings,
+            [ConfigSyncWarning::ChangesetReferencesRenamedPackage {
+                changeset: ChangesetId::new("pending"),
+                from: PackageId::new("old-name"),
+                to: PackageId::new("new-name"),
+            }]
+        );
     }
 }

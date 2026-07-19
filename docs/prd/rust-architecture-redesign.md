@@ -277,6 +277,35 @@ pub enum PlanWarning {
 
 `ReleasePlan` 只通过验证构造函数创建并提供只读访问器：每个发布 package 必须在 `versions` 中存在且版本等于 `next_version`；`order` 必须无重复地包含所有且仅包含发布 package；`consumed_changesets` 不得重复。违反这些条件返回领域错误。集合顺序由 planner 按 `PackageId`、`ChangesetId` 和 `WorkspaceGraph` 拓扑顺序确定，使序列化结果稳定。同一 changeset 或依赖传播原因在一个 package 上不得重复记录。
 
+纯 planner 接收已解析的领域输入，不读取 changeset 文件、config 或 manifest：
+
+```rust
+pub struct ChangesetInput {
+    pub id: ChangesetId,
+    pub releases: BTreeMap<PackageId, BumpLevel>,
+}
+
+pub struct PackageReleasePolicy {
+    pub channel: ReleaseChannel,
+    pub propagating_dependencies:
+        BTreeMap<PackageId, Option<semver::VersionReq>>,
+}
+
+pub struct ReleasePlanner;
+
+impl ReleasePlanner {
+    pub fn plan(
+        graph: &WorkspaceGraph,
+        changesets: &[ChangesetInput],
+        policies: &BTreeMap<PackageId, PackageReleasePolicy>,
+    ) -> Result<ReleasePlan, ReleasePlannerError>;
+}
+```
+
+`propagating_dependencies` 是 adapter/engine 根据生态规则筛选并解析后的传播策略，而不是 manifest 所有依赖的副本。首版只为 Rust runtime dependency 提供规则；dev、build、peer、optional 和尚未决定传播语义的生态依赖不加入该集合。`Some(requirement)` 在依赖的新版本仍满足约束时不传播；`None` 表示没有可验证的发布约束，依赖发生发布时传播 patch。
+
+planner 合并同一 package 的最高 bump，并为每个贡献 changeset 保留独立原因。依赖约束失效时，将尚未发布的依赖方加入 patch 发布闭包；依赖方已有显式发布时保留其更高 bump，同时追加依赖传播原因。完整闭包计算后一次生成所有 package 的 `VersionMap`，再按 `WorkspaceGraph` 拓扑顺序生成发布顺序。
+
 changeset 只能在 manifest、changelog 和 post-version 命令均成功后删除。post-version 失败时必须保留 changeset；后续阶段再将整个流程收敛为原子 `Plan → Validate → Apply`。
 
 `status` 只渲染该计划，`version` 验证并应用该计划。

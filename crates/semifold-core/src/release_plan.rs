@@ -117,6 +117,11 @@ impl ReleasePlan {
     }
 
     #[must_use]
+    pub fn package(&self, id: &PackageId) -> Option<&PackageRelease> {
+        self.packages.iter().find(|package| &package.id == id)
+    }
+
+    #[must_use]
     pub fn versions(&self) -> &VersionMap {
         &self.versions
     }

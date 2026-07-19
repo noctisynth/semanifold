@@ -70,10 +70,10 @@
 
 - [x] 定义不可变、可序列化的 `ReleasePlan`
 - [x] 定义 `PackageRelease` 和完整 `VersionMap`
-- [ ] 实现纯 `ReleasePlanner`
-- [ ] 合并多个 changeset 的发布原因和 bump level
-- [ ] 在写文件前计算所有包的下一版本
-- [ ] 明确 stable / 命名版本通道与依赖传播规则
+- [x] 实现纯 `ReleasePlanner`
+- [x] 合并多个 changeset 的发布原因和 bump level
+- [x] 在写文件前计算所有包的下一版本
+- [x] 明确 stable / 命名版本通道与依赖传播规则
 - [ ] 为 `Package`、`SharedVersion`、`Static` 和 `Fingerprint` identity 建立解析与校验规则
 - [ ] 单包仓库自动形成 package identity release unit
 - [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
@@ -90,7 +90,7 @@
 ### 阶段完成条件
 
 - [ ] `status` 不再自行计算 bump
-- [ ] 相同输入始终生成相同 `ReleasePlan`
+- [x] 相同输入始终生成相同 `ReleasePlan`
 - [ ] 依赖环错误包含可读的完整路径
 
 ## 阶段 2：实现 `smif config sync`

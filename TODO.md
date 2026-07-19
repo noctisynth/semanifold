@@ -144,7 +144,7 @@
 - [x] 抽取 package path 规范化
 - [x] 抽取默认 `PackageConfig` 生成
 - [x] 让 `init` 和 `config sync` 使用相同发现逻辑
-- [ ] 将 `init --force` 从日常工作区同步路径中移除
+- [x] 将 `init --force` 从日常工作区同步路径中移除（仅保留为显式重新初始化）
 
 ### 测试
 

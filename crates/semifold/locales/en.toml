@@ -37,7 +37,7 @@ level = "Level of version bump"
 summary = "Summary of changes"
 
 [cli.init]
-already_initialized = "Semifold is already initialized. If you want to re-initialize, please use the `--force` option."
+already_initialized = "Semifold is already initialized. Use `smif config sync` for workspace package changes; use `init --force` only to re-initialize."
 not_repo_root = "Current directory is not the root of the repository."
 continue = "Continue?"
 aborted = "Aborted."
@@ -52,7 +52,7 @@ discovery_failed = "Package discovery failed: %{error}"
 [cli.init.flags]
 target = "Target directory to store changesets"
 resolvers = "Resolvers to use for workspace resolution"
-force = "Force re-initialize Semifold"
+force = "Re-initialize an existing Semifold setup; use config sync for workspace package changes"
 base_branch = "Base branch to use for release"
 release_branch = "Release branch to use for release"
 

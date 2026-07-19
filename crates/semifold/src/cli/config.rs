@@ -26,7 +26,10 @@ enum Commands {
 }
 
 #[derive(Parser, Debug)]
-struct Sync;
+struct Sync {
+    #[arg(long, help = t!("cli.config.flags.check_sync"))]
+    check: bool,
+}
 
 #[derive(Parser, Debug)]
 struct Migrate {
@@ -91,7 +94,7 @@ pub(crate) fn run(command: &Config, ctx: &Context) -> anyhow::Result<()> {
     }
 }
 
-fn sync(_: &Sync, ctx: &Context) -> anyhow::Result<()> {
+fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
     let path = toml_config_path(ctx, t!("cli.config.command_sync").as_ref())?;
     let project_root = ctx
         .repo_root
@@ -117,6 +120,13 @@ fn sync(_: &Sync, ctx: &Context) -> anyhow::Result<()> {
                     .join(", ")
             )
         );
+    }
+    if options.check {
+        if plan.has_drift() {
+            anyhow::bail!(t!("cli.config.sync_check_failed"));
+        }
+        println!("{}", t!("cli.config.sync_check_passed"));
+        return Ok(());
     }
     if ctx.dry_run {
         println!("{}", t!("cli.config.sync_dry_run"));
@@ -630,11 +640,11 @@ resolver = "rust"
         let context = sync_context(&root, false);
         let config_path = root.join(".changes/config.toml");
 
-        sync(&Sync, &context).unwrap();
+        sync(&Sync { check: false }, &context).unwrap();
         let first = fs::read_to_string(&config_path).unwrap();
         assert!(first.contains("[packages.app]\npath = \"crates/app\"\nresolver = \"rust\""));
 
-        sync(&Sync, &sync_context(&root, false)).unwrap();
+        sync(&Sync { check: false }, &sync_context(&root, false)).unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), first);
 
         fs::remove_dir_all(root).unwrap();
@@ -647,8 +657,38 @@ resolver = "rust"
         let config_path = root.join(".changes/config.toml");
         let original = fs::read_to_string(&config_path).unwrap();
 
-        sync(&Sync, &context).unwrap();
+        sync(&Sync { check: false }, &context).unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_check_reports_drift_without_writing_the_configuration() {
+        let root = temporary_sync_root("check");
+        let context = sync_context(&root, false);
+        let config_path = root.join(".changes/config.toml");
+        let original = fs::read_to_string(&config_path).unwrap();
+
+        let error = sync(&Sync { check: true }, &context).unwrap_err();
+        assert!(error.to_string().contains("out of sync"));
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_check_succeeds_when_the_configuration_is_current() {
+        let root = temporary_sync_root("check-current");
+        let config_path = root.join(".changes/config.toml");
+        sync(&Sync { check: false }, &sync_context(&root, false)).unwrap();
+
+        sync(&Sync { check: true }, &sync_context(&root, false)).unwrap();
+        assert!(
+            fs::read_to_string(&config_path)
+                .unwrap()
+                .contains("[packages.app]")
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

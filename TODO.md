@@ -97,10 +97,10 @@
 - [x] 新增 `smif config channel clear --package <PackageId>` 与 `--all`
 - [x] 支持 `smif config channel ... --check`
 - [x] 新增 `smif config sync`
-- [ ] 新增 `smif config sync --check`
+- [x] 新增 `smif config sync --check`
 - [ ] 新增 `smif config sync --prune`
 - [ ] 支持重复指定 `--resolver <type>`
-- [ ] 明确全局 `--dry-run` 与 `--check` 的不同退出语义
+- [x] 明确全局 `--dry-run` 与 `--check` 的不同退出语义
 - [ ] JSON 配置返回 `UnsupportedConfigFormat`
 
 ### 同步计划
@@ -158,14 +158,14 @@
 - [ ] `--prune` 显式删除缺失 package
 - [ ] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
 - [x] Rename 和 move 保留原 table 的注释与自定义字段
-- [ ] `--check` 检测到漂移时返回非零退出码且不写文件
+- [x] `--check` 检测到漂移时返回非零退出码且不写文件
 - [x] 连续执行两次同步时第二次无 diff
 
 ### 阶段完成条件
 
 - [ ] 工作区增删包后无需重新执行 `init`
 - [x] `config sync` 只产生最小、可审查的 TOML diff
-- [ ] CI 可以使用 `config sync --check` 检测配置漂移
+- [x] CI 可以使用 `config sync --check` 检测配置漂移
 - [x] 阶段完成前清除为分阶段接线临时添加的全部 `#[allow(dead_code)]`，并以无豁免的 Clippy 验证
 
 ## 阶段 3：统一版本修改的 Plan/Validate/Apply
@@ -354,7 +354,7 @@
 - [ ] 所有文件修改在写入前完成计划和验证
 - [ ] `--dry-run` 不产生文件、命令、网络或发布副作用
 - [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
-- [ ] `config sync --check` 可稳定用于 CI
+- [x] `config sync --check` 可稳定用于 CI
 - [ ] 连续执行配置同步和版本规划均具有幂等性
 - [ ] release branch / release PR 支持单包、lockstep、静态和多单元发布策略
 - [ ] 模板在严格模式下渲染，且不会为多包发布隐式选择 package tag

@@ -52,7 +52,6 @@
 - [x] 定义 `PackageSnapshot`
 - [x] 定义 `Dependency` 和 `DependencyKind`
 - [x] 定义 `ChangesetId`、`ReleaseReason` 和 `PlanWarning`
-- [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
 - [x] 确保 core 不依赖 `git2`、`reqwest`、`octocrab`、`clap` 或 `inquire`
 
 ### Workspace graph
@@ -64,7 +63,6 @@
 - [x] 对无依赖节点使用稳定排序
 - [x] 检测依赖环并返回完整环路
 - [x] 为多层依赖、菱形依赖、无关节点和依赖环建立单元测试
-- [ ] 为单包、入口包、lockstep、静态分支和多 release unit 建立规划测试
 
 ### Release planner
 
@@ -74,10 +72,6 @@
 - [x] 合并多个 changeset 的发布原因和 bump level
 - [x] 在写文件前计算所有包的下一版本
 - [x] 明确 stable / 命名版本通道与依赖传播规则
-- [ ] 为 `Package`、`SharedVersion`、`Static` 和 `Fingerprint` identity 建立解析与校验规则
-- [ ] 单包仓库自动形成 package identity release unit
-- [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
-- [ ] 检测 package 重复属于多个 release unit 的冲突
 - [x] 临时将现有 resolver 结果转换为 `PackageSnapshot`
 
 ### 接入 `status`
@@ -151,8 +145,6 @@
 - [ ] 抽取 package path 规范化
 - [ ] 抽取默认 `PackageConfig` 生成
 - [ ] 让 `init` 和 `config sync` 使用相同发现逻辑
-- [ ] 让 `init` 为单包仓库生成默认 package identity release unit
-- [ ] 让 `init` 为未配置多包仓库保留固定 `release` 分支
 - [ ] 将 `init --force` 从日常工作区同步路径中移除
 
 ### 测试
@@ -254,6 +246,14 @@
 - [ ] 跨生态依赖参与同一拓扑排序
 
 ## 阶段 5：统一发布引擎
+
+### Release unit 与发布身份
+
+- [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
+- [ ] 为 `Package`、`SharedVersion`、`Static` 和 `Fingerprint` identity 建立解析与校验规则
+- [ ] 单包仓库自动形成 package identity release unit
+- [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
+- [ ] 为单包、入口包、lockstep、静态分支和多 release unit 建立规划测试
 
 ### Publish plan
 

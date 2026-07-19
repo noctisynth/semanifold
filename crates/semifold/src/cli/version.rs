@@ -236,14 +236,6 @@ pub(crate) fn release_bump_plan(
     })
 }
 
-pub(crate) fn release_bump_levels(
-    root: &std::path::Path,
-    config: &Config,
-    changesets: &[Changeset],
-) -> anyhow::Result<HashMap<String, BumpLevel>> {
-    Ok(release_bump_plan(root, config, changesets)?.levels)
-}
-
 pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     if !ctx.is_initialized() {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));

@@ -59,6 +59,7 @@ packages = "以下包将被提升："
 no_packages = "没有包需要提升"
 pre_release_warning = "%{package} 处于预发布模式，但是正在尝试非补丁提升。"
 pre_release_warning_header = "警告:"
+plan_failed = "无法生成发布计划：%{error}"
 
 [cli.version]
 no_git_repo = "没有识别到 Git 仓库"

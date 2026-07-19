@@ -1,16 +1,15 @@
-use std::{collections::HashMap, env};
+use std::{collections::BTreeMap, env};
 
 use anyhow::Context as _;
 use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semifold_resolver::{
-    changeset::BumpLevel, config::ReleaseChannel, context::Context, resolver, utils,
-};
+use semifold_core::PlanWarning;
+use semifold_resolver::{context::Context, resolver};
 use serde::{Deserialize, Serialize};
 
-use super::version::release_bump_levels;
+use crate::release::plan_release;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RepoOwner {
@@ -62,54 +61,48 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     let config = ctx.config.as_ref().unwrap();
 
     let changesets = resolver::get_changesets(ctx)?;
-    let bump_levels = release_bump_levels(&root, config, &changesets)?;
-    let name_width = config.packages.keys().map(|s| s.len()).max().unwrap_or(0) + 1;
+    let plan = plan_release(&root, config, &changesets)
+        .map_err(|error| anyhow::anyhow!(t!("cli.status.plan_failed", error = error)))?;
+    let name_width = plan
+        .packages()
+        .iter()
+        .map(|package| package.id.as_str().len())
+        .max()
+        .unwrap_or(0)
+        + 1;
 
     println!(
         "{}\n",
         t!(
             "cli.status.changesets",
-            count = changesets.len().to_string().bold()
+            count = plan.consumed_changesets().len().to_string().bold()
         )
     );
 
-    let mut bump_map = HashMap::new();
-    let mut warnings = vec![];
-    for (package_name, package_config) in &config.packages {
-        let level = bump_levels[package_name];
-        if matches!(level, BumpLevel::Unchanged) {
-            continue;
-        }
-
-        let mut resolver = ctx.create_resolver(package_config.resolver);
-        let resolved_package = resolver.resolve(&root, package_config)?;
-        let mut bumped_version = resolved_package.version.clone();
-        utils::bump_version(&mut bumped_version, level, &package_config.channel)?;
-
-        if matches!(package_config.channel, ReleaseChannel::Stable)
-            && !resolved_package.version.pre.is_empty()
-            && level != BumpLevel::Unchanged
-            && level != BumpLevel::Patch
-        {
-            log::debug!(
-                "Adding pre-release warning for package: {}",
-                package_name.as_str()
-            );
-            warnings.push(t!(
-                "cli.status.pre_release_warning",
-                package = package_name.as_str().cyan()
-            ));
-        }
-
-        bump_map.insert(
-            package_name,
+    let bump_map = plan
+        .packages()
+        .iter()
+        .map(|package| {
             (
-                level,
-                resolved_package.version.clone(),
-                bumped_version.clone(),
+                package.id.as_str(),
+                (
+                    package.bump,
+                    &package.current_version,
+                    &package.next_version,
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let warnings = plan
+        .warnings()
+        .iter()
+        .map(|warning| match warning {
+            PlanWarning::NonPatchBumpOnPrerelease { package, .. } => t!(
+                "cli.status.pre_release_warning",
+                package = package.as_str().cyan()
             ),
-        );
-    }
+        })
+        .collect::<Vec<_>>();
 
     if bump_map.is_empty() {
         println!("{}", t!("cli.status.no_packages"));
@@ -207,7 +200,7 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
             </details>\n\
             {}",
             last_commit.sha,
-            changesets.len(),
+            plan.consumed_changesets().len(),
             markdown_table,
             warnings_section,
         );

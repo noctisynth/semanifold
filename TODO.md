@@ -82,14 +82,14 @@
 
 ### 接入 `status`
 
-- [ ] 将 `smif status` 切换为渲染 `ReleasePlan`
-- [ ] 保持现有终端输出语义
-- [ ] CI PR comment 使用同一 `ReleasePlan`
-- [ ] 删除 `status` 内重复的版本计算
+- [x] 将 `smif status` 切换为渲染 `ReleasePlan`
+- [x] 保持现有终端输出语义
+- [x] CI PR comment 使用同一 `ReleasePlan`
+- [x] 删除 `status` 内重复的版本计算
 
 ### 阶段完成条件
 
-- [ ] `status` 不再自行计算 bump
+- [x] `status` 不再自行计算 bump
 - [x] 相同输入始终生成相同 `ReleasePlan`
 - [ ] 依赖环错误包含可读的完整路径
 

@@ -226,12 +226,26 @@ pub struct WorkspaceGraph {
 ### 6.3 `ReleasePlan`
 
 ```rust
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ChangesetId(String);
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum BumpLevel {
+    Unchanged,
+    Patch,
+    Minor,
+    Major,
+}
+
+pub type VersionMap = BTreeMap<PackageId, semver::Version>;
+
 pub struct ReleasePlan {
-    pub packages: Vec<PackageRelease>,
-    pub order: Vec<PackageId>,
-    pub consumed_changesets: Vec<ChangesetId>,
-    pub warnings: Vec<PlanWarning>,
-    pub file_edits: Vec<FileEdit>,
+    packages: Vec<PackageRelease>,
+    versions: VersionMap,
+    order: Vec<PackageId>,
+    consumed_changesets: Vec<ChangesetId>,
+    warnings: Vec<PlanWarning>,
+    file_edits: Vec<FileEdit>,
 }
 
 pub struct PackageRelease {
@@ -242,9 +256,26 @@ pub struct PackageRelease {
     pub bump: BumpLevel,
     pub reasons: Vec<ReleaseReason>,
 }
+
+pub enum ReleaseReason {
+    Changeset { changeset: ChangesetId },
+    DependencyPropagation {
+        dependency: PackageId,
+        next_version: semver::Version,
+    },
+}
+
+pub enum PlanWarning {
+    NonPatchBumpOnPrerelease {
+        package: PackageId,
+        requested: BumpLevel,
+    },
+}
 ```
 
-`ReleasePlan` 构建完成后必须包含所有包的新版本。生态 adapter 因此可以一次获得完整 `VersionMap`，不再需要 `Context.version_bumps`。
+`ReleasePlan.packages` 只包含本次实际发布的 package，`versions` 则必须包含工作区所有 package 的计划后版本，未发布 package 使用当前版本。生态 adapter 因此可以一次获得完整 `VersionMap`，不再需要 `Context.version_bumps`。
+
+`ReleasePlan` 只通过验证构造函数创建并提供只读访问器：每个发布 package 必须在 `versions` 中存在且版本等于 `next_version`；`order` 必须无重复地包含所有且仅包含发布 package；`consumed_changesets` 不得重复。违反这些条件返回领域错误。集合顺序由 planner 按 `PackageId`、`ChangesetId` 和 `WorkspaceGraph` 拓扑顺序确定，使序列化结果稳定。同一 changeset 或依赖传播原因在一个 package 上不得重复记录。
 
 changeset 只能在 manifest、changelog 和 post-version 命令均成功后删除。post-version 失败时必须保留 changeset；后续阶段再将整个流程收敛为原子 `Plan → Validate → Apply`。
 

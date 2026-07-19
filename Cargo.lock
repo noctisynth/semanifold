@@ -174,6 +174,9 @@ name = "camino"
 version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f2d30e4173c4026932d51d31d6b0613b1fd3014bf3f9f8943d4ba139c437ba0"
+dependencies = [
+ "serde_core",
+]
 
 [[package]]
 name = "cc"
@@ -2091,6 +2094,8 @@ version = "0.1.0-alpha.0"
 dependencies = [
  "camino",
  "semver",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 

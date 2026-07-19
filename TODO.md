@@ -51,7 +51,7 @@
 - [x] 定义 `Ecosystem`
 - [x] 定义 `PackageSnapshot`
 - [x] 定义 `Dependency` 和 `DependencyKind`
-- [ ] 定义 `ChangesetId`、`ReleaseReason` 和 `PlanWarning`
+- [x] 定义 `ChangesetId`、`ReleaseReason` 和 `PlanWarning`
 - [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
 - [x] 确保 core 不依赖 `git2`、`reqwest`、`octocrab`、`clap` 或 `inquire`
 
@@ -68,8 +68,8 @@
 
 ### Release planner
 
-- [ ] 定义不可变、可序列化的 `ReleasePlan`
-- [ ] 定义 `PackageRelease` 和完整 `VersionMap`
+- [x] 定义不可变、可序列化的 `ReleasePlan`
+- [x] 定义 `PackageRelease` 和完整 `VersionMap`
 - [ ] 实现纯 `ReleasePlanner`
 - [ ] 合并多个 changeset 的发布原因和 bump level
 - [ ] 在写文件前计算所有包的下一版本

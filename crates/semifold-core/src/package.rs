@@ -2,11 +2,13 @@ use std::fmt;
 
 use camino::Utf8PathBuf;
 use semver::Version;
+use serde::Serialize;
 
 use crate::Dependency;
 
 /// Stable identity used by Semifold configuration and workspace graphs.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct PackageId(String);
 
 impl PackageId {
@@ -28,7 +30,8 @@ impl fmt::Display for PackageId {
 }
 
 /// Package ecosystem that owns manifest discovery and edit planning.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Ecosystem {
     Rust,
     Node,

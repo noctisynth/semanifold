@@ -107,7 +107,7 @@
 
 - [x] 定义 `ConfigSyncPlan`
 - [x] 分类 added、missing、renamed、moved 和 conflicts
-- [ ] 实现 package path 规范化
+- [x] 实现 package path 规范化
 - [x] 优先使用 resolver + path 匹配重命名
 - [x] 使用 package identity 匹配路径移动
 - [x] 多义匹配时停止写入并报告冲突
@@ -142,7 +142,7 @@
 
 - [ ] 抽取 resolver registry
 - [ ] 抽取统一 package discovery 服务
-- [ ] 抽取 package path 规范化
+- [x] 抽取 package path 规范化
 - [ ] 抽取默认 `PackageConfig` 生成
 - [ ] 让 `init` 和 `config sync` 使用相同发现逻辑
 - [ ] 将 `init --force` 从日常工作区同步路径中移除

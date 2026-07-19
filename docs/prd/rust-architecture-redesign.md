@@ -878,6 +878,17 @@ pub enum ConfigConflict {
 - 移除 `.` 和可安全消解的 `..`；
 - 不跟随项目根目录外的符号链接。
 
+应用层提供共享的 `PackagePathNormalizer`，供 workspace 快照桥接、`init` 和 `config sync` 使用：
+
+```rust
+pub fn normalize_package_path(
+    project_root: &Path,
+    package_path: &Path,
+) -> Result<Utf8PathBuf, PackagePathError>;
+```
+
+`project_root` 必须是已存在的绝对目录；`package_path` 可以是绝对路径或相对于项目根目录的路径。实现先做不访问文件系统的词法规范化，再检查最深的已存在祖先路径：如果符号链接解析后的祖先位于项目根目录之外则拒绝该输入，但返回值仍保留项目内的词法相对路径，不改写为符号链接目标。尚不存在但位于项目根目录内的 package path 可以被规范化，以便配置中的 missing package 参与同步。项目根 package 统一表示为 `.`，序列化路径统一使用 `/` 分隔符；无法表示为 UTF-8 或逃逸项目根目录时返回结构化错误。
+
 Rename 时应尽量移动原有 TOML table，而不是重新创建，以保留：
 
 - `channel`；

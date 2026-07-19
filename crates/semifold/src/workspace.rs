@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Context as _;
-use camino::Utf8PathBuf;
 use semifold_core::{Dependency, Ecosystem, PackageId, PackageSnapshot, WorkspaceGraph};
 use semifold_resolver::{
     config::Config,
     resolver::{ResolvedDependency, ResolvedPackage, ResolverType, create_resolver},
 };
+
+use crate::package_path::normalize_package_path;
 
 #[derive(Debug)]
 struct ResolvedSnapshot {
@@ -29,10 +30,11 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
             dependencies,
         });
     }
-    workspace_graph_from_resolved(resolved)
+    workspace_graph_from_resolved(root, resolved)
 }
 
 fn workspace_graph_from_resolved(
+    root: &Path,
     resolved: Vec<ResolvedSnapshot>,
 ) -> anyhow::Result<WorkspaceGraph> {
     let mut package_ids = BTreeMap::new();
@@ -49,9 +51,7 @@ fn workspace_graph_from_resolved(
     let snapshots = resolved
         .into_iter()
         .map(|resolved| {
-            let path = Utf8PathBuf::from_path_buf(resolved.package.path).map_err(|path| {
-                anyhow::anyhow!("package path is not valid UTF-8: {}", path.display())
-            })?;
+            let path = normalize_package_path(root, &resolved.package.path)?;
             let dependencies = resolved
                 .dependencies
                 .into_iter()

@@ -4,6 +4,7 @@ use semifold_resolver::context;
 
 pub mod cli;
 pub mod logger;
+pub(crate) mod package_path;
 pub(crate) mod release;
 pub mod utils;
 pub mod workspace;

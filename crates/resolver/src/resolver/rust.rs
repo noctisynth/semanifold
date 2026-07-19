@@ -3,13 +3,14 @@ use std::{
     path::Path,
 };
 
+use semifold_core::DependencyKind;
 use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
-    resolver::{ResolvedPackage, Resolver, ResolverType},
+    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
 };
 
@@ -47,6 +48,94 @@ pub struct RuntimeDependency {
 }
 
 impl RustResolver {
+    fn dependency_requirement(dependency: &serde_json::Value) -> Option<String> {
+        dependency
+            .as_str()
+            .or_else(|| {
+                dependency
+                    .get("version")
+                    .and_then(serde_json::Value::as_str)
+            })
+            .map(str::to_string)
+    }
+
+    fn collect_dependencies(
+        dependencies: Option<BTreeMap<String, serde_json::Value>>,
+        workspace_dependencies: Option<&BTreeMap<String, serde_json::Value>>,
+        kind: DependencyKind,
+    ) -> Vec<ResolvedDependency> {
+        dependencies
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, dependency)| {
+                let dependency = dependency
+                    .get("workspace")
+                    .and_then(serde_json::Value::as_bool)
+                    .filter(|workspace| *workspace)
+                    .and_then(|_| {
+                        workspace_dependencies.and_then(|dependencies| dependencies.get(&name))
+                    })
+                    .unwrap_or(&dependency);
+                ResolvedDependency {
+                    manifest_name: dependency
+                        .get("package")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(&name)
+                        .to_string(),
+                    kind,
+                    requirement: Self::dependency_requirement(dependency),
+                }
+            })
+            .collect()
+    }
+
+    pub fn manifest_dependencies(
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
+        let cargo_toml: CargoToml =
+            toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
+                ResolveError::ParseError {
+                    path: cargo_toml_path,
+                    reason: e.to_string(),
+                }
+            })?;
+        let workspace_manifest_path = root.join("Cargo.toml");
+        let workspace_dependencies = if workspace_manifest_path.exists() {
+            let workspace_manifest: CargoToml =
+                toml_edit::de::from_str(&std::fs::read_to_string(&workspace_manifest_path)?)
+                    .map_err(|e| ResolveError::ParseError {
+                        path: workspace_manifest_path,
+                        reason: e.to_string(),
+                    })?;
+            workspace_manifest
+                .workspace
+                .and_then(|workspace| workspace.dependencies)
+        } else {
+            None
+        };
+
+        Ok([
+            Self::collect_dependencies(
+                cargo_toml.dependencies,
+                workspace_dependencies.as_ref(),
+                DependencyKind::Runtime,
+            ),
+            Self::collect_dependencies(
+                cargo_toml.dev_dependencies,
+                workspace_dependencies.as_ref(),
+                DependencyKind::Development,
+            ),
+            Self::collect_dependencies(
+                cargo_toml.build_dependencies,
+                workspace_dependencies.as_ref(),
+                DependencyKind::Build,
+            ),
+        ]
+        .concat())
+    }
+
     pub fn internal_dependencies(
         root: &Path,
         pkg_config: &PackageConfig,
@@ -231,6 +320,14 @@ impl Resolver for RustResolver {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(packages)
+    }
+
+    fn dependencies(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        Self::manifest_dependencies(root, pkg_config)
     }
 
     fn bump(

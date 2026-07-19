@@ -2047,6 +2047,7 @@ version = "0.3.0-alpha.1"
 dependencies = [
  "anyhow",
  "bytes",
+ "camino",
  "clap",
  "colored",
  "fern",
@@ -2062,6 +2063,7 @@ dependencies = [
  "saphyr",
  "schemars",
  "semifold-changelog",
+ "semifold-core",
  "semifold-resolver",
  "semver",
  "serde",
@@ -2104,6 +2106,7 @@ dependencies = [
  "pathdiff",
  "regex",
  "saphyr",
+ "semifold-core",
  "semver",
  "serde",
  "serde_json",

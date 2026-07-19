@@ -4,13 +4,14 @@ use std::{
 };
 
 use saphyr::LoadableYamlNode;
+use semifold_core::DependencyKind;
 use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
-    resolver::{ResolvedPackage, Resolver, ResolverType},
+    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
 };
 
@@ -23,10 +24,27 @@ struct PackageJson {
     pub dependencies: Option<BTreeMap<String, String>>,
     pub dev_dependencies: Option<BTreeMap<String, String>>,
     pub peer_dependencies: Option<BTreeMap<String, String>>,
+    pub optional_dependencies: Option<BTreeMap<String, String>>,
     pub private: Option<bool>,
 }
 
 pub struct NodejsResolver;
+
+impl NodejsResolver {
+    fn collect_dependencies(
+        target: &mut Vec<ResolvedDependency>,
+        dependencies: Option<BTreeMap<String, String>>,
+        kind: DependencyKind,
+    ) {
+        target.extend(dependencies.unwrap_or_default().into_iter().map(
+            |(manifest_name, requirement)| ResolvedDependency {
+                manifest_name,
+                kind,
+                requirement: Some(requirement),
+            },
+        ));
+    }
+}
 
 impl Resolver for NodejsResolver {
     fn resolve(
@@ -164,6 +182,43 @@ impl Resolver for NodejsResolver {
         }
 
         Ok(packages)
+    }
+
+    fn dependencies(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        let package_json_path = root.join(&pkg_config.path).join("package.json");
+        let package_json: PackageJson =
+            serde_json::from_str(&std::fs::read_to_string(&package_json_path)?).map_err(|e| {
+                ResolveError::ParseError {
+                    path: package_json_path,
+                    reason: e.to_string(),
+                }
+            })?;
+        let mut dependencies = Vec::new();
+        Self::collect_dependencies(
+            &mut dependencies,
+            package_json.dependencies,
+            DependencyKind::Runtime,
+        );
+        Self::collect_dependencies(
+            &mut dependencies,
+            package_json.dev_dependencies,
+            DependencyKind::Development,
+        );
+        Self::collect_dependencies(
+            &mut dependencies,
+            package_json.peer_dependencies,
+            DependencyKind::Peer,
+        );
+        Self::collect_dependencies(
+            &mut dependencies,
+            package_json.optional_dependencies,
+            DependencyKind::Optional,
+        );
+        Ok(dependencies)
     }
 
     fn bump(

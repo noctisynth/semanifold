@@ -4,12 +4,13 @@ use std::{
 };
 
 use regex::Regex;
+use semifold_core::DependencyKind;
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
-    resolver::{ResolvedPackage, Resolver, ResolverType},
+    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
 };
 
@@ -252,6 +253,22 @@ impl Resolver for CppResolver {
         }
 
         Ok(packages)
+    }
+
+    fn dependencies(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        Ok(self
+            .internal_dependencies(root, pkg_config)?
+            .into_iter()
+            .map(|manifest_name| ResolvedDependency {
+                manifest_name,
+                kind: DependencyKind::Runtime,
+                requirement: None,
+            })
+            .collect())
     }
 
     fn bump(

@@ -3,13 +3,14 @@ use std::{
     path::Path,
 };
 
+use semifold_core::DependencyKind;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     context,
     error::ResolveError,
-    resolver::{ResolvedPackage, Resolver, ResolverType},
+    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
 };
 
@@ -65,6 +66,72 @@ struct CargoPackage {
 pub struct PythonResolver;
 
 impl PythonResolver {
+    fn pep_dependency(specification: String) -> ResolvedDependency {
+        let boundary = specification
+            .char_indices()
+            .find_map(|(index, character)| {
+                matches!(character, '<' | '>' | '=' | '~' | '!' | ';' | '[' | '@')
+                    .then_some(index)
+                    .or_else(|| character.is_whitespace().then_some(index))
+            })
+            .unwrap_or(specification.len());
+        let manifest_name = specification[..boundary].trim().to_string();
+        let requirement = specification[boundary..].trim();
+        let requirement = (!requirement.is_empty()).then(|| requirement.to_string());
+        ResolvedDependency {
+            manifest_name,
+            kind: DependencyKind::Runtime,
+            requirement,
+        }
+    }
+
+    fn manifest_dependencies(
+        &self,
+        root: &Path,
+        pkg_path: &Path,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        let pyproject_path = root.join(pkg_path).join("pyproject.toml");
+        if !pyproject_path.exists() {
+            return Ok(vec![]);
+        }
+
+        let pyproject: PyProjectToml =
+            toml_edit::de::from_str(&std::fs::read_to_string(&pyproject_path)?).map_err(|e| {
+                ResolveError::ParseError {
+                    path: pyproject_path,
+                    reason: e.to_string(),
+                }
+            })?;
+        let mut dependencies = Vec::new();
+        if let Some(project) = pyproject.project {
+            dependencies.extend(
+                project
+                    .dependencies
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(Self::pep_dependency),
+            );
+        }
+        if let Some(poetry) = pyproject.tool.and_then(|tool| tool.poetry) {
+            dependencies.extend(
+                poetry
+                    .dependencies
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter(|(name, _)| name != "python")
+                    .map(|(manifest_name, requirement)| ResolvedDependency {
+                        manifest_name,
+                        kind: DependencyKind::Runtime,
+                        requirement: requirement
+                            .as_str()
+                            .map(str::to_string)
+                            .or_else(|| Some(requirement.to_string())),
+                    }),
+            );
+        }
+        Ok(dependencies)
+    }
+
     fn resolve_pyproject(
         &self,
         root: &Path,
@@ -510,45 +577,11 @@ impl PythonResolver {
         root: &Path,
         pkg_path: &Path,
     ) -> Result<Vec<String>, ResolveError> {
-        let pyproject_path = root.join(pkg_path).join("pyproject.toml");
-        if !pyproject_path.exists() {
-            return Ok(vec![]);
-        }
-
-        let pyproject_str = std::fs::read_to_string(&pyproject_path)?;
-        let pyproject: PyProjectToml =
-            toml_edit::de::from_str(&pyproject_str).map_err(|e| ResolveError::ParseError {
-                path: pyproject_path.clone(),
-                reason: e.to_string(),
-            })?;
-
-        let mut deps = Vec::new();
-
-        // PEP 621 Dependencies
-        if let Some(project) = pyproject.project
-            && let Some(dependencies) = project.dependencies
-        {
-            for dep in dependencies {
-                // "requests>=2.0.0" -> "requests"
-                if let Some(name) = dep.split(&['>', '<', '=', '~', '!'][..]).next() {
-                    deps.push(name.trim().to_string());
-                }
-            }
-        }
-
-        // Poetry Dependencies
-        if let Some(tool) = pyproject.tool
-            && let Some(poetry) = tool.poetry
-            && let Some(dependencies) = poetry.dependencies
-        {
-            for (name, _) in dependencies {
-                if name != "python" {
-                    deps.push(name);
-                }
-            }
-        }
-
-        Ok(deps)
+        Ok(self
+            .manifest_dependencies(root, pkg_path)?
+            .into_iter()
+            .map(|dependency| dependency.manifest_name)
+            .collect())
     }
 }
 
@@ -619,6 +652,14 @@ impl Resolver for PythonResolver {
         }
 
         Ok(packages)
+    }
+
+    fn dependencies(
+        &mut self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        self.manifest_dependencies(root, &pkg_config.path)
     }
 
     fn bump(

@@ -5,6 +5,7 @@ use semifold_resolver::context;
 pub mod cli;
 pub mod logger;
 pub mod utils;
+pub mod workspace;
 
 use cli::{Cli, Commands};
 

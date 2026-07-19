@@ -53,7 +53,7 @@
 - [x] 定义 `Dependency` 和 `DependencyKind`
 - [ ] 定义 `ChangesetId`、`ReleaseReason` 和 `PlanWarning`
 - [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
-- [ ] 确保 core 不依赖 `git2`、`reqwest`、`octocrab`、`clap` 或 `inquire`
+- [x] 确保 core 不依赖 `git2`、`reqwest`、`octocrab`、`clap` 或 `inquire`
 
 ### Workspace graph
 
@@ -78,7 +78,7 @@
 - [ ] 单包仓库自动形成 package identity release unit
 - [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
 - [ ] 检测 package 重复属于多个 release unit 的冲突
-- [ ] 临时将现有 resolver 结果转换为 `PackageSnapshot`
+- [x] 临时将现有 resolver 结果转换为 `PackageSnapshot`
 
 ### 接入 `status`
 

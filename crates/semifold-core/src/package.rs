@@ -28,7 +28,7 @@ impl fmt::Display for PackageId {
 }
 
 /// Package ecosystem that owns manifest discovery and edit planning.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Ecosystem {
     Rust,
     Node,

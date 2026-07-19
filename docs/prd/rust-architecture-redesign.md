@@ -165,7 +165,7 @@ Config + Changesets + Ecosystem manifests
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageId(String);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Ecosystem {
     Rust,
     Node,
@@ -1107,6 +1107,19 @@ fixtures/rust/
 - 将 `status` 改为渲染 `ReleasePlan`。
 
 完成条件：`status` 不再自行计算 bump，依赖环能够给出明确路径。
+
+#### 现有 resolver 的临时转换
+
+阶段 1 在 ecosystem adapter 完成拆分前，由 engine/应用层将现有 resolver 数据临时转换为 `PackageSnapshot`：
+
+- `.changes/config.toml` 中的 package key 作为 `PackageId`，manifest 声明的名称保留为 `manifest_name`；
+- resolver 除 `ResolvedPackage` 外，临时暴露 manifest 依赖的名称、`DependencyKind` 与原始版本约束；resolver 不负责将依赖名称解释为 `PackageId`；
+- 应用层先解析所有已配置 package，再按 `(Ecosystem, manifest_name)` 建立到 `PackageId` 的映射；同一生态出现重复 manifest name 时停止转换，避免产生歧义；
+- 只有在同一生态中唯一匹配到已配置 package 的依赖才转换为内部 `Dependency`，未匹配项视为外部依赖，不进入 `WorkspaceGraph`；首个切片不推断跨生态依赖，后续由显式 `depends-on` 合并；
+- package 路径必须能转换为 UTF-8 相对路径；`private` 映射为 `publishable = false`；
+- 转换完成后统一调用 `WorkspaceGraph` 校验并排序，不再调用各 resolver 的 `sort_packages()` 产生新架构顺序。
+
+该转换是迁移桥接层，不作为最终 `EcosystemAdapter` 接口；切换 `status` 后再逐步删除 resolver 内的旧排序职责。
 
 ### 阶段 2：引入 `config sync`
 

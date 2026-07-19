@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0-alpha.2
+
+### New Features
+
+- [`5bea426`](https://github.com/noctisynth/semifold/commit/5bea42624aa7ba73034ad0fba8dc1c9c14da7419): Bridge configured Rust, Node.js, Python, and C++ packages into the new cross-ecosystem workspace graph.
+
 ## v0.3.0-alpha.1
 
 ### Chores

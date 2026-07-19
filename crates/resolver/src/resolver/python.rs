@@ -609,7 +609,7 @@ impl Resolver for PythonResolver {
 
         // 检查是否是单包项目
         if root.join("pyproject.toml").exists() || root.join("setup.cfg").exists() {
-            match self.resolve(
+            packages.push(self.resolve(
                 root,
                 &PackageConfig {
                     path: ".".into(),
@@ -617,10 +617,7 @@ impl Resolver for PythonResolver {
                     channel: ReleaseChannel::Stable,
                     assets: vec![],
                 },
-            ) {
-                Ok(package) => packages.push(package),
-                Err(e) => log::warn!("Failed to resolve root package: {}", e),
-            }
+            )?);
         }
 
         // 检查常见的 monorepo 结构
@@ -628,25 +625,26 @@ impl Resolver for PythonResolver {
 
         for pattern in common_patterns {
             let glob_pattern = root.join(pattern).display().to_string();
-            if let Ok(paths) = glob::glob(&glob_pattern) {
-                for path in paths.flatten() {
-                    if path.join("pyproject.toml").exists() || path.join("setup.cfg").exists() {
-                        let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
-                        match self.resolve(
-                            root,
-                            &PackageConfig {
-                                path: rel_path,
-                                resolver: ResolverType::Python,
-                                channel: ReleaseChannel::Stable,
-                                assets: vec![],
-                            },
-                        ) {
-                            Ok(package) => packages.push(package),
-                            Err(e) => {
-                                log::warn!("Failed to resolve package at {}: {}", path.display(), e)
-                            }
-                        }
-                    }
+            let paths = glob::glob(&glob_pattern)?
+                .map(|path| {
+                    path.map_err(|error| ResolveError::ParseError {
+                        path: error.path().to_path_buf(),
+                        reason: error.to_string(),
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            for path in paths {
+                if path.join("pyproject.toml").exists() || path.join("setup.cfg").exists() {
+                    let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
+                    packages.push(self.resolve(
+                        root,
+                        &PackageConfig {
+                            path: rel_path,
+                            resolver: ResolverType::Python,
+                            channel: ReleaseChannel::Stable,
+                            assets: vec![],
+                        },
+                    )?);
                 }
             }
         }

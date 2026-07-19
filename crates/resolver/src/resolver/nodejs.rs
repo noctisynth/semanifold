@@ -132,7 +132,7 @@ impl Resolver for NodejsResolver {
         let workspaces = workspaces.unwrap();
         let mut packages = Vec::new();
 
-        if let Ok(root_package) = self.resolve(
+        let root_package = self.resolve(
             root,
             &PackageConfig {
                 path: ".".into(),
@@ -140,11 +140,8 @@ impl Resolver for NodejsResolver {
                 channel: ReleaseChannel::Stable,
                 assets: vec![],
             },
-        ) {
-            packages.push(root_package);
-        } else {
-            log::warn!("Failed to resolve root package in {}", root.display());
-        }
+        )?;
+        packages.push(root_package);
 
         for workspace_pattern in workspaces {
             let pattern = root.join(&workspace_pattern).display().to_string();
@@ -153,8 +150,13 @@ impl Resolver for NodejsResolver {
                     path: package_json_path.clone(),
                     reason: e.to_string(),
                 })?
-                .flatten()
-                .collect::<Vec<_>>();
+                .map(|path| {
+                    path.map_err(|error| ResolveError::ParseError {
+                        path: error.path().to_path_buf(),
+                        reason: error.to_string(),
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
             for path in paths {
                 if path == root {
@@ -163,7 +165,7 @@ impl Resolver for NodejsResolver {
 
                 if path.join("package.json").exists() {
                     let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
-                    match self.resolve(
+                    packages.push(self.resolve(
                         root,
                         &PackageConfig {
                             path: rel_path,
@@ -171,12 +173,7 @@ impl Resolver for NodejsResolver {
                             channel: ReleaseChannel::Stable,
                             assets: vec![],
                         },
-                    ) {
-                        Ok(package) => packages.push(package),
-                        Err(e) => {
-                            log::warn!("Failed to resolve package at {}: {}", path.display(), e);
-                        }
-                    }
+                    )?);
                 }
             }
         }

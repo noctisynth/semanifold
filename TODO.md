@@ -140,10 +140,10 @@
 
 ### 与 `init` 复用
 
-- [ ] 抽取 resolver registry
-- [ ] 抽取统一 package discovery 服务
+- [x] 抽取 resolver registry
+- [x] 抽取统一 package discovery 服务
 - [x] 抽取 package path 规范化
-- [ ] 抽取默认 `PackageConfig` 生成
+- [x] 抽取默认 `PackageConfig` 生成
 - [ ] 让 `init` 和 `config sync` 使用相同发现逻辑
 - [ ] 将 `init --force` 从日常工作区同步路径中移除
 

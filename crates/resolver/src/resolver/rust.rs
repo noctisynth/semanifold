@@ -294,8 +294,13 @@ impl Resolver for RustResolver {
                         path: cargo_toml_path.clone(),
                         reason: e.to_string(),
                     })?
-                    .flatten()
-                    .collect::<Vec<_>>();
+                    .map(|path| {
+                        path.map_err(|error| ResolveError::ParseError {
+                            path: error.path().to_path_buf(),
+                            reason: error.to_string(),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 members.extend(paths);
                 Ok::<_, ResolveError>(members)
             },

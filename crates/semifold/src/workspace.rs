@@ -4,10 +4,10 @@ use anyhow::Context as _;
 use semifold_core::{Dependency, Ecosystem, PackageId, PackageSnapshot, WorkspaceGraph};
 use semifold_resolver::{
     config::Config,
-    resolver::{ResolvedDependency, ResolvedPackage, ResolverType, create_resolver},
+    resolver::{ResolvedDependency, ResolvedPackage, create_resolver},
 };
 
-use crate::package_path::normalize_package_path;
+use crate::{discovery::ResolverRegistry, package_path::normalize_package_path};
 
 #[derive(Debug)]
 struct ResolvedSnapshot {
@@ -25,7 +25,7 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
         let dependencies = resolver.dependencies(root, package_config)?;
         resolved.push(ResolvedSnapshot {
             id: PackageId::new(id),
-            ecosystem: ecosystem(package_config.resolver),
+            ecosystem: ResolverRegistry::ecosystem(package_config.resolver),
             package,
             dependencies,
         });
@@ -81,15 +81,6 @@ fn workspace_graph_from_resolved(
     WorkspaceGraph::new(snapshots).context("failed to build workspace graph")
 }
 
-const fn ecosystem(resolver: ResolverType) -> Ecosystem {
-    match resolver {
-        ResolverType::Rust => Ecosystem::Rust,
-        ResolverType::Nodejs => Ecosystem::Node,
-        ResolverType::Python => Ecosystem::Python,
-        ResolverType::Cpp => Ecosystem::Cpp,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -101,7 +92,10 @@ mod tests {
     };
 
     use semifold_core::{DependencyKind, PackageId};
-    use semifold_resolver::config::{BranchesConfig, PackageConfig, ReleaseChannel};
+    use semifold_resolver::{
+        config::{BranchesConfig, PackageConfig, ReleaseChannel},
+        resolver::ResolverType,
+    };
 
     use super::*;
 

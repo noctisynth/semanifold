@@ -4,14 +4,12 @@ use clap::{Parser, ValueEnum};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_resolver::{
-    config::{
-        self, BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
-        ResolverConfig,
-    },
+    config::{self, BranchesConfig, CommandConfig, PreCheckConfig, ResolverConfig},
     context,
-    error::ResolveError,
-    resolver::{self, Resolver, ResolverType},
+    resolver::ResolverType,
 };
+
+use crate::discovery::{PackageDiscoveryService, ResolverRegistry};
 
 #[derive(rust_embed::Embed)]
 #[folder = "assets"]
@@ -72,6 +70,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     } else {
         init.resolvers.clone()
     };
+    let resolvers = ResolverRegistry::normalize_selection(&resolvers);
     let resolvers_config = BTreeMap::from_iter(resolvers.iter().map(|r| {
         match r {
             ResolverType::Rust => (
@@ -158,62 +157,12 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
 
     log::debug!("resolvers: {resolvers:?}");
 
-    let packages = resolvers
-        .iter()
-        .try_fold(BTreeMap::new(), |mut acc, name| match name {
-            ResolverType::Rust => {
-                let mut resolver = resolver::rust::RustResolver;
-                let packages = resolver.resolve_all(&target_dir)?;
-                packages.into_iter().for_each(|pkg| {
-                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
-                        path: pkg.path.clone(),
-                        resolver: resolver::ResolverType::Rust,
-                        channel: ReleaseChannel::Stable,
-                        assets: vec![],
-                    });
-                });
-                Ok::<_, ResolveError>(acc)
-            }
-            ResolverType::Nodejs => {
-                let mut resolver = resolver::nodejs::NodejsResolver;
-                let packages = resolver.resolve_all(&target_dir)?;
-                packages.into_iter().for_each(|pkg| {
-                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
-                        path: pkg.path.clone(),
-                        resolver: resolver::ResolverType::Nodejs,
-                        channel: ReleaseChannel::Stable,
-                        assets: vec![],
-                    });
-                });
-                Ok::<_, ResolveError>(acc)
-            }
-            ResolverType::Python => {
-                let mut resolver = resolver::python::PythonResolver;
-                let packages = resolver.resolve_all(&target_dir)?;
-                packages.into_iter().for_each(|pkg| {
-                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
-                        path: pkg.path.clone(),
-                        resolver: resolver::ResolverType::Python,
-                        channel: ReleaseChannel::Stable,
-                        assets: vec![],
-                    });
-                });
-                Ok::<_, ResolveError>(acc)
-            }
-            ResolverType::Cpp => {
-                let mut resolver = resolver::cpp::CppResolver;
-                let packages = resolver.resolve_all(&target_dir)?;
-                packages.into_iter().for_each(|pkg| {
-                    acc.entry(pkg.name.clone()).or_insert(PackageConfig {
-                        path: pkg.path.clone(),
-                        resolver: resolver::ResolverType::Cpp,
-                        channel: ReleaseChannel::Stable,
-                        assets: vec![],
-                    });
-                });
-                Ok::<_, ResolveError>(acc)
-            }
-        })?;
+    let discovery = PackageDiscoveryService::default()
+        .discover(&target_dir, &resolvers)
+        .map_err(|error| anyhow::anyhow!(t!("cli.init.discovery_failed", error = error)))?;
+    let packages = discovery
+        .default_package_configs()
+        .map_err(|error| anyhow::anyhow!(t!("cli.init.discovery_failed", error = error)))?;
 
     log::debug!("packages: {packages:?}");
 

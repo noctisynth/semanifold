@@ -3,6 +3,7 @@ use log::LevelFilter;
 use semifold_resolver::context;
 
 pub mod cli;
+pub(crate) mod discovery;
 pub mod logger;
 pub(crate) mod package_path;
 pub(crate) mod release;

@@ -1036,6 +1036,31 @@ let packages = document["packages"]
 - 默认 package 配置生成；
 - 冲突诊断。
 
+迁移期间由应用层提供统一发现入口，隐藏 resolver factory 与领域 ecosystem 的映射：
+
+```rust
+pub struct PackageDiscovery {
+    pub resolvers: Vec<ResolverType>,
+    pub packages: Vec<DiscoveredPackage>,
+}
+
+pub struct PackageDiscoveryService {
+    registry: ResolverRegistry,
+}
+
+impl PackageDiscoveryService {
+    pub fn discover(
+        &self,
+        project_root: &Path,
+        resolvers: &[ResolverType],
+    ) -> Result<PackageDiscovery, PackageDiscoveryError>;
+}
+```
+
+resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId`，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复 `PackageId` 保留在发现快照中，由 `ConfigSyncPlanner` 产生多义冲突，`init` 在无法生成唯一 package table key 时停止。
+
+一次 discovery 只有“完整成功”或“失败”两种结果：任一所选 resolver 的 glob 遍历、manifest 读取、package 解析或路径规范化失败时，整个调用返回结构化错误，不得返回看似完整的部分快照。未选择的 resolver 不属于扫描范围；应用层据此禁止在部分 resolver 模式下 prune 其他生态的配置。现有 `resolve_all` 中记录 warning 后跳过损坏 package 的路径必须改为传播错误，避免把扫描失败误判为 package 已删除。
+
 区别仅在于：
 
 - `init` 从空配置生成初始文档和 CI 模板；单包仓库可生成 package identity 的默认 release unit，多包仓库默认保留固定 `release` 分支；

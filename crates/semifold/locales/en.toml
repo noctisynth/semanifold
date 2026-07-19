@@ -47,6 +47,7 @@ tags = "Add default tags to config?"
 base_branch = "What is the base branch?"
 release_branch = "What is the release branch?"
 write_ci = "Write GitHub Actions workflows?"
+discovery_failed = "Package discovery failed: %{error}"
 
 [cli.init.flags]
 target = "Target directory to store changesets"

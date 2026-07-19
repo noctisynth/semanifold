@@ -1204,6 +1204,12 @@ fixtures/rust/
 10. 一个 package 是否允许属于多个 `ReleaseUnit`；若允许，如何界定它们的发布和版本修改冲突。
 11. `Fingerprint` identity 的稳定输入、可见格式和适用场景。
 
+### 19.1 低优先级优化：首次发布状态
+
+manifest 中的版本不足以可靠判断 package 是否已经发布。长期可以引入 `PackageReleaseState`，由 engine 通过 registry package metadata 获取 `Unpublished` 或 `Published` 状态，再作为纯 `ReleasePlanner` 的输入。该查询与发布前“目标版本是否已存在”的 `version_exists` pre-check 是两个不同语义；网络失败、鉴权失败或无 registry 配置时不得推断为 `Unpublished`。
+
+该能力不阻塞当前架构重构，具体状态模型、离线行为、registry port 和各生态实现留待后续决策。`semifold-core` 首次发布暂时将 manifest 版本设为 `0.0.0`，使现有 minor changeset 在 alpha 通道生成 `0.1.0-alpha.0`，在 stable 通道生成 `0.1.0`。这是当前仓库的过渡措施，不定义为所有新 package 的长期通用规则。
+
 ## 20. 推荐的第一个实施切片
 
 第一个可合并切片不应是大规模移动文件，而应是：

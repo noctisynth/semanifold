@@ -371,3 +371,9 @@
 - [ ] 是否提供 `--rewrite-changesets` 辅助包重命名
 - [ ] 一个 package 是否允许同时属于多个 `ReleaseUnit`
 - [ ] `Fingerprint` identity 的格式与适用场景
+
+## 低优先级优化
+
+- [ ] 定义 `PackageReleaseState`，区分首次发布与已有发布历史
+- [ ] 将 registry package metadata 查询与目标版本 `version_exists` pre-check 分离
+- [ ] 确定首次发布状态查询失败、离线模式和无 registry 配置时的行为

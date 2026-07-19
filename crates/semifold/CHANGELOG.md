@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0-alpha.5
+
+### Bug Fixes
+
+- [`e0f036f`](https://github.com/noctisynth/semifold/commit/e0f036fc681358fda2b06ec13a2d7fd379d3935d): Return a typed unsupported-format error when config sync is invoked for JSON configuration files.
+- [`64a2fbb`](https://github.com/noctisynth/semifold/commit/64a2fbb6d913edcb59e49435212da190a1307d04): Clarify that `init --force` is only for explicit reinitialization and direct workspace package changes to `config sync`.
+- [`48697f8`](https://github.com/noctisynth/semifold/commit/48697f8069b7f3c623f563e466c8896fd40476eb): Insert newly discovered package tables in deterministic package-ID order without reordering existing configuration.
+
+### New Features
+
+- [`563a8b9`](https://github.com/noctisynth/semifold/commit/563a8b966ddea828ba84a4444f7c42ca268abf5d): Add `smif config sync --prune` to atomically remove package configuration entries that are absent from a complete workspace scan.
+- [`c591e35`](https://github.com/noctisynth/semifold/commit/c591e3563a81f3dcae7d0c62ed294ed88058fbe6): Add repeatable resolver scoping to `smif config sync` and prevent pruning from partial scans.
+- [`27adfcf`](https://github.com/noctisynth/semifold/commit/27adfcf9e70dd04f08cb928455cf624882637b0c): Add `smif config sync --check` for CI-safe configuration drift detection without file writes.
+- [`55496de`](https://github.com/noctisynth/semifold/commit/55496ded28bbd1c133ba5d3af795a0a1ae4623f1): Add the `smif config sync` command to safely synchronize discovered packages into TOML configuration, with dry-run plan output and preserved formatting.
+
 ## v0.3.0-alpha.4
 
 ### New Features

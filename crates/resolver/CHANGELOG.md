@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0-alpha.3
+
+### Bug Fixes
+
+- [`3abdf29`](https://github.com/noctisynth/semifold/commit/3abdf29df5cbbe5542ff72a1f98c276dd74e4406): Add shared deterministic package discovery for init and config synchronization, and fail incomplete workspace scans instead of silently skipping invalid packages.
+
 ## v0.4.0-alpha.2
 
 ### New Features

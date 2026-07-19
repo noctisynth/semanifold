@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0-alpha.4
+
+### New Features
+
+- [`8377fd7`](https://github.com/noctisynth/semifold/commit/8377fd77c6f33fe834b601675e301f22510d44d9): Add a TOML config editor that validates and applies package sync plans while preserving release configuration, comments, and manual package fields.
+- [`a9a0ac9`](https://github.com/noctisynth/semifold/commit/a9a0ac9c59b99eddb2ee0694b9629d0a115658c8): Bridge configured packages, shared discovery, and pending changesets into config sync planning, including warnings for changesets that reference renamed packages.
+- [`a8fb0f2`](https://github.com/noctisynth/semifold/commit/a8fb0f22fb64739091406805ad290e09d674973e): Add shared safe package path normalization for workspace discovery and config synchronization.
+- [`3abdf29`](https://github.com/noctisynth/semifold/commit/3abdf29df5cbbe5542ff72a1f98c276dd74e4406): Add shared deterministic package discovery for init and config synchronization, and fail incomplete workspace scans instead of silently skipping invalid packages.
+
 ## v0.3.0-alpha.3
 
 ### New Features

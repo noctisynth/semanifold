@@ -927,7 +927,7 @@ resolver = "rust"
 
 稳定通道为默认值时不显式写入 `channel`。`assets`、`depends-on` 等无法从 manifest 推导的字段不自动生成。
 
-新条目采用确定性顺序插入。建议在 `[packages]` 内按 `PackageId` 排序新增条目，但不重排现有条目，避免产生大面积无意义 diff。
+新条目必须采用确定性顺序插入：在 `[packages]` 内按 `PackageId` 排序新增条目，但不重排现有条目，避免产生大面积无意义 diff。
 
 ### 13.6 版本通道
 

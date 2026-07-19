@@ -125,13 +125,12 @@
 - [x] 保留 `[release]`、`[[release.units]]` 和其他发布策略配置
 - [x] 保留注释、空行、字段顺序和未知字段
 - [x] 保留 `assets`、`channel` 和 `depends-on` 等手工字段
-- [ ] 在配置模型中以 `ReleaseChannel::{Stable, Named}` 取代 `VersionMode`
-- [ ] 读取时接受缺省 `channel` 和 `channel = "stable"`，并将二者解析为 stable
-- [ ] 新增 stable package 时省略 `channel`，无关同步时保留用户显式的 `channel = "stable"`
-- [ ] 将 `channel` 与 changeset / changelog 的 tag 完全分离
-- [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
+- [x] 在配置模型中以 `ReleaseChannel::{Stable, Named}` 取代 `VersionMode`（仅保留 legacy 解析兼容）
+- [x] 读取时接受缺省 `channel` 和 `channel = "stable"`，并将二者解析为 stable
+- [x] 新增 stable package 时省略 `channel`，无关同步时保留用户显式的 `channel = "stable"`
+- [x] 将 `channel` 与 changeset / changelog 的 tag 完全分离
 - [x] 新增 package 时只写入最小默认配置
-- [ ] 新增条目采用确定性顺序，但不重排现有条目
+- [x] 新增条目采用确定性顺序，但不重排现有条目
 - [x] 默认只报告缺失 package
 - [x] 仅在完整扫描成功且指定 `--prune` 时删除 package
 - [x] 修改后再次反序列化并验证 `Config`
@@ -220,6 +219,7 @@
 - [ ] 实现 `inspect()`
 - [ ] 实现 `plan_edits()`
 - [ ] Adapter 接收完整 `VersionMap`
+- [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
 
 ### 迁移
 

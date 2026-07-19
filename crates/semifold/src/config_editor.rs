@@ -73,7 +73,9 @@ impl TomlConfigEditor {
             let package = package_table_mut(packages, &moved.package)?;
             package.insert("path", value(moved.to.as_str()));
         }
-        for added in &plan.added {
+        let mut added = plan.added.iter().collect::<Vec<_>>();
+        added.sort_by(|left, right| left.id.cmp(&right.id));
+        for added in added {
             insert_discovered_package(packages, added)?;
         }
         if prune_missing {
@@ -367,6 +369,41 @@ custom = "preserved"
         fs::write(&path, "[packages.invalid]\npath = \"crates/invalid\"\n").unwrap();
 
         assert!(TomlConfigEditor::load(&path).is_err());
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn inserts_new_packages_by_id_without_reordering_existing_tables() {
+        let path = temporary_config_path();
+        fs::write(&path, CONFIG).unwrap();
+        let mut editor = TomlConfigEditor::load(&path).unwrap();
+        let mut plan = plan(path.clone());
+        plan.renamed.clear();
+        plan.moved.clear();
+        plan.added = vec![
+            DiscoveredPackage {
+                id: PackageId::new("zeta"),
+                ecosystem: Ecosystem::Rust,
+                path: Utf8PathBuf::from("crates/zeta"),
+            },
+            DiscoveredPackage {
+                id: PackageId::new("alpha"),
+                ecosystem: Ecosystem::Rust,
+                path: Utf8PathBuf::from("crates/alpha"),
+            },
+        ];
+
+        editor.apply(&plan, false).unwrap();
+        let rendered = editor.render();
+        let old_name = rendered.find("[packages.old-name]").unwrap();
+        let moved = rendered.find("[packages.moved]").unwrap();
+        let alpha = rendered.find("[packages.alpha]").unwrap();
+        let zeta = rendered.find("[packages.zeta]").unwrap();
+
+        assert!(old_name < moved);
+        assert!(moved < alpha);
+        assert!(alpha < zeta);
 
         fs::remove_file(path).unwrap();
     }

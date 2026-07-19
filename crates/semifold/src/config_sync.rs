@@ -18,7 +18,6 @@ use crate::{
 };
 
 /// Builds one config sync plan without editing the configuration document.
-#[allow(dead_code)] // Wired into the CLI after the incremental TOML editor is available.
 pub(crate) fn plan_config_sync(
     project_root: &Path,
     config_path: &Path,
@@ -72,7 +71,6 @@ pub(crate) fn plan_config_sync(
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // Constructed by the application bridge before its CLI wiring lands.
 pub(crate) enum ConfigSyncPlanningError {
     NonUtf8ConfigPath {
         path: PathBuf,

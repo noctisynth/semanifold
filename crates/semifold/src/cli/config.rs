@@ -1,9 +1,13 @@
 use std::{fs::OpenOptions, io::Write, path::Path};
 
-use anyhow::Context as _;
+use anyhow::{Context as _, anyhow};
+use camino::Utf8Path;
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
-use semifold_resolver::{config, context::Context};
+use semifold_core::ConfigSyncWarning;
+use semifold_resolver::{config, context::Context, resolver};
+
+use crate::{config_editor::TomlConfigEditor, config_sync::plan_config_sync};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Config {
@@ -13,11 +17,16 @@ pub(crate) struct Config {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    #[command(about = t!("cli.config.commands.sync"))]
+    Sync(Sync),
     #[command(about = t!("cli.config.commands.migrate"))]
     Migrate(Migrate),
     #[command(about = t!("cli.config.commands.channel"))]
     Channel(Channel),
 }
+
+#[derive(Parser, Debug)]
+struct Sync;
 
 #[derive(Parser, Debug)]
 struct Migrate {
@@ -76,8 +85,93 @@ struct MigrationPlan {
 
 pub(crate) fn run(command: &Config, ctx: &Context) -> anyhow::Result<()> {
     match &command.command {
+        Commands::Sync(options) => sync(options, ctx),
         Commands::Migrate(options) => migrate(options, ctx),
         Commands::Channel(channel) => manage_channel(channel, ctx),
+    }
+}
+
+fn sync(_: &Sync, ctx: &Context) -> anyhow::Result<()> {
+    let path = toml_config_path(ctx, t!("cli.config.command_sync").as_ref())?;
+    let project_root = ctx
+        .repo_root
+        .as_deref()
+        .context(t!("cli.config.sync_repo_root_not_found"))?;
+    let config = ctx.config.as_ref().context(t!("cli.config.not_found"))?;
+    let changesets = resolver::get_changesets(ctx)
+        .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
+    let plan = plan_config_sync(project_root, path, config, &changesets)
+        .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
+
+    report_sync_warnings(&plan.warnings);
+    if !plan.missing.is_empty() {
+        println!(
+            "{}",
+            t!(
+                "cli.config.sync_missing",
+                packages = plan
+                    .missing
+                    .iter()
+                    .map(|package| package.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        );
+    }
+    if ctx.dry_run {
+        println!("{}", t!("cli.config.sync_dry_run"));
+        println!("{}", serde_json::to_string_pretty(&plan)?);
+        return Ok(());
+    }
+    if !plan.conflicts.is_empty() {
+        anyhow::bail!(
+            "{}",
+            t!(
+                "cli.config.sync_conflicts",
+                count = plan.conflicts.len().to_string()
+            )
+        );
+    }
+    if !plan.has_drift() {
+        println!("{}", t!("cli.config.sync_not_required"));
+        return Ok(());
+    }
+
+    let path = Utf8Path::from_path(path).context(t!("cli.config.sync_non_utf8_path"))?;
+    let mut editor = TomlConfigEditor::load(path)
+        .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
+    let original = editor.render();
+    editor
+        .apply(&plan)
+        .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
+    let content = editor.render();
+    if content == original {
+        println!("{}", t!("cli.config.sync_no_safe_changes"));
+        return Ok(());
+    }
+
+    write_atomically(path.as_std_path(), &content)?;
+    println!("{}", t!("cli.config.synced", path = path));
+    Ok(())
+}
+
+fn report_sync_warnings(warnings: &[ConfigSyncWarning]) {
+    for warning in warnings {
+        match warning {
+            ConfigSyncWarning::ChangesetReferencesRenamedPackage {
+                changeset,
+                from,
+                to,
+            } => println!(
+                "{}",
+                t!(
+                    "cli.config.sync_renamed_changeset_warning",
+                    changeset = changeset.as_str(),
+                    from = from.as_str(),
+                    to = to.as_str()
+                )
+            ),
+        }
     }
 }
 
@@ -298,10 +392,11 @@ fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use semifold_resolver::context::Context;
+    use semifold_resolver::{config, context::Context};
 
     use super::{
-        ChannelTarget, Migrate, migrate, plan_channel_update, plan_migration, update_channel,
+        ChannelTarget, Migrate, Sync, migrate, plan_channel_update, plan_migration, sync,
+        update_channel,
     };
 
     fn temporary_config_path(name: &str) -> PathBuf {
@@ -311,6 +406,44 @@ mod tests {
         ));
         fs::create_dir_all(&directory).unwrap();
         directory.join("config.toml")
+    }
+
+    fn temporary_sync_root(name: &str) -> PathBuf {
+        let directory = std::env::temp_dir().join(format!(
+            "semifold-config-sync-{name}-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(directory.join("crates/app")).unwrap();
+        fs::create_dir_all(directory.join(".changes")).unwrap();
+        fs::write(
+            directory.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/app\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join("crates/app/Cargo.toml"),
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            directory.join(".changes/config.toml"),
+            "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages]\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+        )
+        .unwrap();
+        directory
+    }
+
+    fn sync_context(root: &std::path::Path, dry_run: bool) -> Context {
+        let changeset_root = root.join(".changes");
+        let config_path = changeset_root.join("config.toml");
+        Context {
+            config: Some(config::load_config(&config_path).unwrap()),
+            changeset_root: Some(changeset_root),
+            config_path: Some(config_path),
+            repo_root: Some(root.to_path_buf()),
+            dry_run,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -489,5 +622,34 @@ resolver = "rust"
         assert!(error.to_string().contains("do not match"));
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn sync_adds_discovered_packages_and_is_idempotent() {
+        let root = temporary_sync_root("write");
+        let context = sync_context(&root, false);
+        let config_path = root.join(".changes/config.toml");
+
+        sync(&Sync, &context).unwrap();
+        let first = fs::read_to_string(&config_path).unwrap();
+        assert!(first.contains("[packages.app]\npath = \"crates/app\"\nresolver = \"rust\""));
+
+        sync(&Sync, &sync_context(&root, false)).unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), first);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_dry_run_does_not_write_the_configuration() {
+        let root = temporary_sync_root("dry-run");
+        let context = sync_context(&root, true);
+        let config_path = root.join(".changes/config.toml");
+        let original = fs::read_to_string(&config_path).unwrap();
+
+        sync(&Sync, &context).unwrap();
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

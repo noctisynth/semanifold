@@ -3,7 +3,6 @@ use log::LevelFilter;
 use semifold_resolver::context;
 
 pub mod cli;
-#[allow(dead_code)] // The config sync CLI wires this validated editor in the next slice.
 pub(crate) mod config_editor;
 pub(crate) mod config_sync;
 pub(crate) mod discovery;

@@ -8,7 +8,7 @@
 - [ ] 以可配置 `ReleaseUnit` 支持单包、lockstep、多项目和 workspace 级发布流
 - [ ] 让 `status`、`version`、`publish` 和 CI 使用同一套应用服务
 - [ ] 将领域计算与文件系统、Git、HTTP、GitHub 和子进程副作用分离
-- [ ] 使用 `smif config sync` 增量同步 `.changes/config.toml`，不再依赖重复执行 `init`
+- [x] 使用 `smif config sync` 增量同步 `.changes/config.toml`，不再依赖重复执行 `init`
 - [ ] 保持现有 CLI 和配置格式的向后兼容
 
 ## 阶段 0：建立重构安全网
@@ -96,7 +96,7 @@
 - [x] 新增 `smif config channel set <channel> --package <PackageId>` 与 `--all`
 - [x] 新增 `smif config channel clear --package <PackageId>` 与 `--all`
 - [x] 支持 `smif config channel ... --check`
-- [ ] 新增 `smif config sync`
+- [x] 新增 `smif config sync`
 - [ ] 新增 `smif config sync --check`
 - [ ] 新增 `smif config sync --prune`
 - [ ] 支持重复指定 `--resolver <type>`
@@ -135,8 +135,8 @@
 - [x] 默认只报告缺失 package
 - [ ] 仅在完整扫描成功且指定 `--prune` 时删除 package
 - [x] 修改后再次反序列化并验证 `Config`
-- [ ] 使用临时文件和 rename 原子写回
-- [ ] 内容无变化时不写文件
+- [x] 使用临时文件和 rename 原子写回
+- [x] 内容无变化时不写文件
 
 ### 与 `init` 复用
 
@@ -159,14 +159,14 @@
 - [ ] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
 - [x] Rename 和 move 保留原 table 的注释与自定义字段
 - [ ] `--check` 检测到漂移时返回非零退出码且不写文件
-- [ ] 连续执行两次同步时第二次无 diff
+- [x] 连续执行两次同步时第二次无 diff
 
 ### 阶段完成条件
 
 - [ ] 工作区增删包后无需重新执行 `init`
-- [ ] `config sync` 只产生最小、可审查的 TOML diff
+- [x] `config sync` 只产生最小、可审查的 TOML diff
 - [ ] CI 可以使用 `config sync --check` 检测配置漂移
-- [ ] 阶段完成前清除为分阶段接线临时添加的全部 `#[allow(dead_code)]`，并以无豁免的 Clippy 验证
+- [x] 阶段完成前清除为分阶段接线临时添加的全部 `#[allow(dead_code)]`，并以无豁免的 Clippy 验证
 
 ## 阶段 3：统一版本修改的 Plan/Validate/Apply
 
@@ -353,7 +353,7 @@
 - [ ] 跨生态依赖图支持确定性拓扑排序和环检测
 - [ ] 所有文件修改在写入前完成计划和验证
 - [ ] `--dry-run` 不产生文件、命令、网络或发布副作用
-- [ ] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
+- [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
 - [ ] `config sync --check` 可稳定用于 CI
 - [ ] 连续执行配置同步和版本规划均具有幂等性
 - [ ] release branch / release PR 支持单包、lockstep、静态和多单元发布策略

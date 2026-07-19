@@ -98,7 +98,7 @@
 - [x] 支持 `smif config channel ... --check`
 - [x] 新增 `smif config sync`
 - [x] 新增 `smif config sync --check`
-- [ ] 新增 `smif config sync --prune`
+- [x] 新增 `smif config sync --prune`
 - [ ] 支持重复指定 `--resolver <type>`
 - [x] 明确全局 `--dry-run` 与 `--check` 的不同退出语义
 - [ ] JSON 配置返回 `UnsupportedConfigFormat`
@@ -133,7 +133,7 @@
 - [x] 新增 package 时只写入最小默认配置
 - [ ] 新增条目采用确定性顺序，但不重排现有条目
 - [x] 默认只报告缺失 package
-- [ ] 仅在完整扫描成功且指定 `--prune` 时删除 package
+- [x] 仅在完整扫描成功且指定 `--prune` 时删除 package
 - [x] 修改后再次反序列化并验证 `Config`
 - [x] 使用临时文件和 rename 原子写回
 - [x] 内容无变化时不写文件
@@ -155,7 +155,7 @@
 - [x] channel `--check` 检测到状态不匹配时返回非零且不写文件
 - [x] 新增 package 只产生最小 TOML diff
 - [x] 缺失 package 默认保留
-- [ ] `--prune` 显式删除缺失 package
+- [x] `--prune` 显式删除缺失 package
 - [ ] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
 - [x] Rename 和 move 保留原 table 的注释与自定义字段
 - [x] `--check` 检测到漂移时返回非零退出码且不写文件
@@ -163,7 +163,7 @@
 
 ### 阶段完成条件
 
-- [ ] 工作区增删包后无需重新执行 `init`
+- [x] 工作区增删包后无需重新执行 `init`
 - [x] `config sync` 只产生最小、可审查的 TOML diff
 - [x] CI 可以使用 `config sync --check` 检测配置漂移
 - [x] 阶段完成前清除为分阶段接线临时添加的全部 `#[allow(dead_code)]`，并以无豁免的 Clippy 验证

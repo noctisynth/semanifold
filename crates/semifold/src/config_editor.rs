@@ -40,7 +40,11 @@ impl TomlConfigEditor {
         })
     }
 
-    pub(crate) fn apply(&mut self, plan: &ConfigSyncPlan) -> Result<(), ConfigEditError> {
+    pub(crate) fn apply(
+        &mut self,
+        plan: &ConfigSyncPlan,
+        prune_missing: bool,
+    ) -> Result<(), ConfigEditError> {
         if plan.config_path != self.path {
             return Err(ConfigEditError::PlanPathMismatch {
                 editor: self.path.clone(),
@@ -71,6 +75,15 @@ impl TomlConfigEditor {
         }
         for added in &plan.added {
             insert_discovered_package(packages, added)?;
+        }
+        if prune_missing {
+            for missing in &plan.missing {
+                packages.remove(missing.id.as_str()).ok_or_else(|| {
+                    ConfigEditError::PackageNotFound {
+                        package: missing.id.clone(),
+                    }
+                })?;
+            }
         }
 
         self.validate()?;
@@ -285,7 +298,7 @@ custom = "preserved"
         let path = temporary_config_path();
         fs::write(&path, CONFIG).unwrap();
         let mut editor = TomlConfigEditor::load(&path).unwrap();
-        editor.apply(&plan(path.clone())).unwrap();
+        editor.apply(&plan(path.clone()), false).unwrap();
         let rendered = editor.render();
 
         assert!(rendered.contains("# top-level comment"));
@@ -321,7 +334,7 @@ custom = "preserved"
             discovered: vec![],
         });
 
-        assert!(editor.apply(&plan).is_err());
+        assert!(editor.apply(&plan, false).is_err());
         assert_eq!(editor.render(), CONFIG);
 
         fs::remove_file(path).unwrap();
@@ -342,7 +355,7 @@ custom = "preserved"
             path: Utf8PathBuf::from("crates/keep"),
         }];
 
-        editor.apply(&plan).unwrap();
+        editor.apply(&plan, false).unwrap();
         assert_eq!(editor.render(), CONFIG);
 
         fs::remove_file(path).unwrap();

@@ -172,6 +172,7 @@ channel_clear = "Return packages to the default stable channel"
 
 [cli.config.flags]
 check_sync = "Check whether the workspace and configuration are synchronized without writing"
+prune_sync = "Remove configured packages that are absent from a complete workspace scan"
 check_migration = "Report whether migration is required without writing the configuration"
 channel = "Named release channel to set, such as alpha or beta"
 package = "Package ID to update. May be repeated"

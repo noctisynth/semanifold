@@ -1017,7 +1017,11 @@ pub struct TomlConfigEditor {
 impl TomlConfigEditor {
     pub fn load(path: &Utf8Path) -> Result<Self, ConfigEditError>;
     pub fn validate(&self) -> Result<Config, ConfigEditError>;
-    pub fn apply(&mut self, plan: &ConfigSyncPlan) -> Result<(), ConfigEditError>;
+    pub fn apply(
+        &mut self,
+        plan: &ConfigSyncPlan,
+        prune_missing: bool,
+    ) -> Result<(), ConfigEditError>;
     pub fn render(&self) -> String;
 }
 ```
@@ -1040,7 +1044,7 @@ let packages = document["packages"]
 - 使用临时文件与 rename 原子替换；
 - 文件内容未变化时不执行写入。
 
-`apply` 在存在任何 `conflicts` 时必须在修改文档前返回错误。未启用 `--prune` 的编辑仅应用 `added`、`renamed` 与 `moved`，`missing` 保持为报告项且不得删除 table；`--prune` 的删除策略和原子写回属于后续 CLI 切片。
+`apply` 在存在任何 `conflicts` 时必须在修改文档前返回错误。`prune_missing = false` 时仅应用 `added`、`renamed` 与 `moved`，`missing` 保持为报告项且不得删除 table；`prune_missing = true` 时删除 `missing` 对应的 package table。CLI 只可在完整扫描成功、未排除任何 resolver 且计划无冲突时传入 `true`，随后使用临时文件和 rename 原子写回。
 
 ### 13.8 与 `init` 的关系
 

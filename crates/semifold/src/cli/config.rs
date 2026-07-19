@@ -29,6 +29,12 @@ enum Commands {
 struct Sync {
     #[arg(long, help = t!("cli.config.flags.check_sync"))]
     check: bool,
+    #[arg(
+        long,
+        conflicts_with = "check",
+        help = t!("cli.config.flags.prune_sync")
+    )]
+    prune: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -152,7 +158,7 @@ fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
         .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
     let original = editor.render();
     editor
-        .apply(&plan)
+        .apply(&plan, options.prune)
         .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
     let content = editor.render();
     if content == original {
@@ -640,11 +646,25 @@ resolver = "rust"
         let context = sync_context(&root, false);
         let config_path = root.join(".changes/config.toml");
 
-        sync(&Sync { check: false }, &context).unwrap();
+        sync(
+            &Sync {
+                check: false,
+                prune: false,
+            },
+            &context,
+        )
+        .unwrap();
         let first = fs::read_to_string(&config_path).unwrap();
         assert!(first.contains("[packages.app]\npath = \"crates/app\"\nresolver = \"rust\""));
 
-        sync(&Sync { check: false }, &sync_context(&root, false)).unwrap();
+        sync(
+            &Sync {
+                check: false,
+                prune: false,
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), first);
 
         fs::remove_dir_all(root).unwrap();
@@ -657,7 +677,14 @@ resolver = "rust"
         let config_path = root.join(".changes/config.toml");
         let original = fs::read_to_string(&config_path).unwrap();
 
-        sync(&Sync { check: false }, &context).unwrap();
+        sync(
+            &Sync {
+                check: false,
+                prune: true,
+            },
+            &context,
+        )
+        .unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
 
         fs::remove_dir_all(root).unwrap();
@@ -670,7 +697,14 @@ resolver = "rust"
         let config_path = root.join(".changes/config.toml");
         let original = fs::read_to_string(&config_path).unwrap();
 
-        let error = sync(&Sync { check: true }, &context).unwrap_err();
+        let error = sync(
+            &Sync {
+                check: true,
+                prune: false,
+            },
+            &context,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("out of sync"));
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
 
@@ -681,14 +715,57 @@ resolver = "rust"
     fn sync_check_succeeds_when_the_configuration_is_current() {
         let root = temporary_sync_root("check-current");
         let config_path = root.join(".changes/config.toml");
-        sync(&Sync { check: false }, &sync_context(&root, false)).unwrap();
+        sync(
+            &Sync {
+                check: false,
+                prune: false,
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap();
 
-        sync(&Sync { check: true }, &sync_context(&root, false)).unwrap();
+        sync(
+            &Sync {
+                check: true,
+                prune: false,
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap();
         assert!(
             fs::read_to_string(&config_path)
                 .unwrap()
                 .contains("[packages.app]")
         );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_prune_removes_packages_missing_from_the_complete_scan() {
+        let root = temporary_sync_root("prune");
+        let config_path = root.join(".changes/config.toml");
+        fs::write(
+            &config_path,
+            format!(
+                "{}\n[packages.removed]\n# removed package fields must leave with its table\npath = \"crates/removed\"\nresolver = \"rust\"\ncustom = \"value\"\n",
+                fs::read_to_string(&config_path).unwrap()
+            ),
+        )
+        .unwrap();
+
+        sync(
+            &Sync {
+                check: false,
+                prune: true,
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap();
+        let synced = fs::read_to_string(&config_path).unwrap();
+        assert!(synced.contains("[packages.app]"));
+        assert!(!synced.contains("[packages.removed]"));
+        assert!(!synced.contains("custom = \"value\""));
 
         fs::remove_dir_all(root).unwrap();
     }

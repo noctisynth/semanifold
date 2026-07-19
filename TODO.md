@@ -91,7 +91,7 @@
 
 - [x] `status` 不再自行计算 bump
 - [x] 相同输入始终生成相同 `ReleasePlan`
-- [ ] 依赖环错误包含可读的完整路径
+- [x] 依赖环错误包含可读的完整路径
 
 ## 阶段 2：实现 `smif config sync`
 

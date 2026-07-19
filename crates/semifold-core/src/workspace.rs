@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use crate::{PackageId, PackageSnapshot};
 
@@ -140,8 +143,26 @@ pub enum WorkspaceGraphError {
         package: PackageId,
         dependency: PackageId,
     },
-    #[error("dependency cycle: {cycle:?}")]
+    #[error("dependency cycle: {}", display_cycle(.cycle))]
     DependencyCycle { cycle: Vec<PackageId> },
+}
+
+fn display_cycle(cycle: &[PackageId]) -> DependencyCycleDisplay<'_> {
+    DependencyCycleDisplay(cycle)
+}
+
+struct DependencyCycleDisplay<'a>(&'a [PackageId]);
+
+impl fmt::Display for DependencyCycleDisplay<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, package) in self.0.iter().enumerate() {
+            if index > 0 {
+                formatter.write_str(" -> ")?;
+            }
+            package.fmt(formatter)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +254,10 @@ mod tests {
                     PackageId::new("a"),
                 ],
             })
+        );
+        assert_eq!(
+            graph.topological_order().unwrap_err().to_string(),
+            "dependency cycle: a -> b -> c -> a"
         );
     }
 

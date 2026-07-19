@@ -57,6 +57,40 @@ fn config(package: &str) -> String {
 }
 
 #[test]
+fn status_reports_the_complete_dependency_cycle() {
+    let root = temporary_project(
+        "dependency-cycle",
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages.a]\npath = \"a\"\nresolver = \"rust\"\n\n[packages.b]\npath = \"b\"\nresolver = \"rust\"\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+    );
+    fs::remove_file(root.join("Cargo.toml")).unwrap();
+    fs::remove_file(root.join(".changes/feature.md")).unwrap();
+    for (path, manifest) in [
+        (
+            "a",
+            "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[dependencies]\nb = { version = \"1\", path = \"../b\" }\n",
+        ),
+        (
+            "b",
+            "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[dependencies]\na = { version = \"1\", path = \"../a\" }\n",
+        ),
+    ] {
+        fs::create_dir_all(root.join(path)).unwrap();
+        fs::write(root.join(path).join("Cargo.toml"), manifest).unwrap();
+    }
+
+    let status = run_smif(&root, &["status"]);
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(output.contains("a -> b -> a"), "{output}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn status_and_dry_run_version_leave_the_workspace_unchanged() {
     let root = temporary_project("status-version", &config("channel = \"stable\""));
     let manifest = root.join("Cargo.toml");

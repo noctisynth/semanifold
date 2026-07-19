@@ -1040,6 +1040,8 @@ let packages = document["packages"]
 - 使用临时文件与 rename 原子替换；
 - 文件内容未变化时不执行写入。
 
+`apply` 在存在任何 `conflicts` 时必须在修改文档前返回错误。未启用 `--prune` 的编辑仅应用 `added`、`renamed` 与 `moved`，`missing` 保持为报告项且不得删除 table；`--prune` 的删除策略和原子写回属于后续 CLI 切片。
+
 ### 13.8 与 `init` 的关系
 
 `init` 和 `config sync` 应共享：

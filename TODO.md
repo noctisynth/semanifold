@@ -118,23 +118,23 @@
 
 - [x] 将 legacy `version-mode` 增量迁移为 `channel`，并保留无关字段和注释
 - [x] `channel` 与 `version-mode` 同时存在时停止并报告冲突
-- [ ] 实现 `TomlConfigEditor`
-- [ ] 使用 `toml_edit::DocumentMut` 读取和修改原始文档
-- [ ] 修改前将文档反序列化为强类型 `Config` 并验证
-- [ ] 只更新 `[packages]` 下需要变化的 table
-- [ ] 保留 `[release]`、`[[release.units]]` 和其他发布策略配置
-- [ ] 保留注释、空行、字段顺序和未知字段
-- [ ] 保留 `assets`、`channel` 和 `depends-on` 等手工字段
+- [x] 实现 `TomlConfigEditor`
+- [x] 使用 `toml_edit::DocumentMut` 读取和修改原始文档
+- [x] 修改前将文档反序列化为强类型 `Config` 并验证
+- [x] 只更新 `[packages]` 下需要变化的 table
+- [x] 保留 `[release]`、`[[release.units]]` 和其他发布策略配置
+- [x] 保留注释、空行、字段顺序和未知字段
+- [x] 保留 `assets`、`channel` 和 `depends-on` 等手工字段
 - [ ] 在配置模型中以 `ReleaseChannel::{Stable, Named}` 取代 `VersionMode`
 - [ ] 读取时接受缺省 `channel` 和 `channel = "stable"`，并将二者解析为 stable
 - [ ] 新增 stable package 时省略 `channel`，无关同步时保留用户显式的 `channel = "stable"`
 - [ ] 将 `channel` 与 changeset / changelog 的 tag 完全分离
 - [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
-- [ ] 新增 package 时只写入最小默认配置
+- [x] 新增 package 时只写入最小默认配置
 - [ ] 新增条目采用确定性顺序，但不重排现有条目
-- [ ] 默认只报告缺失 package
+- [x] 默认只报告缺失 package
 - [ ] 仅在完整扫描成功且指定 `--prune` 时删除 package
-- [ ] 修改后再次反序列化并验证 `Config`
+- [x] 修改后再次反序列化并验证 `Config`
 - [ ] 使用临时文件和 rename 原子写回
 - [ ] 内容无变化时不写文件
 
@@ -153,11 +153,11 @@
 - [x] 连续执行两次 `config migrate` 时第二次无 diff
 - [x] channel set、clear 与 `--all` 保留目标 table 的其他字段，并且重复执行无 diff
 - [x] channel `--check` 检测到状态不匹配时返回非零且不写文件
-- [ ] 新增 package 只产生最小 TOML diff
-- [ ] 缺失 package 默认保留
+- [x] 新增 package 只产生最小 TOML diff
+- [x] 缺失 package 默认保留
 - [ ] `--prune` 显式删除缺失 package
 - [ ] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
-- [ ] Rename 和 move 保留原 table 的注释与自定义字段
+- [x] Rename 和 move 保留原 table 的注释与自定义字段
 - [ ] `--check` 检测到漂移时返回非零退出码且不写文件
 - [ ] 连续执行两次同步时第二次无 diff
 
@@ -166,6 +166,7 @@
 - [ ] 工作区增删包后无需重新执行 `init`
 - [ ] `config sync` 只产生最小、可审查的 TOML diff
 - [ ] CI 可以使用 `config sync --check` 检测配置漂移
+- [ ] 阶段完成前清除为分阶段接线临时添加的全部 `#[allow(dead_code)]`，并以无豁免的 Clippy 验证
 
 ## 阶段 3：统一版本修改的 Plan/Validate/Apply
 

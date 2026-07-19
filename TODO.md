@@ -105,13 +105,13 @@
 
 ### 同步计划
 
-- [ ] 定义 `ConfigSyncPlan`
-- [ ] 分类 added、missing、renamed、moved 和 conflicts
+- [x] 定义 `ConfigSyncPlan`
+- [x] 分类 added、missing、renamed、moved 和 conflicts
 - [ ] 实现 package path 规范化
-- [ ] 优先使用 resolver + path 匹配重命名
-- [ ] 使用 package identity 匹配路径移动
-- [ ] 多义匹配时停止写入并报告冲突
-- [ ] Resolver 变化时要求显式处理，不自动覆盖
+- [x] 优先使用 resolver + path 匹配重命名
+- [x] 使用 package identity 匹配路径移动
+- [x] 多义匹配时停止写入并报告冲突
+- [x] Resolver 变化时要求显式处理，不自动覆盖
 - [ ] Rename 时检查现有 changeset 对旧包名的引用并警告
 
 ### TOML 增量编辑

@@ -1,6 +1,7 @@
 //! Cross-ecosystem release domain types.
 
 pub mod changeset;
+pub mod config_sync;
 pub mod dependency;
 pub mod file_edit;
 pub mod package;
@@ -10,6 +11,10 @@ pub mod versioning;
 pub mod workspace;
 
 pub use changeset::{BumpLevel, ChangesetId, PlanWarning, ReleaseReason};
+pub use config_sync::{
+    ConfigConflict, ConfigSyncPlan, ConfigSyncPlanner, ConfiguredPackage, DiscoveredPackage,
+    PackageMove, PackageRename,
+};
 pub use dependency::{Dependency, DependencyKind};
 pub use file_edit::{EditSource, FileEdit, FileHash};
 pub use package::{Ecosystem, PackageId, PackageSnapshot};

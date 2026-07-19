@@ -794,12 +794,59 @@ smif config channel clear --package semifold
 pub struct ConfigSyncPlan {
     pub config_path: Utf8PathBuf,
     pub added: Vec<DiscoveredPackage>,
-    pub removed: Vec<ConfiguredPackage>,
+    pub missing: Vec<ConfiguredPackage>,
     pub renamed: Vec<PackageRename>,
     pub moved: Vec<PackageMove>,
     pub conflicts: Vec<ConfigConflict>,
 }
 ```
+
+首版领域输入与分类结果使用以下结构：
+
+```rust
+pub struct ConfiguredPackage {
+    pub id: PackageId,
+    pub ecosystem: Ecosystem,
+    pub path: Utf8PathBuf,
+}
+
+pub struct DiscoveredPackage {
+    pub id: PackageId,
+    pub ecosystem: Ecosystem,
+    pub path: Utf8PathBuf,
+}
+
+pub struct PackageRename {
+    pub from: PackageId,
+    pub to: PackageId,
+    pub ecosystem: Ecosystem,
+    pub path: Utf8PathBuf,
+}
+
+pub struct PackageMove {
+    pub package: PackageId,
+    pub ecosystem: Ecosystem,
+    pub from: Utf8PathBuf,
+    pub to: Utf8PathBuf,
+}
+
+pub enum ConfigConflict {
+    AmbiguousMatch {
+        configured: Vec<ConfiguredPackage>,
+        discovered: Vec<DiscoveredPackage>,
+    },
+    ResolverChanged {
+        configured: ConfiguredPackage,
+        discovered: DiscoveredPackage,
+    },
+}
+```
+
+`ConfigSyncPlanner` 是纯函数式领域服务，接收 config 路径、已配置 package 快照和完整 discovery 快照。package path 在进入 planner 前必须已转换为相对项目根目录的规范化 UTF-8 路径；路径规范化失败属于应用层输入错误，不伪装为同步冲突。planner 不读取文件、不决定 `--prune`，也不修改配置。
+
+输出使用 `missing` 而不是 `removed`：它只表示配置项未被发现；是否删除由应用阶段结合完整扫描状态和 `--prune` 决定。所有结果按 package id、路径和生态稳定排序。同一输入无论迭代顺序如何都必须产生相同计划。
+
+匹配前先验证 discovery 建议的 `PackageId` 唯一；同一 id 对应多个发现结果时分类为 `AmbiguousMatch`。随后严格分两轮匹配：第一轮匹配相同 ecosystem 与相同规范化 path，package id 不同时分类为 rename；第二轮在剩余项中匹配相同 `PackageId` 与相同 ecosystem，path 不同时分类为 move。相同路径或相同 `PackageId` 的 ecosystem 改变分类为 `ResolverChanged`。任一轮存在多对一或一对多候选时，将全部相关项分类为 `AmbiguousMatch`，不得同时把它们报告为 added 或 missing。剩余 discovery 项为 added，剩余 config 项为 missing。
 
 执行流程：
 
@@ -820,7 +867,7 @@ pub struct ConfigSyncPlan {
 同步不能只按包名匹配，否则重命名会被误判为“一删一增”，并丢失原配置中的手工字段。建议按以下优先级匹配：
 
 1. resolver 与规范化 package path 完全相同：视为同一个包，manifest name 改变时识别为 rename；
-2. `PackageId` 或 manifest name 相同：path 改变时识别为 move；
+2. `PackageId` 相同：path 改变时识别为 move；discovery 的默认 `PackageId` 从 manifest name 派生；
 3. 名称和路径均不匹配：视为新增和缺失；
 4. 多个包同时命中同一候选：产生冲突，不自动修改。
 

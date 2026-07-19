@@ -101,7 +101,7 @@
 - [x] 新增 `smif config sync --prune`
 - [x] 支持重复指定 `--resolver <type>`
 - [x] 明确全局 `--dry-run` 与 `--check` 的不同退出语义
-- [ ] JSON 配置返回 `UnsupportedConfigFormat`
+- [x] JSON 配置返回 `UnsupportedConfigFormat`
 
 ### 同步计划
 

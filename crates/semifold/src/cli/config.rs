@@ -114,7 +114,8 @@ pub(crate) fn run(command: &Config, ctx: &Context) -> anyhow::Result<()> {
 }
 
 fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx, t!("cli.config.command_sync").as_ref())?;
+    let path = toml_config_path(ctx)
+        .map_err(|error| render_config_path_error(error, t!("cli.config.command_sync").as_ref()))?;
     let project_root = ctx
         .repo_root
         .as_deref()
@@ -231,7 +232,9 @@ fn update_channel(
     target: &ChannelTarget,
     ctx: &Context,
 ) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx, t!("cli.config.command_channel").as_ref())?;
+    let path = toml_config_path(ctx).map_err(|error| {
+        render_config_path_error(error, t!("cli.config.command_channel").as_ref())
+    })?;
     let original = std::fs::read_to_string(path)?;
     config::load_config(path)?;
     let plan = plan_channel_update(&original, channel, &target.packages, target.all)?;
@@ -263,7 +266,9 @@ fn update_channel(
 }
 
 fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx, t!("cli.config.command_migrate").as_ref())?;
+    let path = toml_config_path(ctx).map_err(|error| {
+        render_config_path_error(error, t!("cli.config.command_migrate").as_ref())
+    })?;
 
     let original = std::fs::read_to_string(path)?;
     config::load_config(path)?;
@@ -293,15 +298,30 @@ fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn toml_config_path<'a>(ctx: &'a Context, command: &str) -> anyhow::Result<&'a Path> {
+#[derive(Debug, Eq, PartialEq)]
+enum ConfigPathError {
+    ConfigNotFound,
+    UnsupportedConfigFormat,
+}
+
+fn toml_config_path(ctx: &Context) -> Result<&Path, ConfigPathError> {
     let path = ctx
         .config_path
         .as_deref()
-        .context(t!("cli.config.not_found"))?;
+        .ok_or(ConfigPathError::ConfigNotFound)?;
     if path.extension().and_then(|extension| extension.to_str()) != Some("toml") {
-        anyhow::bail!(t!("cli.config.unsupported_format", command = command));
+        return Err(ConfigPathError::UnsupportedConfigFormat);
     }
     Ok(path)
+}
+
+fn render_config_path_error(error: ConfigPathError, command: &str) -> anyhow::Error {
+    match error {
+        ConfigPathError::ConfigNotFound => anyhow!(t!("cli.config.not_found")),
+        ConfigPathError::UnsupportedConfigFormat => {
+            anyhow!(t!("cli.config.unsupported_format", command = command))
+        }
+    }
 }
 
 fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
@@ -435,8 +455,8 @@ mod tests {
     use semifold_resolver::{config, context::Context, resolver::ResolverType};
 
     use super::{
-        ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate, plan_channel_update,
-        plan_migration, sync, update_channel,
+        ChannelTarget, Config as ConfigCommand, ConfigPathError, Migrate, Sync, migrate,
+        plan_channel_update, plan_migration, sync, toml_config_path, update_channel,
     };
 
     fn temporary_config_path(name: &str) -> PathBuf {
@@ -909,5 +929,33 @@ resolver = "rust"
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_rejects_json_configuration_with_a_typed_format_error() {
+        let path = temporary_config_path("json").with_extension("json");
+        fs::write(&path, "{}").unwrap();
+        let context = Context {
+            config_path: Some(path.clone()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            toml_config_path(&context),
+            Err(ConfigPathError::UnsupportedConfigFormat)
+        );
+        let error = sync(
+            &Sync {
+                check: false,
+                prune: false,
+                resolvers: vec![],
+            },
+            &context,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("supports only TOML"));
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{}");
+
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }

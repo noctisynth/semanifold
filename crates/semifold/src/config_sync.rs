@@ -10,12 +10,44 @@ use semifold_core::{
     ChangesetId, ChangesetReference, ConfigSyncPlan, ConfigSyncPlanner, ConfiguredPackage,
     PackageId,
 };
-use semifold_resolver::{changeset::Changeset, config::Config};
+use semifold_resolver::{changeset::Changeset, config::Config, resolver::ResolverType};
 
 use crate::{
     discovery::{PackageDiscoveryError, PackageDiscoveryService, ResolverRegistry},
     package_path::{PackagePathError, normalize_package_path},
 };
+
+/// Resolver selection and deletion safety for one config sync invocation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ConfigSyncScope {
+    resolvers: Vec<ResolverType>,
+    pub(crate) is_complete: bool,
+}
+
+pub(crate) fn config_sync_scope(
+    config: &Config,
+    requested: &[ResolverType],
+) -> Result<ConfigSyncScope, ConfigSyncPlanningError> {
+    let enabled =
+        ResolverRegistry::normalize_selection(&config.resolver.keys().copied().collect::<Vec<_>>());
+    let resolvers = if requested.is_empty() {
+        enabled.clone()
+    } else {
+        ResolverRegistry::normalize_selection(requested)
+    };
+    for resolver in &resolvers {
+        if !config.resolver.contains_key(resolver) {
+            return Err(ConfigSyncPlanningError::ResolverNotEnabled {
+                resolver: *resolver,
+            });
+        }
+    }
+
+    Ok(ConfigSyncScope {
+        is_complete: resolvers == enabled,
+        resolvers,
+    })
+}
 
 /// Builds one config sync plan without editing the configuration document.
 pub(crate) fn plan_config_sync(
@@ -23,10 +55,9 @@ pub(crate) fn plan_config_sync(
     config_path: &Path,
     config: &Config,
     changesets: &[Changeset],
+    scope: &ConfigSyncScope,
 ) -> Result<ConfigSyncPlan, ConfigSyncPlanningError> {
-    let resolvers =
-        ResolverRegistry::normalize_selection(&config.resolver.keys().copied().collect::<Vec<_>>());
-    let selected = resolvers.iter().copied().collect::<BTreeSet<_>>();
+    let selected = scope.resolvers.iter().copied().collect::<BTreeSet<_>>();
     let configured = config
         .packages
         .iter()
@@ -46,7 +77,7 @@ pub(crate) fn plan_config_sync(
         })
         .collect::<Result<Vec<_>, ConfigSyncPlanningError>>()?;
     let discovery = PackageDiscoveryService::default()
-        .discover(project_root, &resolvers)
+        .discover(project_root, &scope.resolvers)
         .map_err(ConfigSyncPlanningError::Discovery)?;
     let changesets = changesets
         .iter()
@@ -72,6 +103,9 @@ pub(crate) fn plan_config_sync(
 
 #[derive(Debug)]
 pub(crate) enum ConfigSyncPlanningError {
+    ResolverNotEnabled {
+        resolver: ResolverType,
+    },
     NonUtf8ConfigPath {
         path: PathBuf,
     },
@@ -85,6 +119,12 @@ pub(crate) enum ConfigSyncPlanningError {
 impl fmt::Display for ConfigSyncPlanningError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ResolverNotEnabled { resolver } => {
+                write!(
+                    formatter,
+                    "resolver {resolver} is not enabled in the configuration"
+                )
+            }
             Self::NonUtf8ConfigPath { path } => {
                 write!(
                     formatter,
@@ -108,7 +148,7 @@ impl Error for ConfigSyncPlanningError {
         match self {
             Self::ConfiguredPackagePath { source, .. } => Some(source),
             Self::Discovery(source) => Some(source),
-            Self::NonUtf8ConfigPath { .. } => None,
+            Self::ResolverNotEnabled { .. } | Self::NonUtf8ConfigPath { .. } => None,
         }
     }
 }
@@ -208,11 +248,16 @@ mod tests {
         let mut changeset = Changeset::new("pending".to_string(), &root.0);
         changeset.add_package("old-name".to_string(), BumpLevel::Patch, None);
 
+        let scope = config_sync_scope(&config, &[ResolverType::Rust, ResolverType::Rust]).unwrap();
+        assert_eq!(scope.resolvers, [ResolverType::Rust]);
+        assert!(scope.is_complete);
+
         let plan = plan_config_sync(
             &root.0,
             &root.0.join(".changes/config.toml"),
             &config,
             &[changeset],
+            &scope,
         )
         .unwrap();
 

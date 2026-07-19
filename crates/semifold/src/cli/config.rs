@@ -5,9 +5,16 @@ use camino::Utf8Path;
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
 use semifold_core::ConfigSyncWarning;
-use semifold_resolver::{config, context::Context, resolver};
+use semifold_resolver::{
+    config,
+    context::Context,
+    resolver::{self, ResolverType},
+};
 
-use crate::{config_editor::TomlConfigEditor, config_sync::plan_config_sync};
+use crate::{
+    config_editor::TomlConfigEditor,
+    config_sync::{ConfigSyncPlanningError, config_sync_scope, plan_config_sync},
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Config {
@@ -35,6 +42,12 @@ struct Sync {
         help = t!("cli.config.flags.prune_sync")
     )]
     prune: bool,
+    #[arg(
+        long = "resolver",
+        value_enum,
+        help = t!("cli.config.flags.resolver_sync")
+    )]
+    resolvers: Vec<ResolverType>,
 }
 
 #[derive(Parser, Debug)]
@@ -107,9 +120,19 @@ fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
         .as_deref()
         .context(t!("cli.config.sync_repo_root_not_found"))?;
     let config = ctx.config.as_ref().context(t!("cli.config.not_found"))?;
+    let scope = config_sync_scope(config, &options.resolvers).map_err(|error| match error {
+        ConfigSyncPlanningError::ResolverNotEnabled { resolver } => anyhow!(t!(
+            "cli.config.sync_resolver_not_enabled",
+            resolver = resolver.to_string()
+        )),
+        error => anyhow!(t!("cli.config.sync_planning_failed", error = error)),
+    })?;
+    if options.prune && !scope.is_complete {
+        anyhow::bail!(t!("cli.config.sync_prune_partial_scan"));
+    }
     let changesets = resolver::get_changesets(ctx)
         .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
-    let plan = plan_config_sync(project_root, path, config, &changesets)
+    let plan = plan_config_sync(project_root, path, config, &changesets, &scope)
         .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
 
     report_sync_warnings(&plan.warnings);
@@ -408,11 +431,12 @@ fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use semifold_resolver::{config, context::Context};
+    use clap::Parser as _;
+    use semifold_resolver::{config, context::Context, resolver::ResolverType};
 
     use super::{
-        ChannelTarget, Migrate, Sync, migrate, plan_channel_update, plan_migration, sync,
-        update_channel,
+        ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate, plan_channel_update,
+        plan_migration, sync, update_channel,
     };
 
     fn temporary_config_path(name: &str) -> PathBuf {
@@ -460,6 +484,17 @@ mod tests {
             dry_run,
             ..Default::default()
         }
+    }
+
+    fn enable_node_resolver(config_path: &std::path::Path) {
+        fs::write(
+            config_path,
+            format!(
+                "{}\n[resolver.nodejs.pre-check]\nurl = \"\"\n",
+                fs::read_to_string(config_path).unwrap()
+            ),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -650,6 +685,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: false,
+                resolvers: vec![],
             },
             &context,
         )
@@ -661,6 +697,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: false,
+                resolvers: vec![],
             },
             &sync_context(&root, false),
         )
@@ -681,6 +718,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: true,
+                resolvers: vec![],
             },
             &context,
         )
@@ -701,6 +739,7 @@ resolver = "rust"
             &Sync {
                 check: true,
                 prune: false,
+                resolvers: vec![],
             },
             &context,
         )
@@ -719,6 +758,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: false,
+                resolvers: vec![],
             },
             &sync_context(&root, false),
         )
@@ -728,6 +768,7 @@ resolver = "rust"
             &Sync {
                 check: true,
                 prune: false,
+                resolvers: vec![],
             },
             &sync_context(&root, false),
         )
@@ -758,6 +799,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: true,
+                resolvers: vec![],
             },
             &sync_context(&root, false),
         )
@@ -766,6 +808,105 @@ resolver = "rust"
         assert!(synced.contains("[packages.app]"));
         assert!(!synced.contains("[packages.removed]"));
         assert!(!synced.contains("custom = \"value\""));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_accepts_repeated_resolver_flags() {
+        assert!(
+            ConfigCommand::try_parse_from([
+                "config",
+                "sync",
+                "--resolver",
+                "rust",
+                "--resolver",
+                "rust",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn sync_limits_planning_to_selected_resolvers() {
+        let root = temporary_sync_root("scope");
+        let config_path = root.join(".changes/config.toml");
+        enable_node_resolver(&config_path);
+        fs::write(
+            &config_path,
+            format!(
+                "{}\n[packages.node-only]\npath = \"packages/node-only\"\nresolver = \"nodejs\"\n",
+                fs::read_to_string(&config_path).unwrap()
+            ),
+        )
+        .unwrap();
+        let rust_only = Sync {
+            check: false,
+            prune: false,
+            resolvers: vec![ResolverType::Rust],
+        };
+
+        sync(&rust_only, &sync_context(&root, false)).unwrap();
+        let synced = fs::read_to_string(&config_path).unwrap();
+        assert!(synced.contains("[packages.app]"));
+        assert!(synced.contains("[packages.node-only]"));
+
+        sync(
+            &Sync {
+                check: true,
+                prune: false,
+                resolvers: vec![ResolverType::Rust],
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap();
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_rejects_unenabled_resolvers_without_writing() {
+        let root = temporary_sync_root("unconfigured-resolver");
+        let config_path = root.join(".changes/config.toml");
+        let original = fs::read_to_string(&config_path).unwrap();
+
+        let error = sync(
+            &Sync {
+                check: false,
+                prune: false,
+                resolvers: vec![ResolverType::Nodejs],
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("not enabled"));
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sync_rejects_prune_for_partial_resolver_scopes_without_writing() {
+        let root = temporary_sync_root("partial-prune");
+        let config_path = root.join(".changes/config.toml");
+        enable_node_resolver(&config_path);
+        let original = fs::read_to_string(&config_path).unwrap();
+
+        let error = sync(
+            &Sync {
+                check: false,
+                prune: true,
+                resolvers: vec![ResolverType::Rust],
+            },
+            &sync_context(&root, false),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires scanning every enabled resolver")
+        );
+        assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
 
         fs::remove_dir_all(root).unwrap();
     }

@@ -1081,7 +1081,7 @@ resolver 选择先按类型稳定排序并去重。服务通过 registry 创建�
 
 一次 discovery 只有“完整成功”或“失败”两种结果：任一所选 resolver 的 glob 遍历、manifest 读取、package 解析或路径规范化失败时，整个调用返回结构化错误，不得返回看似完整的部分快照。未选择的 resolver 不属于扫描范围；应用层据此禁止在部分 resolver 模式下 prune 其他生态的配置。现有 `resolve_all` 中记录 warning 后跳过损坏 package 的路径必须改为传播错误，避免把扫描失败误判为 package 已删除。
 
-`plan_config_sync` 的首个应用层桥接默认选择配置中已启用的 resolver，将这些生态的 `[packages]` table 转换为 `ConfiguredPackage`，调用统一 discovery，并把未消费 changeset 转换为 `ChangesetReference` 后交给 `ConfigSyncPlanner`。未被本次 resolver 范围覆盖的配置项不得进入 `missing`。后续 CLI 的显式 `--resolver` 只改变该选择范围，不复制快照转换或匹配逻辑。
+`plan_config_sync` 的应用层桥接通过 `ConfigSyncScope` 选择 resolver：未指定 `--resolver` 时选择配置中全部已启用的 resolver；显式选择必须是已启用 resolver 的子集，否则返回 `ResolverNotEnabled`。scope 将这些生态的 `[packages]` table 转换为 `ConfiguredPackage`，调用统一 discovery，并把未消费 changeset 转换为 `ChangesetReference` 后交给 `ConfigSyncPlanner`。未被本次 resolver 范围覆盖的配置项不得进入 `missing`。CLI 的显式 `--resolver` 只改变 scope，不复制快照转换或匹配逻辑；只有 scope 覆盖全部已启用 resolver 时才允许 `--prune`。
 
 区别仅在于：
 

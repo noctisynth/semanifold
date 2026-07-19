@@ -99,7 +99,7 @@
 - [x] 新增 `smif config sync`
 - [x] 新增 `smif config sync --check`
 - [x] 新增 `smif config sync --prune`
-- [ ] 支持重复指定 `--resolver <type>`
+- [x] 支持重复指定 `--resolver <type>`
 - [x] 明确全局 `--dry-run` 与 `--check` 的不同退出语义
 - [ ] JSON 配置返回 `UnsupportedConfigFormat`
 
@@ -156,7 +156,7 @@
 - [x] 新增 package 只产生最小 TOML diff
 - [x] 缺失 package 默认保留
 - [x] `--prune` 显式删除缺失 package
-- [ ] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
+- [x] 扫描失败、部分 resolver 或匹配歧义时禁止 prune
 - [x] Rename 和 move 保留原 table 的注释与自定义字段
 - [x] `--check` 检测到漂移时返回非零退出码且不写文件
 - [x] 连续执行两次同步时第二次无 diff
@@ -368,7 +368,7 @@
 - [ ] Post-version 命令失败后的文件恢复策略
 - [ ] GitHub 元数据查询失败时是否降级
 - [ ] 是否长期支持 JSON 配置更新
-- [ ] `config sync` 遇到未启用 resolver 时的行为
+- [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`
 - [ ] 是否提供 `--rewrite-changesets` 辅助包重命名
 - [ ] 一个 package 是否允许同时属于多个 `ReleaseUnit`
 - [ ] `Fingerprint` identity 的格式与适用场景

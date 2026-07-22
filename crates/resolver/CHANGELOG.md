@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0-alpha.4
+
+### Bug Fixes
+
+- [`fc7284b`](https://github.com/noctisynth/semifold/commit/fc7284b604ed488a725f0222865946bea646eb3f): Serialize planned package.json edits with serde_json while preserving object-key order and a trailing newline.
+- [`02dc67d`](https://github.com/noctisynth/semifold/commit/02dc67d11f54e1db0cc8a0c32855493218ff8556): Treat package.json files without a version field as version 0.0.0 and insert the planned version when writing.
+
+### New Features
+
+- [`9136774`](https://github.com/noctisynth/semifold/commit/91367741414431f6e77bb2b3584e9a84b5c39cd7): Plan Rust manifest version replacements from the complete release VersionMap without writing files.
+- [`e6ff3b7`](https://github.com/noctisynth/semifold/commit/e6ff3b7a90f8b6e93832ca7b9da6002c5b1dedd9): Plan Node.js package.json version and internal dependency replacements from the complete release VersionMap without rewriting unrelated JSON.
+
 ## v0.4.0-alpha.3
 
 ### Bug Fixes

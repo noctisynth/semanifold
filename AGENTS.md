@@ -18,6 +18,7 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 - 禁止手动编辑任何 `Cargo.toml`。
 - 新增或移除依赖、crate、workspace member 或 crate 元数据时，必须使用 Cargo CLI，例如 `cargo add`、`cargo remove`、`cargo new` 或 `cargo init`。
 - 如果 Cargo CLI 无法表达变更、命令失败，或预期结果不明确，立即停止并向用户确认；不得通过手动编辑 `Cargo.toml` 绕过。
+- 当前受限环境中的 `cargo add` 无法访问 crates.io；新增依赖时应直接使用受审批的网络执行 `cargo add`，并将 `prefix_rule` 限定为对应 package 的 `cargo add -p <package>`，不得以手动编辑 `Cargo.toml` 替代。
 
 ## 实施约束
 
@@ -35,5 +36,5 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 ## 国际化（i18n）
 
 - 所有面向用户的 CLI 文案（命令描述、flag help、成功/错误/状态输出和交互提示）必须通过 `rust-i18n` 的 `t!` 宏提供；不得在 Rust 源码中新增硬编码的自然语言文本。
-- 实现或修改用户可见文案时，必须同步更新 `crates/semifold/locales/en.toml` 中对应的 locale key，并遵循现有 `[cli.*]` 的分组结构。
-- 在提交实现前，检查新增或修改的用户可见路径是否具有 locale key；测试断言可使用必要的固定字符串，但不应将其作为生产文案来源。
+- 实现或修改用户可见文案时，必须同步更新 `crates/semifold/locales/en.toml` 和 `crates/semifold/locales/zh.toml` 中对应的 locale key，并遵循现有 `[cli.*]` 的分组结构；不得依赖英文 fallback 掩盖中文缺失。
+- 在提交实现前，检查新增或修改的用户可见路径是否具有 locale key，并确认 `en.toml` 与 `zh.toml` 的 key 集合完全一致；测试断言可使用必要的固定字符串，但不应将其作为生产文案来源。

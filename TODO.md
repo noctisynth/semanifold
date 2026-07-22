@@ -201,6 +201,7 @@
 
 - [x] 移除旧 Rust 专属版本规划路径；混合 Rust + Node.js changeset 必须与 `status` 使用同一 `ReleasePlan` 且不 panic
 - [x] `smif version` 消费与 `status` 相同的 `ReleasePlan`
+- [x] Rust 与 Node.js manifest 由 `ReleasePlan.file_edits` 统一规划、校验并原子应用
 - [ ] `smif version --dry-run` 只渲染计划，不调用写入器或命令运行器
 - [x] 删除 `version` 内逐包填充可变版本 map 的逻辑
 - [ ] 返回结构化 `ApplyReport`

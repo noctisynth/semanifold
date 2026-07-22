@@ -24,7 +24,7 @@ impl<'root> FileEditExecutor<'root> {
     }
 
     pub fn apply(&self, edits: &[FileEdit]) -> Result<(), FileEditApplyError> {
-        let targets = self.validate(edits)?;
+        let targets = self.validate_targets(edits)?;
         let mut temporary_files = Vec::with_capacity(edits.len());
 
         for (target, edit) in targets.iter().zip(edits) {
@@ -68,7 +68,12 @@ impl<'root> FileEditExecutor<'root> {
         Ok(())
     }
 
-    fn validate(&self, edits: &[FileEdit]) -> Result<Vec<Utf8PathBuf>, FileEditApplyError> {
+    /// Validates every target without writing files.
+    pub fn validate(&self, edits: &[FileEdit]) -> Result<(), FileEditApplyError> {
+        self.validate_targets(edits).map(|_| ())
+    }
+
+    fn validate_targets(&self, edits: &[FileEdit]) -> Result<Vec<Utf8PathBuf>, FileEditApplyError> {
         let mut paths = BTreeSet::new();
         let mut targets = Vec::with_capacity(edits.len());
         for edit in edits {

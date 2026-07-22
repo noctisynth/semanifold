@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 
+use anyhow::Context as _;
+use camino::Utf8Path;
 use clap::Parser;
 use colored::Colorize;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
+use semifold_core::{EditSource, ReleaseReason};
 use semifold_resolver::{
     changeset::Changeset, config::ResolverConfig, context::Context, resolver, utils,
 };
 
-use crate::release::plan_release;
+use crate::{file_edit_executor::FileEditExecutor, release::plan_release};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -71,6 +74,14 @@ pub(crate) async fn version(
     let mut changelogs_map = HashMap::new();
 
     let release_plan = plan_release(root, config, changesets)?;
+    let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
+    let executor = FileEditExecutor::new(edit_root);
+    if ctx.dry_run {
+        executor.validate(release_plan.file_edits())?;
+        return Ok(HashMap::new());
+    }
+    executor.apply(release_plan.file_edits())?;
+
     let version_map = release_plan
         .packages()
         .iter()
@@ -81,8 +92,6 @@ pub(crate) async fn version(
             )
         })
         .collect::<HashMap<_, _>>();
-    *ctx.version_bumps.borrow_mut() = version_map.clone();
-
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
         let package_config = config
@@ -92,22 +101,28 @@ pub(crate) async fn version(
         let package_release = release_plan
             .package(package_id)
             .expect("release plan order must only contain release packages");
-        log::debug!("Processing package: {}", package_name);
-        let mut resolver = ctx.create_resolver(package_config.resolver);
-        let resolved_package = resolver.resolve(root, package_config)?;
         let bumped_version = package_release.next_version.clone();
-        resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
+        let has_planned_edit = release_plan.file_edits().iter().any(|edit| {
+            matches!(
+                &edit.source,
+                EditSource::PackageVersion { package } if package == package_id
+            )
+        });
+        if !has_planned_edit {
+            log::debug!("Processing package: {}", package_name);
+            let mut resolver = ctx.create_resolver(package_config.resolver);
+            let resolved_package = resolver.resolve(root, package_config)?;
+            resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
+        }
 
         let dependency_updates = package_release
             .reasons
             .iter()
             .filter_map(|reason| match reason {
-                semifold_core::ReleaseReason::DependencyPropagation { dependency, .. } => {
-                    version_map
-                        .get(dependency.as_str())
-                        .map(|version| (dependency.as_str().to_string(), version.to_string()))
-                }
-                semifold_core::ReleaseReason::Changeset { .. } => None,
+                ReleaseReason::DependencyPropagation { dependency, .. } => version_map
+                    .get(dependency.as_str())
+                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
+                ReleaseReason::Changeset { .. } => None,
             })
             .collect::<Vec<_>>();
 
@@ -250,6 +265,16 @@ mod tests {
                 .unwrap()
                 .next_version,
             semver::Version::new(1, 0, 1)
+        );
+        assert_eq!(release_plan.file_edits().len(), 1);
+        assert_eq!(
+            release_plan.file_edits()[0].path.as_str(),
+            "node/package.json"
+        );
+        assert!(
+            release_plan.file_edits()[0]
+                .new_content
+                .contains("\"version\": \"1.0.1\"")
         );
         fs::remove_dir_all(root).unwrap();
     }

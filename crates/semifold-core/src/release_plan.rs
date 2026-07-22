@@ -145,6 +145,18 @@ impl ReleasePlan {
     pub fn file_edits(&self) -> &[FileEdit] {
         &self.file_edits
     }
+
+    /// Returns the same validated release plan with its planned file edits attached.
+    pub fn with_file_edits(self, file_edits: Vec<FileEdit>) -> Result<Self, ReleasePlanError> {
+        Self::new(
+            self.packages,
+            self.versions,
+            self.order,
+            self.consumed_changesets,
+            self.warnings,
+            file_edits,
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]

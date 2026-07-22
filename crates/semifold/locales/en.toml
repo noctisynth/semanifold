@@ -81,6 +81,7 @@ edit_hash_mismatch = "Planned edit target %{path} changed after planning"
 edit_temp_create_failed = "Failed to create temporary file %{path}: %{error}"
 edit_temp_write_failed = "Failed to write temporary file %{path}: %{error}"
 edit_replace_failed = "Failed to replace planned edit target %{path}: %{error}"
+edit_non_utf8_root = "Versioning requires a UTF-8 project root"
 
 [cli.version.flags]
 allow_dirty = "Allow versioning packages with dirty Git working tree"

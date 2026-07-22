@@ -8,6 +8,7 @@ use semifold_core::{
 use semifold_resolver::{
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{Config, ReleaseChannel as ResolverReleaseChannel},
+    resolver::{nodejs::NodejsResolver, rust::RustResolver},
 };
 use semver::VersionReq;
 
@@ -22,7 +23,28 @@ pub(crate) fn plan_release(
     let graph = load_workspace_graph(root, config)?;
     let changesets = changeset_inputs(changesets);
     let policies = release_policies(&graph, config)?;
-    Ok(ReleasePlanner::plan(&graph, &changesets, &policies)?)
+    let plan = ReleasePlanner::plan(&graph, &changesets, &policies)?;
+    let file_edits = plan
+        .packages()
+        .iter()
+        .filter_map(|release| {
+            let package = graph
+                .package(&release.id)
+                .expect("release plan packages must exist in the workspace graph");
+            match package.ecosystem {
+                Ecosystem::Rust => {
+                    Some(RustResolver::plan_file_edit(root, package, plan.versions()))
+                }
+                Ecosystem::Node => Some(NodejsResolver::plan_file_edit(
+                    root,
+                    package,
+                    plan.versions(),
+                )),
+                Ecosystem::Python | Ecosystem::Cpp => None,
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(plan.with_file_edits(file_edits)?)
 }
 
 fn changeset_inputs(changesets: &[Changeset]) -> Vec<ChangesetInput> {
@@ -174,6 +196,23 @@ mod tests {
             [ReleaseReason::DependencyPropagation { dependency, .. }]
                 if dependency == &PackageId::new("core")
         ));
+        assert_eq!(
+            plan.file_edits()
+                .iter()
+                .map(|edit| edit.path.as_str())
+                .collect::<Vec<_>>(),
+            ["app/Cargo.toml", "core/Cargo.toml"]
+        );
+        assert!(
+            plan.file_edits()[0]
+                .new_content
+                .contains("version = \"2.0.0\"")
+        );
+        assert!(
+            plan.file_edits()[1]
+                .new_content
+                .contains("version = \"2.0.0\"")
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

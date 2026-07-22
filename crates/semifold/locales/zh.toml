@@ -81,6 +81,7 @@ edit_hash_mismatch = "计划修改的目标文件 %{path} 在规划后已发生�
 edit_temp_create_failed = "无法创建临时文件 %{path}：%{error}"
 edit_temp_write_failed = "无法写入临时文件 %{path}：%{error}"
 edit_replace_failed = "无法替换计划修改的目标文件 %{path}：%{error}"
+edit_non_utf8_root = "版本处理需要 UTF-8 项目根目录"
 
 [cli.version.flags]
 allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"

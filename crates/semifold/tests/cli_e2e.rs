@@ -138,6 +138,24 @@ fn dry_run_version_handles_a_node_changeset_in_a_mixed_workspace() {
 }
 
 #[test]
+fn dry_run_version_does_not_run_post_version_commands() {
+    let root = temporary_project(
+        "dry-run-post-version",
+        &format!(
+            "{}\n[[resolver.rust.post-version]]\ncommand = \"sh\"\nargs = [\"-c\", \"touch dry-run-marker\"]\ndry_run = true\n",
+            config("channel = \"stable\"")
+        ),
+    );
+    let marker = root.join("dry-run-marker");
+
+    let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    assert!(!marker.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn config_migrate_and_channel_check_preserve_expected_file_state() {
     let root = temporary_project(
         "config",

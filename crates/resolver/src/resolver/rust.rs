@@ -3,7 +3,9 @@ use std::{
     path::Path,
 };
 
-use semifold_core::DependencyKind;
+use semifold_core::{
+    DependencyKind, EditSource, FileEdit, FileHash, PackageId, PackageSnapshot, VersionMap,
+};
 use serde::Deserialize;
 
 use crate::{
@@ -48,6 +50,64 @@ pub struct RuntimeDependency {
 }
 
 impl RustResolver {
+    /// Plans a manifest replacement from immutable package and version snapshots.
+    pub fn plan_file_edit(
+        root: &Path,
+        package: &PackageSnapshot,
+        versions: &VersionMap,
+    ) -> Result<FileEdit, ResolveError> {
+        let cargo_toml_path = root.join(package.path.as_std_path()).join("Cargo.toml");
+        let original = std::fs::read_to_string(&cargo_toml_path)?;
+        let next_version =
+            versions
+                .get(&package.id)
+                .ok_or_else(|| ResolveError::InvalidConfig {
+                    path: cargo_toml_path.clone(),
+                    reason: format!("missing planned version for {}", package.id),
+                })?;
+        let mut document = original
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|error| ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: error.to_string(),
+            })?;
+        let package_table = document["package"]
+            .as_table_mut()
+            .ok_or(ResolveError::ParseError {
+                path: cargo_toml_path.clone(),
+                reason: "package table not found".to_string(),
+            })?;
+        package_table["version"] = toml_edit::value(next_version.to_string());
+
+        for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(dependencies) = document[dependency_table].as_table_mut() {
+                for (name, dependency) in dependencies.iter_mut() {
+                    let manifest_name = dependency
+                        .get("package")
+                        .and_then(toml_edit::Item::as_str)
+                        .unwrap_or(name.get());
+                    let Some(version) = versions.get(&PackageId::new(manifest_name)) else {
+                        continue;
+                    };
+                    if dependency.is_str() {
+                        *dependency = toml_edit::value(version.to_string());
+                    } else if dependency.get("version").is_some() {
+                        dependency["version"] = toml_edit::value(version.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(FileEdit {
+            path: package.path.join("Cargo.toml"),
+            expected_hash: FileHash::from_bytes(original.as_bytes()),
+            new_content: document.to_string(),
+            source: EditSource::PackageVersion {
+                package: package.id.clone(),
+            },
+        })
+    }
+
     fn dependency_requirement(dependency: &serde_json::Value) -> Option<String> {
         dependency
             .as_str()
@@ -498,6 +558,7 @@ mod tests {
         context::Context,
         resolver::{ResolvedPackage, Resolver, ResolverType},
     };
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
     use super::RustResolver;
 
@@ -623,6 +684,52 @@ mod tests {
         let manifest = fs::read_to_string(root.join("crates/app/Cargo.toml")).unwrap();
         assert!(manifest.contains("version = \"1.0.1\""));
         assert!(manifest.contains("core = { version = \"1.1.0\", path = \"../core\" }"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_a_manifest_edit_from_the_complete_version_map() {
+        let root = temp_dir("plan-file-edit");
+        let manifest_path = root.join("crates/app/Cargo.toml");
+        fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
+        let original = "# keep this comment\n[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[dependencies]\ncore = { version = \"1.0.0\", path = \"../core\", features = [\"serde\"] }\nalias = { package = \"renamed\", version = \"2.0.0\" }\n\n[dev-dependencies]\ndev = \"3.0.0\"\n\n[build-dependencies]\nbuild = { version = \"4.0.0\" }\n";
+        fs::write(&manifest_path, original).unwrap();
+        let package = PackageSnapshot {
+            id: PackageId::new("app"),
+            manifest_name: "app".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Rust,
+            path: "crates/app".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([
+            (PackageId::new("app"), semver::Version::new(1, 0, 1)),
+            (PackageId::new("core"), semver::Version::new(1, 1, 0)),
+            (PackageId::new("renamed"), semver::Version::new(2, 1, 0)),
+            (PackageId::new("dev"), semver::Version::new(3, 1, 0)),
+            (PackageId::new("build"), semver::Version::new(4, 1, 0)),
+        ]);
+
+        let edit = RustResolver::plan_file_edit(&root, &package, &versions).unwrap();
+
+        assert_eq!(edit.path.as_str(), "crates/app/Cargo.toml");
+        assert_eq!(
+            edit.expected_hash,
+            semifold_core::FileHash::from_bytes(original.as_bytes())
+        );
+        assert!(edit.new_content.contains("# keep this comment"));
+        assert!(edit.new_content.contains("version = \"1.0.1\""));
+        assert!(edit.new_content.contains(
+            "core = { version = \"1.1.0\", path = \"../core\", features = [\"serde\"] }"
+        ));
+        assert!(
+            edit.new_content
+                .contains("alias = { package = \"renamed\", version = \"2.1.0\" }")
+        );
+        assert!(edit.new_content.contains("dev = \"3.1.0\""));
+        assert!(edit.new_content.contains("build = { version = \"4.1.0\" }"));
+        assert_eq!(fs::read_to_string(manifest_path).unwrap(), original);
         fs::remove_dir_all(root).unwrap();
     }
 }

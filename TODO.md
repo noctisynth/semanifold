@@ -181,7 +181,7 @@
 
 ### Rust 与 Node.js
 
-- [ ] 将 Rust resolver 改为根据完整 `VersionMap` 生成 `FileEdit`
+- [x] 将 Rust resolver 改为根据完整 `VersionMap` 生成 `FileEdit`
 - [ ] 正确更新 Rust dependencies、dev-dependencies、build-dependencies 和 workspace dependencies
 - [ ] 将 Node.js resolver 改为生成 `FileEdit`
 - [ ] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies

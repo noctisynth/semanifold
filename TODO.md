@@ -183,8 +183,8 @@
 
 - [x] 将 Rust resolver 改为根据完整 `VersionMap` 生成 `FileEdit`
 - [ ] 正确更新 Rust dependencies、dev-dependencies、build-dependencies 和 workspace dependencies
-- [ ] 将 Node.js resolver 改为生成 `FileEdit`
-- [ ] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies
+- [x] 将 Node.js resolver 改为生成 `FileEdit`
+- [x] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies
 - [ ] 移除 Rust/Node.js 对 `Context.version_bumps` 的依赖
 - [ ] Resolver 不再直接写文件或处理 dry-run
 

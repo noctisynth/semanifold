@@ -1,5 +1,6 @@
 use std::{
     cmp::max,
+    collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
@@ -183,6 +184,100 @@ pub fn replace_root_json_string_field(
             _ => return None,
         }
     }
+}
+
+/// Replaces selected string fields in a named root-object child without reformatting JSON.
+pub fn replace_json_object_string_fields(
+    content: &str,
+    object_field: &str,
+    replacements: &BTreeMap<String, String>,
+) -> Option<String> {
+    let bytes = content.as_bytes();
+    let mut index = skip_json_whitespace(bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return None;
+    }
+    index += 1;
+
+    loop {
+        index = skip_json_whitespace(bytes, index);
+        if bytes.get(index) == Some(&b'}') {
+            return Some(content.to_string());
+        }
+        if bytes.get(index) != Some(&b'"') {
+            return None;
+        }
+        let key_start = index;
+        let key_end = scan_json_string(bytes, index)?;
+        let key = serde_json::from_str::<String>(&content[key_start..key_end]).ok()?;
+        index = skip_json_whitespace(bytes, key_end);
+        if bytes.get(index) != Some(&b':') {
+            return None;
+        }
+        index = skip_json_whitespace(bytes, index + 1);
+
+        if key == object_field && bytes.get(index) == Some(&b'{') {
+            return replace_json_object_members(content, index, replacements);
+        }
+
+        index = scan_json_value(bytes, index)?;
+        index = skip_json_whitespace(bytes, index);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => return Some(content.to_string()),
+            _ => return None,
+        }
+    }
+}
+
+fn replace_json_object_members(
+    content: &str,
+    mut index: usize,
+    replacements: &BTreeMap<String, String>,
+) -> Option<String> {
+    let bytes = content.as_bytes();
+    index += 1;
+    let mut spans = Vec::new();
+    loop {
+        index = skip_json_whitespace(bytes, index);
+        if bytes.get(index) == Some(&b'}') {
+            break;
+        }
+        if bytes.get(index) != Some(&b'"') {
+            return None;
+        }
+        let key_start = index;
+        let key_end = scan_json_string(bytes, index)?;
+        let key = serde_json::from_str::<String>(&content[key_start..key_end]).ok()?;
+        index = skip_json_whitespace(bytes, key_end);
+        if bytes.get(index) != Some(&b':') {
+            return None;
+        }
+        index = skip_json_whitespace(bytes, index + 1);
+        let value_start = index;
+        let value_end = scan_json_value(bytes, index)?;
+        if bytes.get(value_start) == Some(&b'"')
+            && let Some(replacement) = replacements.get(&key)
+        {
+            spans.push((
+                value_start,
+                value_end,
+                serde_json::to_string(replacement).ok()?,
+            ));
+        }
+        index = skip_json_whitespace(bytes, value_end);
+        match bytes.get(index) {
+            Some(b',') => index += 1,
+            Some(b'}') => break,
+            _ => return None,
+        }
+    }
+
+    let mut updated = content.to_string();
+    for (start, end, replacement) in spans.into_iter().rev() {
+        updated.replace_range(start..end, &replacement);
+    }
+    Some(updated)
 }
 
 fn skip_json_whitespace(bytes: &[u8], mut index: usize) -> usize {

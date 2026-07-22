@@ -4,7 +4,9 @@ use std::{
 };
 
 use saphyr::LoadableYamlNode;
-use semifold_core::DependencyKind;
+use semifold_core::{
+    DependencyKind, EditSource, FileEdit, FileHash, PackageId, PackageSnapshot, VersionMap,
+};
 use serde::Deserialize;
 
 use crate::{
@@ -31,6 +33,64 @@ struct PackageJson {
 pub struct NodejsResolver;
 
 impl NodejsResolver {
+    /// Plans a package.json replacement from immutable package and version snapshots.
+    pub fn plan_file_edit(
+        root: &Path,
+        package: &PackageSnapshot,
+        versions: &VersionMap,
+    ) -> Result<FileEdit, ResolveError> {
+        let package_json_path = root.join(package.path.as_std_path()).join("package.json");
+        let original = std::fs::read_to_string(&package_json_path)?;
+        let next_version =
+            versions
+                .get(&package.id)
+                .ok_or_else(|| ResolveError::InvalidConfig {
+                    path: package_json_path.clone(),
+                    reason: format!("missing planned version for {}", package.id),
+                })?;
+        let package_json: PackageJson =
+            serde_json::from_str(&original).map_err(|error| ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: error.to_string(),
+            })?;
+        let mut updated =
+            utils::replace_root_json_string_field(&original, "version", &next_version.to_string())
+                .ok_or(ResolveError::ParseError {
+                    path: package_json_path.clone(),
+                    reason: "package.json is missing a string version field".to_string(),
+                })?;
+        for (field, dependencies) in [
+            ("dependencies", package_json.dependencies),
+            ("devDependencies", package_json.dev_dependencies),
+            ("peerDependencies", package_json.peer_dependencies),
+            ("optionalDependencies", package_json.optional_dependencies),
+        ] {
+            let replacements = dependencies
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(name, requirement)| {
+                    versions
+                        .get(&PackageId::new(&name))
+                        .map(|version| (name, node_requirement(&requirement, version)))
+                })
+                .collect::<BTreeMap<_, _>>();
+            updated = utils::replace_json_object_string_fields(&updated, field, &replacements)
+                .ok_or_else(|| ResolveError::ParseError {
+                    path: package_json_path.clone(),
+                    reason: format!("invalid {field} object in package.json"),
+                })?;
+        }
+
+        Ok(FileEdit {
+            path: package.path.join("package.json"),
+            expected_hash: FileHash::from_bytes(original.as_bytes()),
+            new_content: updated,
+            source: EditSource::PackageVersion {
+                package: package.id.clone(),
+            },
+        })
+    }
+
     fn collect_dependencies(
         target: &mut Vec<ResolvedDependency>,
         dependencies: Option<BTreeMap<String, String>>,
@@ -44,6 +104,19 @@ impl NodejsResolver {
             },
         ));
     }
+}
+
+fn node_requirement(requirement: &str, version: &semver::Version) -> String {
+    if requirement == "workspace:*" {
+        return requirement.to_string();
+    }
+    let version = version.to_string();
+    for prefix in ["workspace:^", "workspace:~", "^", "~"] {
+        if requirement.starts_with(prefix) {
+            return format!("{prefix}{version}");
+        }
+    }
+    version
 }
 
 impl Resolver for NodejsResolver {
@@ -372,6 +445,7 @@ mod tests {
         context::Context,
         resolver::{ResolvedPackage, Resolver, ResolverType},
     };
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
     use super::NodejsResolver;
 
@@ -498,6 +572,52 @@ mod tests {
         assert_eq!(package_json["version"], "1.0.1");
         assert_eq!(package_json["dependencies"]["core"], "^1.0.0");
         assert_eq!(package_json["custom"]["preserved"], true);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_a_package_json_edit_from_the_complete_version_map() {
+        let root = temp_dir("plan-file-edit");
+        let manifest_path = root.join("packages/app/package.json");
+        fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
+        let original = "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": { \"core\": \"^1.0.0\", \"workspace\": \"workspace:*\" },\n  \"devDependencies\": { \"dev\": \"~2.0.0\" },\n  \"peerDependencies\": { \"peer\": \"workspace:^3.0.0\" },\n  \"optionalDependencies\": { \"optional\": \"4.0.0\" },\n  \"custom\": { \"preserved\": true }\n}\n";
+        fs::write(&manifest_path, original).unwrap();
+        let package = PackageSnapshot {
+            id: PackageId::new("app"),
+            manifest_name: "app".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Node,
+            path: "packages/app".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([
+            (PackageId::new("app"), semver::Version::new(1, 0, 1)),
+            (PackageId::new("core"), semver::Version::new(1, 1, 0)),
+            (PackageId::new("workspace"), semver::Version::new(1, 1, 0)),
+            (PackageId::new("dev"), semver::Version::new(2, 1, 0)),
+            (PackageId::new("peer"), semver::Version::new(3, 1, 0)),
+            (PackageId::new("optional"), semver::Version::new(4, 1, 0)),
+        ]);
+
+        let edit = NodejsResolver::plan_file_edit(&root, &package, &versions).unwrap();
+
+        assert_eq!(edit.path.as_str(), "packages/app/package.json");
+        assert_eq!(
+            edit.expected_hash,
+            semifold_core::FileHash::from_bytes(original.as_bytes())
+        );
+        assert!(edit.new_content.contains("\"version\": \"1.0.1\""));
+        assert!(edit.new_content.contains("\"core\": \"^1.1.0\""));
+        assert!(edit.new_content.contains("\"workspace\": \"workspace:*\""));
+        assert!(edit.new_content.contains("\"dev\": \"~2.1.0\""));
+        assert!(edit.new_content.contains("\"peer\": \"workspace:^3.1.0\""));
+        assert!(edit.new_content.contains("\"optional\": \"4.1.0\""));
+        assert!(
+            edit.new_content
+                .contains("\"custom\": { \"preserved\": true }")
+        );
+        assert_eq!(fs::read_to_string(manifest_path).unwrap(), original);
         fs::remove_dir_all(root).unwrap();
     }
 }

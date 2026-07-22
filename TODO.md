@@ -199,14 +199,15 @@
 
 ### 接入 `version`
 
-- [ ] `smif version` 消费与 `status` 相同的 `ReleasePlan`
+- [x] 移除旧 Rust 专属版本规划路径；混合 Rust + Node.js changeset 必须与 `status` 使用同一 `ReleasePlan` 且不 panic
+- [x] `smif version` 消费与 `status` 相同的 `ReleasePlan`
 - [ ] `smif version --dry-run` 只渲染计划，不调用写入器或命令运行器
-- [ ] 删除 `version` 内逐包填充可变版本 map 的逻辑
+- [x] 删除 `version` 内逐包填充可变版本 map 的逻辑
 - [ ] 返回结构化 `ApplyReport`
 
 ### 阶段完成条件
 
-- [ ] `status`、`version --dry-run` 与 `version` 使用相同计划
+- [x] `status`、`version --dry-run` 与 `version` 使用相同计划
 - [ ] 任一验证失败时工作区保持不变
 - [ ] 文件修改不再依赖包处理顺序
 

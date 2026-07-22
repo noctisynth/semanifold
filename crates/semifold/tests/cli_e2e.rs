@@ -114,6 +114,30 @@ fn status_and_dry_run_version_leave_the_workspace_unchanged() {
 }
 
 #[test]
+fn dry_run_version_handles_a_node_changeset_in_a_mixed_workspace() {
+    let root = temporary_project(
+        "mixed-version",
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\npath = \".\"\nresolver = \"rust\"\n\n[packages.node-lib]\npath = \"node\"\nresolver = \"nodejs\"\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+    );
+    let node_manifest = root.join("node/package.json");
+    fs::create_dir_all(node_manifest.parent().unwrap()).unwrap();
+    fs::write(&node_manifest, r#"{"name":"node-lib","version":"1.0.0"}"#).unwrap();
+    fs::write(
+        root.join(".changes/feature.md"),
+        "node-lib: patch:chore\n---\n\nExercise mixed-ecosystem versioning.\n",
+    )
+    .unwrap();
+    let before = fs::read_to_string(&node_manifest).unwrap();
+
+    let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    assert_eq!(fs::read_to_string(&node_manifest).unwrap(), before);
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn config_migrate_and_channel_check_preserve_expected_file_state() {
     let root = temporary_project(
         "config",

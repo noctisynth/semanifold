@@ -1303,13 +1303,14 @@ fixtures/rust/
 
 目标：让 `version` 消费与 `status` 相同的 plan。
 
+- 阶段开始时先移除旧 `version` 的 Rust 专属版本规划路径：混合生态工作区中任何受 changeset 影响的 package 都必须从同一个 `ReleasePlan` 取得发布顺序和目标版本，不能因旧的 Rust-only 当前版本 map 缺项而 panic；
 - 引入 `FileEdit` 和 `VersionMap`；
 - 改造 Rust 和 Node.js resolver，使其返回修改内容而不直接写入；
 - 实现文件修改验证与统一应用；
 - 删除 Rust/Node.js 对 `Context.version_bumps` 的依赖；
 - 将 changelog 写入纳入同一执行过程。
 
-完成条件：`status`、`version --dry-run` 和 `version` 使用相同计划。
+完成条件：`status`、`version --dry-run` 和 `version` 使用相同计划；包含 Rust 与 Node.js package 的 changeset 能完成规划且不 panic。跨生态自动传播仍只在阶段 4 合并显式 `depends-on` 边后启用。
 
 ### 阶段 4：完成 ecosystem adapter 迁移
 

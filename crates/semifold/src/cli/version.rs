@@ -1,16 +1,14 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 use clap::Parser;
 use colored::Colorize;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::insert_changelog};
 use semifold_resolver::{
-    changeset::{BumpLevel, Changeset},
-    config::{Config, ResolverConfig},
-    context::Context,
-    resolver::{self, Resolver, ResolverType, rust::RustResolver},
-    utils,
+    changeset::Changeset, config::ResolverConfig, context::Context, resolver, utils,
 };
+
+use crate::release::plan_release;
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -72,54 +70,44 @@ pub(crate) async fn version(
     };
     let mut changelogs_map = HashMap::new();
 
-    let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
-    for resolver in config.resolver.keys() {
-        ctx.create_resolver(*resolver)
-            .sort_packages(root, &mut sorted_packages)?;
-    }
-    let release_plan = release_bump_plan(root, config, changesets)?;
-    let mut resolved_packages = HashMap::new();
-    let mut version_map = HashMap::new();
-    for (package_name, package_config) in &sorted_packages {
-        let mut resolver = ctx.create_resolver(package_config.resolver);
-        let resolved_package = resolver.resolve(root, package_config)?;
-        let level = release_plan.levels[package_name];
-        if level != BumpLevel::Unchanged {
-            let mut next_version = resolved_package.version.clone();
-            utils::bump_version(&mut next_version, level, &package_config.channel)?;
-            version_map.insert(package_name.clone(), next_version);
-        }
-        resolved_packages.insert(package_name.clone(), resolved_package);
-    }
+    let release_plan = plan_release(root, config, changesets)?;
+    let version_map = release_plan
+        .packages()
+        .iter()
+        .map(|package| {
+            (
+                package.id.as_str().to_string(),
+                package.next_version.clone(),
+            )
+        })
+        .collect::<HashMap<_, _>>();
     *ctx.version_bumps.borrow_mut() = version_map.clone();
 
-    for (package_name, package_config) in &sorted_packages {
+    for package_id in release_plan.order() {
+        let package_name = package_id.as_str();
+        let package_config = config
+            .packages
+            .get(package_name)
+            .expect("release plan packages must exist in the loaded configuration");
+        let package_release = release_plan
+            .package(package_id)
+            .expect("release plan order must only contain release packages");
         log::debug!("Processing package: {}", package_name);
         let mut resolver = ctx.create_resolver(package_config.resolver);
-        let resolved_package = resolved_packages.remove(package_name).unwrap();
-        let level = release_plan.levels[package_name];
-
-        // Skip unchanged packages
-        if matches!(level, BumpLevel::Unchanged) {
-            log::warn!(
-                "{}",
-                t!("cli.version.unchanged", package = package_name.cyan())
-            );
-            continue;
-        }
-
-        let bumped_version = version_map[package_name].clone();
+        let resolved_package = resolver.resolve(root, package_config)?;
+        let bumped_version = package_release.next_version.clone();
         resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
 
-        let dependency_updates = release_plan
-            .propagated_dependencies
-            .get(package_name)
-            .into_iter()
-            .flatten()
-            .filter_map(|dependency| {
-                version_map
-                    .get(dependency)
-                    .map(|version| (dependency.clone(), version.to_string()))
+        let dependency_updates = package_release
+            .reasons
+            .iter()
+            .filter_map(|reason| match reason {
+                semifold_core::ReleaseReason::DependencyPropagation { dependency, .. } => {
+                    version_map
+                        .get(dependency.as_str())
+                        .map(|version| (dependency.as_str().to_string(), version.to_string()))
+                }
+                semifold_core::ReleaseReason::Changeset { .. } => None,
             })
             .collect::<Vec<_>>();
 
@@ -153,89 +141,6 @@ pub(crate) async fn version(
     Ok(changelogs_map)
 }
 
-#[derive(Debug, Default, Eq, PartialEq)]
-pub(crate) struct ReleaseBumpPlan {
-    pub levels: HashMap<String, BumpLevel>,
-    pub propagated_dependencies: HashMap<String, Vec<String>>,
-}
-
-struct Dependent {
-    name: String,
-    version_requirement: Option<semver::VersionReq>,
-}
-
-pub(crate) fn release_bump_plan(
-    root: &std::path::Path,
-    config: &Config,
-    changesets: &[Changeset],
-) -> anyhow::Result<ReleaseBumpPlan> {
-    let mut levels = config
-        .packages
-        .keys()
-        .map(|name| (name.clone(), utils::get_bump_level(changesets, name)))
-        .collect::<HashMap<_, _>>();
-    let mut dependents = HashMap::<String, Vec<Dependent>>::new();
-    let mut propagated_dependencies = HashMap::<String, Vec<String>>::new();
-    let mut current_versions = HashMap::new();
-    for (package_name, package_config) in &config.packages {
-        if package_config.resolver != ResolverType::Rust {
-            continue;
-        }
-        current_versions.insert(
-            package_name.clone(),
-            RustResolver.resolve(root, package_config)?.version,
-        );
-        for dependency in RustResolver::runtime_dependencies(root, package_config)? {
-            if config.packages.contains_key(&dependency.name) {
-                dependents
-                    .entry(dependency.name)
-                    .or_default()
-                    .push(Dependent {
-                        name: package_name.clone(),
-                        version_requirement: dependency.version_requirement,
-                    });
-            }
-        }
-    }
-
-    let mut pending = levels
-        .iter()
-        .filter_map(|(name, level)| (*level != BumpLevel::Unchanged).then_some(name.clone()))
-        .collect::<VecDeque<_>>();
-    while let Some(package_name) = pending.pop_front() {
-        let mut next_version = current_versions[&package_name].clone();
-        utils::bump_version(
-            &mut next_version,
-            levels[&package_name],
-            &config.packages[&package_name].channel,
-        )?;
-
-        for dependent in dependents.get(&package_name).into_iter().flatten() {
-            if dependent
-                .version_requirement
-                .as_ref()
-                .is_some_and(|requirement| requirement.matches(&next_version))
-            {
-                continue;
-            }
-
-            let level = levels.get_mut(&dependent.name).unwrap();
-            if *level == BumpLevel::Unchanged {
-                *level = BumpLevel::Patch;
-                propagated_dependencies
-                    .entry(dependent.name.clone())
-                    .or_default()
-                    .push(package_name.clone());
-                pending.push_back(dependent.name.clone());
-            }
-        }
-    }
-    Ok(ReleaseBumpPlan {
-        levels,
-        propagated_dependencies,
-    })
-}
-
 pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
     if !ctx.is_initialized() {
         return Err(anyhow::anyhow!(t!("cli.not_initialized")));
@@ -265,13 +170,14 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
+    use semifold_core::PackageId;
     use semifold_resolver::{
         changeset::Changeset,
         config::{BranchesConfig, Config, PackageConfig, ReleaseChannel},
         resolver::ResolverType,
     };
 
-    use super::{BumpLevel, release_bump_plan};
+    use crate::release::plan_release;
 
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
@@ -286,136 +192,30 @@ mod tests {
         root
     }
 
-    fn package_config(path: &str) -> PackageConfig {
+    fn package_config(path: &str, resolver: ResolverType) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Rust,
-            channel: ReleaseChannel::Named("alpha".to_string()),
-            assets: vec![],
-        }
-    }
-
-    fn stable_package_config(path: &str) -> PackageConfig {
-        PackageConfig {
-            path: path.into(),
-            resolver: ResolverType::Rust,
+            resolver,
             channel: ReleaseChannel::Stable,
             assets: vec![],
         }
     }
 
     #[test]
-    fn adds_transitive_rust_dependents_to_the_release_closure() {
+    fn plans_a_node_changeset_in_a_mixed_workspace_without_a_rust_only_lookup() {
         let root = temporary_root();
-        for (path, manifest) in [
-            (
-                "resolver",
-                "[package]\nname = \"resolver\"\nversion = \"0.3.5\"\n",
-            ),
-            (
-                "changelog",
-                "[package]\nname = \"changelog\"\nversion = \"0.2.1\"\n\n[dependencies]\nresolver = { version = \"0.3.5\", path = \"../resolver\" }\n",
-            ),
-            (
-                "cli",
-                "[package]\nname = \"cli\"\nversion = \"0.2.16\"\n\n[dependencies]\nchangelog = { version = \"0.2.1\", path = \"../changelog\" }\n",
-            ),
-        ] {
-            let package_root = root.join(path);
-            fs::create_dir_all(&package_root).unwrap();
-            fs::write(package_root.join("Cargo.toml"), manifest).unwrap();
-        }
-        let config = Config {
-            branches: BranchesConfig {
-                base: "main".to_string(),
-                release: "release".to_string(),
-            },
-            tags: BTreeMap::new(),
-            packages: BTreeMap::from([
-                ("resolver".to_string(), package_config("resolver")),
-                ("changelog".to_string(), package_config("changelog")),
-                ("cli".to_string(), package_config("cli")),
-            ]),
-            resolver: BTreeMap::new(),
-        };
-        let mut changeset = Changeset::new("resolver-feature".to_string(), &root);
-        changeset.add_package("resolver".to_string(), BumpLevel::Minor, None);
-
-        let release_plan = release_bump_plan(&root, &config, &[changeset]).unwrap();
-
-        assert_eq!(release_plan.levels["resolver"], BumpLevel::Minor);
-        assert_eq!(release_plan.levels["changelog"], BumpLevel::Patch);
-        assert_eq!(release_plan.levels["cli"], BumpLevel::Patch);
-        assert_eq!(
-            release_plan.propagated_dependencies["changelog"],
-            ["resolver"]
-        );
-        assert_eq!(release_plan.propagated_dependencies["cli"], ["changelog"]);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn does_not_propagate_when_the_runtime_requirement_accepts_the_next_version() {
-        let root = temporary_root();
-        for (path, manifest) in [
-            (
-                "resolver",
-                "[package]\nname = \"resolver\"\nversion = \"0.3.5\"\n",
-            ),
-            (
-                "changelog",
-                "[package]\nname = \"changelog\"\nversion = \"0.2.1\"\n\n[dependencies]\nresolver = { version = \">=0.3.5, <0.4.0\", path = \"../resolver\" }\n",
-            ),
-        ] {
-            let package_root = root.join(path);
-            fs::create_dir_all(&package_root).unwrap();
-            fs::write(package_root.join("Cargo.toml"), manifest).unwrap();
-        }
-        let config = Config {
-            branches: BranchesConfig {
-                base: "main".to_string(),
-                release: "release".to_string(),
-            },
-            tags: BTreeMap::new(),
-            packages: BTreeMap::from([
-                ("resolver".to_string(), stable_package_config("resolver")),
-                ("changelog".to_string(), stable_package_config("changelog")),
-            ]),
-            resolver: BTreeMap::new(),
-        };
-        let mut changeset = Changeset::new("resolver-patch".to_string(), &root);
-        changeset.add_package("resolver".to_string(), BumpLevel::Patch, None);
-
-        let release_plan = release_bump_plan(&root, &config, &[changeset]).unwrap();
-
-        assert_eq!(release_plan.levels["resolver"], BumpLevel::Patch);
-        assert_eq!(release_plan.levels["changelog"], BumpLevel::Unchanged);
-        assert!(release_plan.propagated_dependencies.is_empty());
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn resolves_workspace_dependency_requirements_before_propagating() {
-        let root = temporary_root();
+        fs::create_dir_all(root.join("rust")).unwrap();
         fs::write(
-            root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.dependencies]\ncore = { version = \">=1.0.0, <2.0.0\", path = \"crates/core\" }\n",
+            root.join("rust/Cargo.toml"),
+            "[package]\nname = \"rust-lib\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
-        for (path, manifest) in [
-            (
-                "crates/core",
-                "[package]\nname = \"core\"\nversion = \"1.0.0\"\n",
-            ),
-            (
-                "crates/app",
-                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[dependencies]\ncore = { workspace = true }\n",
-            ),
-        ] {
-            let package_root = root.join(path);
-            fs::create_dir_all(&package_root).unwrap();
-            fs::write(package_root.join("Cargo.toml"), manifest).unwrap();
-        }
+        fs::create_dir_all(root.join("node")).unwrap();
+        fs::write(
+            root.join("node/package.json"),
+            r#"{"name":"node-lib","version":"1.0.0"}"#,
+        )
+        .unwrap();
         let config = Config {
             branches: BranchesConfig {
                 base: "main".to_string(),
@@ -423,57 +223,34 @@ mod tests {
             },
             tags: BTreeMap::new(),
             packages: BTreeMap::from([
-                ("core".to_string(), stable_package_config("crates/core")),
-                ("app".to_string(), stable_package_config("crates/app")),
+                (
+                    "node-lib".to_string(),
+                    package_config("node", ResolverType::Nodejs),
+                ),
+                (
+                    "rust-lib".to_string(),
+                    package_config("rust", ResolverType::Rust),
+                ),
             ]),
             resolver: BTreeMap::new(),
         };
-        let mut changeset = Changeset::new("core-patch".to_string(), &root);
-        changeset.add_package("core".to_string(), BumpLevel::Patch, None);
+        let mut changeset = Changeset::new("node-patch".to_string(), &root);
+        changeset.add_package(
+            "node-lib".to_string(),
+            semifold_resolver::changeset::BumpLevel::Patch,
+            None,
+        );
 
-        let release_plan = release_bump_plan(&root, &config, &[changeset]).unwrap();
+        let release_plan = plan_release(&root, &config, &[changeset]).unwrap();
 
-        assert_eq!(release_plan.levels["core"], BumpLevel::Patch);
-        assert_eq!(release_plan.levels["app"], BumpLevel::Unchanged);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn does_not_propagate_dev_dependencies() {
-        let root = temporary_root();
-        for (path, manifest) in [
-            (
-                "resolver",
-                "[package]\nname = \"resolver\"\nversion = \"0.3.5\"\n",
-            ),
-            (
-                "consumer",
-                "[package]\nname = \"consumer\"\nversion = \"0.2.1\"\n\n[dev-dependencies]\nresolver = { version = \"0.3.5\", path = \"../resolver\" }\n",
-            ),
-        ] {
-            let package_root = root.join(path);
-            fs::create_dir_all(&package_root).unwrap();
-            fs::write(package_root.join("Cargo.toml"), manifest).unwrap();
-        }
-        let config = Config {
-            branches: BranchesConfig {
-                base: "main".to_string(),
-                release: "release".to_string(),
-            },
-            tags: BTreeMap::new(),
-            packages: BTreeMap::from([
-                ("resolver".to_string(), package_config("resolver")),
-                ("consumer".to_string(), package_config("consumer")),
-            ]),
-            resolver: BTreeMap::new(),
-        };
-        let mut changeset = Changeset::new("resolver-minor".to_string(), &root);
-        changeset.add_package("resolver".to_string(), BumpLevel::Minor, None);
-
-        let release_plan = release_bump_plan(&root, &config, &[changeset]).unwrap();
-
-        assert_eq!(release_plan.levels["consumer"], BumpLevel::Unchanged);
-        assert!(release_plan.propagated_dependencies.is_empty());
+        assert_eq!(release_plan.order(), [PackageId::new("node-lib")]);
+        assert_eq!(
+            release_plan
+                .package(&PackageId::new("node-lib"))
+                .unwrap()
+                .next_version,
+            semver::Version::new(1, 0, 1)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

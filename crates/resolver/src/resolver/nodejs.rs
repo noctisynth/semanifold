@@ -21,6 +21,7 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 struct PackageJson {
     pub name: String,
+    #[serde(default = "default_node_version")]
     pub version: String,
     pub workspaces: Option<Vec<String>>,
     pub dependencies: Option<BTreeMap<String, String>>,
@@ -31,6 +32,10 @@ struct PackageJson {
 }
 
 pub struct NodejsResolver;
+
+fn default_node_version() -> String {
+    "0.0.0".to_string()
+}
 
 impl NodejsResolver {
     /// Plans a package.json replacement from immutable package and version snapshots.
@@ -62,15 +67,6 @@ impl NodejsResolver {
             path: package_json_path.clone(),
             reason: "package.json root must be an object".to_string(),
         })?;
-        if !object
-            .get("version")
-            .is_some_and(serde_json::Value::is_string)
-        {
-            return Err(ResolveError::ParseError {
-                path: package_json_path.clone(),
-                reason: "package.json is missing a string version field".to_string(),
-            });
-        }
         object.insert(
             "version".to_string(),
             serde_json::Value::String(next_version.to_string()),
@@ -337,15 +333,6 @@ impl Resolver for NodejsResolver {
                 path: package_json_path.clone(),
                 reason: "package.json root must be an object".to_string(),
             })?;
-        if !object
-            .get("version")
-            .is_some_and(serde_json::Value::is_string)
-        {
-            return Err(ResolveError::ParseError {
-                path: package_json_path.clone(),
-                reason: "package.json is missing a string version field".to_string(),
-            });
-        }
         object.insert(
             "version".to_string(),
             serde_json::Value::String(bumped_version.clone()),
@@ -546,6 +533,22 @@ mod tests {
     }
 
     #[test]
+    fn resolves_a_package_without_a_version_as_zero() {
+        let root = temp_dir("missing-version");
+        fs::write(
+            root.join("package.json"),
+            "{\n  \"name\": \"template\"\n}\n",
+        )
+        .unwrap();
+
+        let package = NodejsResolver.resolve(&root, &package_config(".")).unwrap();
+
+        assert_eq!(package.name, "template");
+        assert_eq!(package.version, semver::Version::new(0, 0, 0));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn discovers_pnpm_workspace_packages_and_private_members() {
         let root = temp_dir("pnpm-workspace");
         write_package(
@@ -624,7 +627,6 @@ mod tests {
         fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
         let original = r#"{
   "name": "app",
-  "version": "1.0.0",
   "dependencies": { "core": "^1.0.0", "workspace": "workspace:*" },
   "devDependencies": { "dev": "~2.0.0" },
   "peerDependencies": { "peer": "workspace:^3.0.0" },
@@ -636,7 +638,7 @@ mod tests {
         let package = PackageSnapshot {
             id: PackageId::new("app"),
             manifest_name: "app".to_string(),
-            version: semver::Version::new(1, 0, 0),
+            version: semver::Version::new(0, 0, 0),
             ecosystem: Ecosystem::Node,
             path: "packages/app".into(),
             publishable: true,
@@ -673,10 +675,6 @@ mod tests {
         );
         assert!(
             edit.new_content.find("\"name\"").unwrap()
-                < edit.new_content.find("\"version\"").unwrap()
-        );
-        assert!(
-            edit.new_content.find("\"version\"").unwrap()
                 < edit.new_content.find("\"dependencies\"").unwrap()
         );
         assert_eq!(fs::read_to_string(manifest_path).unwrap(), original);

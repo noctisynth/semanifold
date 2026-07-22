@@ -26,6 +26,8 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 - 领域设计优先：先生成或更新计划、接口和测试策略，再引入副作用。
 - 新设计中不恢复全局可变万能 `Context`；渲染使用不可变、按作用域构造的 `ReleaseContext`、`PackageContext`、`ChangelogContext` 与 `TemplateContext`。
 
+- 每次完成任务时，除总结业务和技术产出外，必须明确说明本次采用的技术方案相对既有设计的变动；不得将方案变动隐式包含在实现中而不告知用户。
+
 ## Changeset
 
 - 完成会影响任一已发布 package 的功能、修复、重构、依赖或测试能力变更后，必须在 `.changes/` 生成对应 changeset；纯文档或不影响 package 的维护工作除外。

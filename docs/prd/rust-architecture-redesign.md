@@ -480,6 +480,8 @@ Adapter 可以：
 
 Rust manifest 与 Semifold TOML 配置必须使用保格式编辑器，保留无关的文本布局。`package.json` 则允许在完成 `serde_json::Value` 语义校验后使用启用 `preserve_order` 的序列化器规范化输出：对象键顺序必须保持，输出使用标准缩进并始终以一个换行结束。不得为 `package.json` 版本修改维护自定义字节级 JSON 解析或扫描器；JSON 结构、转义和边缘语法应完全由 `serde_json` 处理。
 
+Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。
+
 对于 manifest 内部依赖，adapter 必须同时提供依赖类别与可发布版本约束。`ReleasePlanner` 只在依赖的计划新版本不满足该约束时，才将运行时依赖方自动加入发布闭包并规划 manifest 版本更新；约束仍满足时，依赖方不因该依赖单独发布。首版只将 Rust `[dependencies]` 视为运行时依赖，`dev-dependencies`、`build-dependencies`、Node peer/optional 及其他生态依赖类别必须在对应传播策略确定前保持不自动传播。
 
 Adapter 不可以：

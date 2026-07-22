@@ -74,6 +74,13 @@ unchanged = "%{package} is unchanged, skipping versioning"
 skip_post_version = "Skipping post-version command %{command} for %{package} due to dry run"
 run_post_version = "Running post-version command %{command} for %{package}"
 no_resolver_config = "No resolver config found for %{resolver}, failed to run post-version for %{package}"
+edit_path_invalid = "Planned file edit path %{path} is outside the project root"
+duplicate_edit = "Multiple planned edits target %{path}"
+edit_read_failed = "Failed to read planned edit target %{path}: %{error}"
+edit_hash_mismatch = "Planned edit target %{path} changed after planning"
+edit_temp_create_failed = "Failed to create temporary file %{path}: %{error}"
+edit_temp_write_failed = "Failed to write temporary file %{path}: %{error}"
+edit_replace_failed = "Failed to replace planned edit target %{path}: %{error}"
 
 [cli.version.flags]
 allow_dirty = "Allow versioning packages with dirty Git working tree"

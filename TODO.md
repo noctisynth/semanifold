@@ -174,8 +174,8 @@
 - [x] 定义 `FileEdit`、`FileHash` 和 `EditSource`
 - [ ] 在计划阶段生成所有 manifest 和 changelog 修改
 - [x] 检查多个 edit 是否修改同一文件
-- [ ] 使用 expected hash 检测规划后的并发修改
-- [ ] 实现临时文件写入和原子替换
+- [x] 使用 expected hash 检测规划后的并发修改
+- [x] 实现临时文件写入和原子替换
 - [ ] 所有文件成功写入后再删除 changeset
 - [ ] 明确 post-version 失败后的恢复策略
 

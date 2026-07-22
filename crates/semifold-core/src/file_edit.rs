@@ -1,5 +1,6 @@
 use camino::Utf8PathBuf;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::PackageId;
 
@@ -10,8 +11,8 @@ pub struct FileHash(String);
 
 impl FileHash {
     #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self(format!("{:x}", Sha256::digest(bytes)))
     }
 
     #[must_use]
@@ -43,4 +44,17 @@ pub struct FileEdit {
     pub expected_hash: FileHash,
     pub new_content: String,
     pub source: EditSource,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FileHash;
+
+    #[test]
+    fn hashes_source_bytes_with_sha256() {
+        assert_eq!(
+            FileHash::from_bytes(b"semifold").as_str(),
+            "acfa94237c0f2abcae06590ebe6bb12455e24f07a9608a2418d618b540aee4e0"
+        );
+    }
 }

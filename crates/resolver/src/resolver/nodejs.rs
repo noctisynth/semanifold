@@ -48,38 +48,62 @@ impl NodejsResolver {
                     path: package_json_path.clone(),
                     reason: format!("missing planned version for {}", package.id),
                 })?;
-        let package_json: PackageJson =
+        let _: PackageJson =
             serde_json::from_str(&original).map_err(|error| ResolveError::ParseError {
                 path: package_json_path.clone(),
                 reason: error.to_string(),
             })?;
-        let mut updated =
-            utils::replace_root_json_string_field(&original, "version", &next_version.to_string())
-                .ok_or(ResolveError::ParseError {
-                    path: package_json_path.clone(),
-                    reason: "package.json is missing a string version field".to_string(),
-                })?;
-        for (field, dependencies) in [
-            ("dependencies", package_json.dependencies),
-            ("devDependencies", package_json.dev_dependencies),
-            ("peerDependencies", package_json.peer_dependencies),
-            ("optionalDependencies", package_json.optional_dependencies),
-        ] {
-            let replacements = dependencies
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|(name, requirement)| {
-                    versions
-                        .get(&PackageId::new(&name))
-                        .map(|version| (name, node_requirement(&requirement, version)))
-                })
-                .collect::<BTreeMap<_, _>>();
-            updated = utils::replace_json_object_string_fields(&updated, field, &replacements)
-                .ok_or_else(|| ResolveError::ParseError {
-                    path: package_json_path.clone(),
-                    reason: format!("invalid {field} object in package.json"),
-                })?;
+        let mut document: serde_json::Value =
+            serde_json::from_str(&original).map_err(|error| ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: error.to_string(),
+            })?;
+        let object = document.as_object_mut().ok_or(ResolveError::ParseError {
+            path: package_json_path.clone(),
+            reason: "package.json root must be an object".to_string(),
+        })?;
+        if !object
+            .get("version")
+            .is_some_and(serde_json::Value::is_string)
+        {
+            return Err(ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: "package.json is missing a string version field".to_string(),
+            });
         }
+        object.insert(
+            "version".to_string(),
+            serde_json::Value::String(next_version.to_string()),
+        );
+        for field in [
+            "dependencies",
+            "devDependencies",
+            "peerDependencies",
+            "optionalDependencies",
+        ] {
+            let Some(dependencies) = object
+                .get_mut(field)
+                .and_then(serde_json::Value::as_object_mut)
+            else {
+                continue;
+            };
+            for (name, requirement_value) in dependencies {
+                let Some(requirement) = requirement_value.as_str() else {
+                    continue;
+                };
+                let Some(version) = versions.get(&PackageId::new(name.as_str())) else {
+                    continue;
+                };
+                let next_requirement = node_requirement(requirement, version);
+                *requirement_value = serde_json::Value::String(next_requirement);
+            }
+        }
+        let mut updated =
+            serde_json::to_string_pretty(&document).map_err(|error| ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: error.to_string(),
+            })?;
+        updated.push('\n');
 
         Ok(FileEdit {
             path: package.path.join("package.json"),
@@ -302,20 +326,38 @@ impl Resolver for NodejsResolver {
         let package_json_path = root.join(&package.path).join("package.json");
         let package_json_str = std::fs::read_to_string(&package_json_path)?;
 
-        let package_json: serde_json::Value =
+        let mut package_json: serde_json::Value =
             serde_json::from_str(&package_json_str).map_err(|e| ResolveError::ParseError {
                 path: package_json_path.clone(),
                 reason: e.to_string(),
             })?;
-
-        let package_json_content = package_json
-            .as_object()
-            .and_then(|object| object.get("version"))
-            .filter(|version| version.is_string())
-            .and_then(|_| {
-                utils::replace_root_json_string_field(&package_json_str, "version", &bumped_version)
-            })
-            .unwrap_or(package_json_str);
+        let object = package_json
+            .as_object_mut()
+            .ok_or(ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: "package.json root must be an object".to_string(),
+            })?;
+        if !object
+            .get("version")
+            .is_some_and(serde_json::Value::is_string)
+        {
+            return Err(ResolveError::ParseError {
+                path: package_json_path.clone(),
+                reason: "package.json is missing a string version field".to_string(),
+            });
+        }
+        object.insert(
+            "version".to_string(),
+            serde_json::Value::String(bumped_version.clone()),
+        );
+        let mut package_json_content =
+            serde_json::to_string_pretty(&package_json).map_err(|error| {
+                ResolveError::ParseError {
+                    path: package_json_path.clone(),
+                    reason: error.to_string(),
+                }
+            })?;
+        package_json_content.push('\n');
         if !ctx.dry_run {
             std::fs::write(package_json_path, package_json_content)?;
         } else {
@@ -580,7 +622,16 @@ mod tests {
         let root = temp_dir("plan-file-edit");
         let manifest_path = root.join("packages/app/package.json");
         fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
-        let original = "{\n  \"name\": \"app\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": { \"core\": \"^1.0.0\", \"workspace\": \"workspace:*\" },\n  \"devDependencies\": { \"dev\": \"~2.0.0\" },\n  \"peerDependencies\": { \"peer\": \"workspace:^3.0.0\" },\n  \"optionalDependencies\": { \"optional\": \"4.0.0\" },\n  \"custom\": { \"preserved\": true }\n}\n";
+        let original = r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "core": "^1.0.0", "workspace": "workspace:*" },
+  "devDependencies": { "dev": "~2.0.0" },
+  "peerDependencies": { "peer": "workspace:^3.0.0" },
+  "optionalDependencies": { "optional": "4.0.0" },
+  "custom": { "preserved": true, "escaped": "quote \\\" and slash \\\\" }
+}
+"#;
         fs::write(&manifest_path, original).unwrap();
         let package = PackageSnapshot {
             id: PackageId::new("app"),
@@ -613,9 +664,20 @@ mod tests {
         assert!(edit.new_content.contains("\"dev\": \"~2.1.0\""));
         assert!(edit.new_content.contains("\"peer\": \"workspace:^3.1.0\""));
         assert!(edit.new_content.contains("\"optional\": \"4.1.0\""));
+        assert!(edit.new_content.ends_with('\n'));
+        let rendered = serde_json::from_str::<serde_json::Value>(&edit.new_content).unwrap();
+        assert_eq!(rendered["custom"]["preserved"], true);
+        assert_eq!(
+            rendered["custom"]["escaped"],
+            serde_json::from_str::<serde_json::Value>(original).unwrap()["custom"]["escaped"]
+        );
         assert!(
-            edit.new_content
-                .contains("\"custom\": { \"preserved\": true }")
+            edit.new_content.find("\"name\"").unwrap()
+                < edit.new_content.find("\"version\"").unwrap()
+        );
+        assert!(
+            edit.new_content.find("\"version\"").unwrap()
+                < edit.new_content.find("\"dependencies\"").unwrap()
         );
         assert_eq!(fs::read_to_string(manifest_path).unwrap(), original);
         fs::remove_dir_all(root).unwrap();

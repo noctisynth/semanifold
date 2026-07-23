@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.0-alpha.3
+
+### Bug Fixes
+
+- [`970de01`](https://github.com/noctisynth/semifold/commit/970de019abd60f6ff889b8520c76b46e51044eba): Define planned file hashes as SHA-256 digests of the source bytes for reliable edit validation.
+
+### New Features
+
+- [`44ee660`](https://github.com/noctisynth/semifold/commit/44ee660cf4a0993bcb87cea2e43e9f391aa7119d): Plan and atomically apply Rust and Node manifest version edits through the shared release plan.
+
 ## v0.1.0-alpha.2
 
 ### New Features

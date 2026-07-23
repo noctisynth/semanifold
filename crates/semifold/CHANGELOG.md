@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0-alpha.6
+
+### New Features
+
+- [`93e5c74`](https://github.com/noctisynth/semifold/commit/93e5c746f337bef0e0729bcb71b4537c60a62b73): Add a validated FileEdit executor that rejects changed or conflicting targets before writing and applies replacements atomically.
+- [`44ee660`](https://github.com/noctisynth/semifold/commit/44ee660cf4a0993bcb87cea2e43e9f391aa7119d): Plan and atomically apply Rust and Node manifest version edits through the shared release plan.
+
+### Bug Fixes
+
+- [`1c90682`](https://github.com/noctisynth/semifold/commit/1c90682632e694b914d5ba1aefd7118344115c81): Make versioning consume the shared release plan so mixed Rust and Node.js workspaces do not panic when a Node.js package has a changeset.
+- [`5d67c50`](https://github.com/noctisynth/semifold/commit/5d67c509d0f203b4ce50d48cf392d2d805304170): Complete the Chinese CLI locale and verify it has the same translation keys as English without relying on fallback text.
+
 ## v0.3.0-alpha.5
 
 ### Bug Fixes

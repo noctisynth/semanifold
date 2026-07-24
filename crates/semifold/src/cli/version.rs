@@ -85,9 +85,9 @@ pub(crate) async fn version(
     let Some(repo) = ctx.git_repo.as_ref() else {
         return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
-    let mut changelogs_map = HashMap::new();
-
     let release_plan = plan_release(root, config, changesets)?;
+    let (release_plan, mut changelogs_map) =
+        plan_changelog_edits(ctx, repo, root, config, changesets, release_plan).await?;
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
     if ctx.dry_run {
         FileEditExecutor::new(edit_root).validate(release_plan.file_edits())?;
@@ -95,62 +95,11 @@ pub(crate) async fn version(
     }
 
     let version_map = release_plan
-        .packages()
+        .versions()
         .iter()
-        .map(|package| {
-            (
-                package.id.as_str().to_string(),
-                package.next_version.clone(),
-            )
-        })
+        .map(|(package, version)| (package.as_str().to_string(), version.clone()))
         .collect::<HashMap<_, _>>();
-    let mut file_edits = release_plan.file_edits().to_vec();
-    for package_id in release_plan.order() {
-        let has_planned_manifest_edit = release_plan.file_edits().iter().any(|edit| {
-            matches!(
-                &edit.source,
-                EditSource::PackageVersion { package } if package == package_id
-            )
-        });
-        if !has_planned_manifest_edit {
-            continue;
-        }
-        let package_name = package_id.as_str();
-        let package_config = config
-            .packages
-            .get(package_name)
-            .expect("release plan packages are configured before versioning");
-        let package_release = release_plan
-            .package(package_id)
-            .expect("release plan order only contains planned releases");
-        let dependency_updates = package_release
-            .reasons
-            .iter()
-            .filter_map(|reason| match reason {
-                ReleaseReason::DependencyPropagation { dependency, .. } => version_map
-                    .get(dependency.as_str())
-                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
-                ReleaseReason::Changeset { .. } => None,
-            })
-            .collect::<Vec<_>>();
-        let changelog = generate_changelog(
-            ctx,
-            repo,
-            changesets,
-            package_name,
-            &package_release.next_version.to_string(),
-            &dependency_updates,
-        )
-        .await?;
-        file_edits.push(plan_changelog_edit(
-            root,
-            package_config,
-            package_id,
-            &changelog,
-        )?);
-        changelogs_map.insert(package_name.to_string(), changelog);
-    }
-    FileEditExecutor::new(edit_root).apply(&file_edits)?;
+    FileEditExecutor::new(edit_root).apply(release_plan.file_edits())?;
 
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
@@ -191,6 +140,7 @@ pub(crate) async fn version(
                 package_name,
                 &bumped_version.to_string(),
                 &dependency_updates,
+                true,
             )
             .await?;
             changelogs_map.insert(package_name.to_string(), changelog.clone());
@@ -208,6 +158,68 @@ pub(crate) async fn version(
     }
 
     Ok(changelogs_map)
+}
+
+async fn plan_changelog_edits(
+    ctx: &Context,
+    repo: &git2::Repository,
+    root: &Path,
+    config: &semifold_resolver::config::Config,
+    changesets: &[Changeset],
+    release_plan: semifold_core::ReleasePlan,
+) -> anyhow::Result<(semifold_core::ReleasePlan, HashMap<String, String>)> {
+    let mut file_edits = release_plan.file_edits().to_vec();
+    let mut changelogs = HashMap::new();
+
+    for package_id in release_plan.order() {
+        let has_planned_manifest_edit = release_plan.file_edits().iter().any(|edit| {
+            matches!(
+                &edit.source,
+                EditSource::PackageVersion { package } if package == package_id
+            )
+        });
+        if !has_planned_manifest_edit {
+            continue;
+        }
+        let package_name = package_id.as_str();
+        let package_config = config
+            .packages
+            .get(package_name)
+            .expect("release plan packages are configured before changelog planning");
+        let package_release = release_plan
+            .package(package_id)
+            .expect("release plan order only contains planned releases");
+        let dependency_updates = package_release
+            .reasons
+            .iter()
+            .filter_map(|reason| match reason {
+                ReleaseReason::DependencyPropagation { dependency, .. } => release_plan
+                    .versions()
+                    .get(dependency)
+                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
+                ReleaseReason::Changeset { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        let changelog = generate_changelog(
+            ctx,
+            repo,
+            changesets,
+            package_name,
+            &package_release.next_version.to_string(),
+            &dependency_updates,
+            !ctx.dry_run,
+        )
+        .await?;
+        file_edits.push(plan_changelog_edit(
+            root,
+            package_config,
+            package_id,
+            &changelog,
+        )?);
+        changelogs.insert(package_name.to_string(), changelog);
+    }
+
+    Ok((release_plan.with_file_edits(file_edits)?, changelogs))
 }
 
 fn plan_changelog_edit(

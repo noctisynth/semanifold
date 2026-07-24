@@ -53,6 +53,7 @@ pub async fn generate_changelog(
     package_name: &str,
     package_version: &str,
     dependency_updates: &[(String, String)],
+    collect_remote_metadata: bool,
 ) -> Result<String, ResolveError> {
     let mut changes_map = HashMap::new();
 
@@ -81,7 +82,8 @@ pub async fn generate_changelog(
         )?;
         let commit_info = utils::find_first_commit_for_path(repo, &rel_path);
         let commit_hash = commit_info.as_ref().map(|c| c.oid.to_string());
-        let pr_info = if let Some(repo_info) = ctx.repo_info.as_ref()
+        let pr_info = if collect_remote_metadata
+            && let Some(repo_info) = ctx.repo_info.as_ref()
             && let Some(commit_info) = commit_info.as_ref()
         {
             utils::query_pr_for_commit(

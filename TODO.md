@@ -364,8 +364,9 @@
 
 ## 实施前需要确认的决策
 
-- [ ] 内部依赖变化触发 patch bump 的条件
-- [ ] dev、peer、optional 和 build dependency 的传播规则
+- [x] 运行时内部依赖仅在计划新版本不满足依赖方 manifest 约束时触发 patch bump；显式 changeset 的更高 bump 优先，约束仍满足时不自动发布依赖方
+- [x] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播
+- [ ] peer、optional 和其他生态依赖类别的传播规则
 - [ ] 相同包名跨生态时的 `PackageId` namespace
 - [ ] Post-version 命令失败后的文件恢复策略
 - [ ] GitHub 元数据查询失败时是否降级

@@ -116,6 +116,29 @@ fn status_and_dry_run_version_leave_the_workspace_unchanged() {
 }
 
 #[test]
+fn dry_run_validates_the_planned_changelog_without_writing_files() {
+    let root = temporary_project(
+        "dry-run-changelog-validation",
+        &config("channel = \"stable\""),
+    );
+    let manifest = root.join("Cargo.toml");
+    let changelog = root.join("CHANGELOG.md");
+    let changeset = root.join(".changes/feature.md");
+    fs::write(&changelog, "not a changelog\n").unwrap();
+    let manifest_before = fs::read_to_string(&manifest).unwrap();
+    let changelog_before = fs::read_to_string(&changelog).unwrap();
+    let changeset_before = fs::read_to_string(&changeset).unwrap();
+
+    let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+
+    assert!(!version.status.success(), "{version:?}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), manifest_before);
+    assert_eq!(fs::read_to_string(&changelog).unwrap(), changelog_before);
+    assert_eq!(fs::read_to_string(&changeset).unwrap(), changeset_before);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn dry_run_version_handles_a_node_changeset_in_a_mixed_workspace() {
     let root = temporary_project(
         "mixed-version",
@@ -177,6 +200,28 @@ fn version_applies_manifest_and_changelog_edits_together() {
         "# Changelog\n\n## v1.0.1\n\n### Chores\n\n- Exercise the CLI.\n"
     );
     assert!(!changeset.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn version_keeps_changesets_when_changelog_planning_fails() {
+    let root = temporary_project(
+        "version-changelog-validation",
+        &config("channel = \"stable\""),
+    );
+    let manifest = root.join("Cargo.toml");
+    let changelog = root.join("CHANGELOG.md");
+    let changeset = root.join(".changes/feature.md");
+    fs::write(&changelog, "not a changelog\n").unwrap();
+    let manifest_before = fs::read_to_string(&manifest).unwrap();
+    let changelog_before = fs::read_to_string(&changelog).unwrap();
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(!version.status.success(), "{version:?}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), manifest_before);
+    assert_eq!(fs::read_to_string(&changelog).unwrap(), changelog_before);
+    assert!(changeset.exists());
     fs::remove_dir_all(root).unwrap();
 }
 

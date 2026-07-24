@@ -143,8 +143,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
             .body(pr_body)
             .send()
             .await?;
-    } else {
-        let pr = existing_prs.first().unwrap();
+    } else if let Some(pr) = existing_prs.first() {
         log::info!("{}", t!("cli.ci.existing_pr_found", number = pr.number));
         pulls
             .update(pr.number)

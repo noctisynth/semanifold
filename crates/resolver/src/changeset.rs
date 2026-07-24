@@ -145,7 +145,13 @@ impl Changeset {
                 .to_string(),
             packages,
             summary,
-            root_path: path.parent().unwrap().to_path_buf(),
+            root_path: path
+                .parent()
+                .ok_or(ResolveError::InvalidChangeset {
+                    path: path.to_path_buf(),
+                    reason: "Changeset path has no parent directory".to_string(),
+                })?
+                .to_path_buf(),
             path: Some(path.to_path_buf()),
         })
     }

@@ -348,9 +348,13 @@ impl Resolver for RustResolver {
             return Ok(vec![package]);
         }
 
-        let members = cargo_toml.workspace.unwrap().members.iter().try_fold(
-            Vec::new(),
-            |mut members, member| {
+        let Some(workspace) = cargo_toml.workspace else {
+            return Ok(vec![]);
+        };
+        let members = workspace
+            .members
+            .iter()
+            .try_fold(Vec::new(), |mut members, member| {
                 let pattern = root.join(member).display().to_string();
                 let paths = glob::glob(&pattern)
                     .map_err(|e| ResolveError::ParseError {
@@ -366,8 +370,7 @@ impl Resolver for RustResolver {
                     .collect::<Result<Vec<_>, _>>()?;
                 members.extend(paths);
                 Ok::<_, ResolveError>(members)
-            },
-        )?;
+            })?;
 
         log::debug!("members: {members:?}");
 
@@ -472,21 +475,17 @@ impl Resolver for RustResolver {
         packages.sort_by(
             |(a, a_cfg), (b, b_cfg)| match (a_cfg.resolver, b_cfg.resolver) {
                 (ResolverType::Rust, ResolverType::Rust) => {
-                    let a_deps = cached_packages
+                    let a_depends_on_b = cached_packages
                         .get(a)
-                        .unwrap()
-                        .dependencies
-                        .as_ref()
-                        .unwrap();
-                    let b_deps = cached_packages
+                        .and_then(|package| package.dependencies.as_ref())
+                        .is_some_and(|dependencies| dependencies.contains_key(b));
+                    let b_depends_on_a = cached_packages
                         .get(b)
-                        .unwrap()
-                        .dependencies
-                        .as_ref()
-                        .unwrap();
-                    if a_deps.contains_key(b) {
+                        .and_then(|package| package.dependencies.as_ref())
+                        .is_some_and(|dependencies| dependencies.contains_key(a));
+                    if a_depends_on_b {
                         std::cmp::Ordering::Greater
-                    } else if b_deps.contains_key(a) {
+                    } else if b_depends_on_a {
                         std::cmp::Ordering::Less
                     } else {
                         std::cmp::Ordering::Equal

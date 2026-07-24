@@ -18,7 +18,7 @@ pub fn find_at_parent(
 ) -> Option<PathBuf> {
     let mut current_path = starts_at;
     loop {
-        if ends_at.is_some() && current_path == ends_at.unwrap() {
+        if ends_at.is_some_and(|ends_at| current_path == ends_at) {
             break None;
         } else {
             let config_path = current_path.join(path_name);

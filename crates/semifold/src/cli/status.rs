@@ -58,7 +58,10 @@ pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
     log::debug!("GitHub CI environment: {}", is_ci);
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
-    let config = ctx.config.as_ref().unwrap();
+    let config = ctx
+        .config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.not_initialized")))?;
 
     let changesets = resolver::get_changesets(ctx)?;
     let plan = plan_release(&root, config, &changesets)

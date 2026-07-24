@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::Path};
+#![cfg_attr(not(test), deny(clippy::expect_used, clippy::unwrap_used))]
+
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use semifold_resolver::{changeset, context, error::ResolveError};
 
@@ -58,12 +63,22 @@ pub async fn generate_changelog(
         .unwrap_or_default();
 
     for changeset in changesets {
-        let changeset_path = changeset.path.as_ref().unwrap();
-        let rel_path = pathdiff::diff_paths(changeset_path, ctx.repo_root.as_ref().unwrap())
+        let changeset_path = changeset
+            .path
+            .as_ref()
             .ok_or(ResolveError::InvalidChangeset {
+                path: PathBuf::new(),
+                reason: "Changeset is missing its source path".to_string(),
+            })?;
+        let repo_root = ctx.repo_root.as_ref().ok_or(ResolveError::GitError {
+            message: "Repository root is not available".to_string(),
+        })?;
+        let rel_path = pathdiff::diff_paths(changeset_path, repo_root).ok_or(
+            ResolveError::InvalidChangeset {
                 path: changeset_path.to_path_buf(),
                 reason: "Changeset path is not under repo root".to_string(),
-            })?;
+            },
+        )?;
         let commit_info = utils::find_first_commit_for_path(repo, &rel_path);
         let commit_hash = commit_info.as_ref().map(|c| c.oid.to_string());
         let pr_info = if let Some(repo_info) = ctx.repo_info.as_ref()

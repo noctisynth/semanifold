@@ -56,7 +56,7 @@ impl SemifoldMcp {
         ctx.config
             .as_ref()
             .ok_or_else(|| t!("cli.mcp.not_initialized").into())
-            .map(|c| serde_json::to_string(&c.tags).unwrap())
+            .and_then(|c| serde_json::to_string(&c.tags).map_err(|error| error.to_string()))
     }
 
     #[tool(
@@ -70,7 +70,7 @@ impl SemifoldMcp {
         ctx.config
             .as_ref()
             .ok_or_else(|| t!("cli.mcp.not_initialized").into())
-            .map(|c| {
+            .and_then(|c| {
                 let pkgs: serde_json::Map<_, _> = c
                     .packages
                     .iter()
@@ -84,7 +84,7 @@ impl SemifoldMcp {
                         )
                     })
                     .collect();
-                serde_json::to_string(&pkgs).unwrap()
+                serde_json::to_string(&pkgs).map_err(|error| error.to_string())
             })
     }
 

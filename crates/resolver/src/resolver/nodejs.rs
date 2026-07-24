@@ -207,8 +207,7 @@ impl Resolver for NodejsResolver {
         } else {
             None
         };
-        let workspaces = pnpm_packages.or(package_json.workspaces);
-        if workspaces.is_none() {
+        let Some(workspaces) = pnpm_packages.or(package_json.workspaces) else {
             if package_json.name.is_empty() {
                 log::warn!("Failed to resolve package in {}", root.display());
                 return Ok(vec![]);
@@ -223,9 +222,7 @@ impl Resolver for NodejsResolver {
                 },
             )?;
             return Ok(vec![package]);
-        }
-
-        let workspaces = workspaces.unwrap();
+        };
         let mut packages = Vec::new();
 
         let root_package = self.resolve(
@@ -382,8 +379,10 @@ impl Resolver for NodejsResolver {
 
         packages.sort_by(|(a, a_cfg), (b, b_cfg)| {
             if a_cfg.resolver == ResolverType::Nodejs && b_cfg.resolver == ResolverType::Nodejs {
-                let a_pkg = cached_packages.get(a).unwrap();
-                let b_pkg = cached_packages.get(b).unwrap();
+                let (Some(a_pkg), Some(b_pkg)) = (cached_packages.get(a), cached_packages.get(b))
+                else {
+                    return a.cmp(b);
+                };
 
                 // 检查依赖关系
                 let has_dep = |pkg: &PackageJson, dep_name: &str| -> bool {

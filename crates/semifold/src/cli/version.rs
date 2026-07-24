@@ -74,8 +74,14 @@ pub(crate) async fn version(
     ctx: &Context,
     changesets: &[Changeset],
 ) -> anyhow::Result<HashMap<String, String>> {
-    let config = ctx.config.as_ref().unwrap();
-    let root = ctx.repo_root.as_ref().unwrap();
+    let config = ctx
+        .config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.not_initialized")))?;
+    let root = ctx
+        .repo_root
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.version.no_git_repo")))?;
     let Some(repo) = ctx.git_repo.as_ref() else {
         return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
@@ -110,13 +116,18 @@ pub(crate) async fn version(
             continue;
         }
         let package_name = package_id.as_str();
-        let package_config = config
-            .packages
-            .get(package_name)
-            .expect("release plan packages must exist in the loaded configuration");
-        let package_release = release_plan
-            .package(package_id)
-            .expect("release plan order must only contain release packages");
+        let package_config = config.packages.get(package_name).ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.version.plan_package_missing",
+                package = package_name
+            ))
+        })?;
+        let package_release = release_plan.package(package_id).ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.version.plan_package_missing",
+                package = package_name
+            ))
+        })?;
         let dependency_updates = package_release
             .reasons
             .iter()
@@ -148,13 +159,18 @@ pub(crate) async fn version(
 
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
-        let package_config = config
-            .packages
-            .get(package_name)
-            .expect("release plan packages must exist in the loaded configuration");
-        let package_release = release_plan
-            .package(package_id)
-            .expect("release plan order must only contain release packages");
+        let package_config = config.packages.get(package_name).ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.version.plan_package_missing",
+                package = package_name
+            ))
+        })?;
+        let package_release = release_plan.package(package_id).ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.version.plan_package_missing",
+                package = package_name
+            ))
+        })?;
         let bumped_version = package_release.next_version.clone();
         let has_planned_edit = release_plan.file_edits().iter().any(|edit| {
             matches!(

@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::Path};
 
+use rust_i18n::t;
 use semifold_core::{
     BumpLevel, ChangesetId, ChangesetInput, DependencyKind, Ecosystem, PackageId,
     PackageReleasePolicy, ReleaseChannel, ReleasePlan, ReleasePlanner, ReleasePolicies,
@@ -27,23 +28,31 @@ pub(crate) fn plan_release(
     let file_edits = plan
         .packages()
         .iter()
-        .filter_map(|release| {
-            let package = graph
-                .package(&release.id)
-                .expect("release plan packages must exist in the workspace graph");
-            match package.ecosystem {
-                Ecosystem::Rust => {
-                    Some(RustResolver::plan_file_edit(root, package, plan.versions()))
-                }
+        .map(|release| -> anyhow::Result<Option<_>> {
+            let package = graph.package(&release.id).ok_or_else(|| {
+                anyhow::anyhow!(t!(
+                    "cli.version.plan_package_missing",
+                    package = release.id.as_str()
+                ))
+            })?;
+            Ok(match package.ecosystem {
+                Ecosystem::Rust => Some(RustResolver::plan_file_edit(
+                    root,
+                    package,
+                    plan.versions(),
+                )?),
                 Ecosystem::Node => Some(NodejsResolver::plan_file_edit(
                     root,
                     package,
                     plan.versions(),
-                )),
+                )?),
                 Ecosystem::Python | Ecosystem::Cpp => None,
-            }
+            })
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect();
     Ok(plan.with_file_edits(file_edits)?)
 }
 

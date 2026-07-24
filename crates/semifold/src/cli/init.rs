@@ -220,8 +220,18 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
         if !workflow_dir.exists() {
             std::fs::create_dir_all(&workflow_dir)?;
         }
-        let ci_asset = CIAsset::get("semifold-ci.yaml.jinja").unwrap();
-        let status_ci_asset = CIAsset::get("semifold-status.yaml.jinja").unwrap();
+        let ci_asset = CIAsset::get("semifold-ci.yaml.jinja").ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.init.embedded_asset_missing",
+                asset = "semifold-ci.yaml.jinja"
+            ))
+        })?;
+        let status_ci_asset = CIAsset::get("semifold-status.yaml.jinja").ok_or_else(|| {
+            anyhow::anyhow!(t!(
+                "cli.init.embedded_asset_missing",
+                asset = "semifold-status.yaml.jinja"
+            ))
+        })?;
 
         let ci_str = String::from_utf8_lossy(&ci_asset.data).to_string();
         let status_ci_str = String::from_utf8_lossy(&status_ci_asset.data).to_string();

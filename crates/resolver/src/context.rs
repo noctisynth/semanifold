@@ -125,7 +125,9 @@ impl Context {
     }
 
     pub fn get_package_config(&self, package_config: &str) -> Option<&config::PackageConfig> {
-        self.config.as_ref().unwrap().packages.get(package_config)
+        self.config
+            .as_ref()
+            .and_then(|config| config.packages.get(package_config))
     }
 
     pub fn get_assets(

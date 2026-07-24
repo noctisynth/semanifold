@@ -48,6 +48,7 @@ base_branch = "要使用的基础分支？"
 release_branch = "要使用的发布分支？"
 write_ci = "是否写入 GitHub Actions 工作流？"
 discovery_failed = "包发现失败：%{error}"
+embedded_asset_missing = "必需的内嵌资源 %{asset} 不可用"
 
 [cli.init.flags]
 target = "要存储变更集的目标目录"
@@ -84,6 +85,7 @@ edit_temp_write_failed = "无法写入临时文件 %{path}：%{error}"
 edit_replace_failed = "无法替换计划修改的目标文件 %{path}：%{error}"
 edit_non_utf8_root = "版本处理需要 UTF-8 项目根目录"
 edit_non_utf8_path = "版本处理需要 UTF-8 包路径"
+plan_package_missing = "发布计划引用了不可用的包 %{package}"
 
 [cli.version.flags]
 allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"

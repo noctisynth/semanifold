@@ -48,6 +48,7 @@ base_branch = "What is the base branch?"
 release_branch = "What is the release branch?"
 write_ci = "Write GitHub Actions workflows?"
 discovery_failed = "Package discovery failed: %{error}"
+embedded_asset_missing = "Required embedded asset %{asset} is unavailable"
 
 [cli.init.flags]
 target = "Target directory to store changesets"
@@ -84,6 +85,7 @@ edit_temp_write_failed = "Failed to write temporary file %{path}: %{error}"
 edit_replace_failed = "Failed to replace planned edit target %{path}: %{error}"
 edit_non_utf8_root = "Versioning requires a UTF-8 project root"
 edit_non_utf8_path = "Versioning requires UTF-8 package paths"
+plan_package_missing = "Release plan references an unavailable package %{package}"
 
 [cli.version.flags]
 allow_dirty = "Allow versioning packages with dirty Git working tree"

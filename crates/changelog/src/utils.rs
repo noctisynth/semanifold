@@ -44,7 +44,9 @@ pub async fn query_pr_for_commit(
         }));
     }
 
-    let re = Regex::new(r"\(#(\d+)\)").unwrap();
+    let Ok(re) = Regex::new(r"\(#(\d+)\)") else {
+        return Ok(None);
+    };
     if let Some(caps) = re.captures(&commit_info.message)
         && let Ok(pr_number) = caps[1].parse::<u64>()
     {

@@ -122,7 +122,10 @@ pub(crate) async fn pre_check(
 }
 
 pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Result<()> {
-    let config = ctx.config.as_ref().unwrap();
+    let config = ctx
+        .config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.not_initialized")))?;
 
     log::debug!(
         "Packages to publish: {:?}",

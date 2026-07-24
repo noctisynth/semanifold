@@ -181,8 +181,12 @@ impl CppResolver {
             });
         }
         let updated_content =
-            utils::replace_root_json_string_field(&content, "version", new_version)
-                .expect("validated root version field must be replaceable");
+            utils::replace_root_json_string_field(&content, "version", new_version).ok_or(
+                ResolveError::ParseError {
+                    path: vcpkg_path.clone(),
+                    reason: "vcpkg.json version field could not be replaced".to_string(),
+                },
+            )?;
 
         std::fs::write(&vcpkg_path, updated_content)?;
         log::info!("Updated {:?} to version {}", vcpkg_path, new_version);

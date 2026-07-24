@@ -379,10 +379,12 @@ impl Resolver for NodejsResolver {
 
         packages.sort_by(|(a, a_cfg), (b, b_cfg)| {
             if a_cfg.resolver == ResolverType::Nodejs && b_cfg.resolver == ResolverType::Nodejs {
-                let (Some(a_pkg), Some(b_pkg)) = (cached_packages.get(a), cached_packages.get(b))
-                else {
-                    return a.cmp(b);
-                };
+                let a_pkg = cached_packages
+                    .get(a)
+                    .expect("every configured Node package must have a cached manifest");
+                let b_pkg = cached_packages
+                    .get(b)
+                    .expect("every configured Node package must have a cached manifest");
 
                 // 检查依赖关系
                 let has_dep = |pkg: &PackageJson, dep_name: &str| -> bool {

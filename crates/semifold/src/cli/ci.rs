@@ -143,7 +143,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
             .body(pr_body)
             .send()
             .await?;
-    } else if let Some(pr) = existing_prs.first() {
+    } else {
+        let pr = existing_prs
+            .first()
+            .expect("non-empty pull request list must have a first entry");
         log::info!("{}", t!("cli.ci.existing_pr_found", number = pr.number));
         pulls
             .update(pr.number)

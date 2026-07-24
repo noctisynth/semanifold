@@ -116,18 +116,13 @@ pub(crate) async fn version(
             continue;
         }
         let package_name = package_id.as_str();
-        let package_config = config.packages.get(package_name).ok_or_else(|| {
-            anyhow::anyhow!(t!(
-                "cli.version.plan_package_missing",
-                package = package_name
-            ))
-        })?;
-        let package_release = release_plan.package(package_id).ok_or_else(|| {
-            anyhow::anyhow!(t!(
-                "cli.version.plan_package_missing",
-                package = package_name
-            ))
-        })?;
+        let package_config = config
+            .packages
+            .get(package_name)
+            .expect("release plan packages are configured before versioning");
+        let package_release = release_plan
+            .package(package_id)
+            .expect("release plan order only contains planned releases");
         let dependency_updates = package_release
             .reasons
             .iter()
@@ -159,18 +154,13 @@ pub(crate) async fn version(
 
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
-        let package_config = config.packages.get(package_name).ok_or_else(|| {
-            anyhow::anyhow!(t!(
-                "cli.version.plan_package_missing",
-                package = package_name
-            ))
-        })?;
-        let package_release = release_plan.package(package_id).ok_or_else(|| {
-            anyhow::anyhow!(t!(
-                "cli.version.plan_package_missing",
-                package = package_name
-            ))
-        })?;
+        let package_config = config
+            .packages
+            .get(package_name)
+            .expect("release plan packages are configured before versioning");
+        let package_release = release_plan
+            .package(package_id)
+            .expect("release plan order only contains planned releases");
         let bumped_version = package_release.next_version.clone();
         let has_planned_edit = release_plan.file_edits().iter().any(|edit| {
             matches!(

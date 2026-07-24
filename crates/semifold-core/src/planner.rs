@@ -68,11 +68,9 @@ impl ReleasePlanner {
             })
             .collect::<BTreeSet<_>>();
         while let Some(dependency) = pending.pop_first() {
-            let snapshot = graph.package(&dependency).ok_or_else(|| {
-                ReleasePlannerError::MissingGraphPackage {
-                    package: dependency.clone(),
-                }
-            })?;
+            let snapshot = graph
+                .package(&dependency)
+                .expect("release package ids are derived from the workspace graph");
             let dependency_next = bump_version(
                 &snapshot.version,
                 levels[&dependency],
@@ -96,11 +94,9 @@ impl ReleasePlanner {
                         next_version: dependency_next.clone(),
                     },
                 );
-                let level = levels.get_mut(dependent).ok_or_else(|| {
-                    ReleasePlannerError::MissingPackageLevel {
-                        package: dependent.clone(),
-                    }
-                })?;
+                let level = levels
+                    .get_mut(dependent)
+                    .expect("validated policy dependents must have release levels");
                 if *level == BumpLevel::Unchanged {
                     *level = BumpLevel::Patch;
                     pending.insert(dependent.clone());
@@ -224,10 +220,6 @@ impl ReleasePlanner {
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ReleasePlannerError {
-    #[error("workspace graph is missing release package: {package}")]
-    MissingGraphPackage { package: PackageId },
-    #[error("release plan is missing a bump level for package: {package}")]
-    MissingPackageLevel { package: PackageId },
     #[error("missing release policy for package: {package}")]
     MissingPackagePolicy { package: PackageId },
     #[error("release policy references unknown package: {package}")]

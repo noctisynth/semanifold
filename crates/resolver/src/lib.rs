@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), deny(clippy::expect_used, clippy::unwrap_used))]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 pub mod changeset;
 pub mod config;

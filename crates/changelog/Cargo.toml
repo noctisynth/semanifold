@@ -10,6 +10,9 @@ repository.workspace = true
 readme.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = "1.0.99"
 git2 = { version = "0.20.2", features = ["vendored-openssl"] }

@@ -10,6 +10,9 @@ repository.workspace = true
 readme.workspace = true
 authors.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 clap = { version = "4.5", features = ["derive"], optional = true }
 git2 = { version = "0.20.2", features = ["vendored-openssl"] }

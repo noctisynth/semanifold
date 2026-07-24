@@ -179,7 +179,9 @@ pub async fn read_latest_changelog<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use super::format_dependency_updates;
+    use std::path::Path;
+
+    use super::{format_dependency_updates, utils::render_changelog};
 
     #[test]
     fn formats_propagated_dependency_updates_as_a_separate_section() {
@@ -189,6 +191,28 @@ mod tests {
                 "0.4.0-alpha.0".to_string(),
             )]),
             "### Dependencies\n\n- Update semifold-resolver to 0.4.0-alpha.0."
+        );
+    }
+
+    #[test]
+    fn renders_a_new_or_existing_changelog_without_writing() {
+        assert_eq!(
+            render_changelog(
+                Path::new("CHANGELOG.md"),
+                None,
+                "## v1.0.0\n\n### Changes\n\n- Add"
+            )
+            .unwrap(),
+            "# Changelog\n\n## v1.0.0\n\n### Changes\n\n- Add\n"
+        );
+        assert_eq!(
+            render_changelog(
+                Path::new("CHANGELOG.md"),
+                Some("# Changelog\n\n## v0.1.0\n\n- Old\n"),
+                "## v1.0.0\n\n### Changes\n\n- Add"
+            )
+            .unwrap(),
+            "# Changelog\n\n## v1.0.0\n\n### Changes\n\n- Add\n\n## v0.1.0\n\n- Old\n"
         );
     }
 }

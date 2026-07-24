@@ -1,14 +1,22 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use anyhow::Context as _;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use colored::Colorize;
 use rust_i18n::t;
-use semifold_changelog::{generate_changelog, utils::insert_changelog};
-use semifold_core::{EditSource, ReleaseReason};
+use semifold_changelog::{
+    generate_changelog,
+    utils::{insert_changelog, render_changelog},
+};
+use semifold_core::{
+    EditSource, FileEdit, FileEditExpectation, FileHash, PackageId, ReleaseReason,
+};
 use semifold_resolver::{
-    changeset::Changeset, config::ResolverConfig, context::Context, resolver, utils,
+    changeset::Changeset,
+    config::{PackageConfig, ResolverConfig},
+    context::Context,
+    resolver, utils,
 };
 
 use crate::{file_edit_executor::FileEditExecutor, release::plan_release};
@@ -75,12 +83,10 @@ pub(crate) async fn version(
 
     let release_plan = plan_release(root, config, changesets)?;
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
-    let executor = FileEditExecutor::new(edit_root);
     if ctx.dry_run {
-        executor.validate(release_plan.file_edits())?;
+        FileEditExecutor::new(edit_root).validate(release_plan.file_edits())?;
         return Ok(HashMap::new());
     }
-    executor.apply(release_plan.file_edits())?;
 
     let version_map = release_plan
         .packages()
@@ -92,6 +98,54 @@ pub(crate) async fn version(
             )
         })
         .collect::<HashMap<_, _>>();
+    let mut file_edits = release_plan.file_edits().to_vec();
+    for package_id in release_plan.order() {
+        let has_planned_manifest_edit = release_plan.file_edits().iter().any(|edit| {
+            matches!(
+                &edit.source,
+                EditSource::PackageVersion { package } if package == package_id
+            )
+        });
+        if !has_planned_manifest_edit {
+            continue;
+        }
+        let package_name = package_id.as_str();
+        let package_config = config
+            .packages
+            .get(package_name)
+            .expect("release plan packages must exist in the loaded configuration");
+        let package_release = release_plan
+            .package(package_id)
+            .expect("release plan order must only contain release packages");
+        let dependency_updates = package_release
+            .reasons
+            .iter()
+            .filter_map(|reason| match reason {
+                ReleaseReason::DependencyPropagation { dependency, .. } => version_map
+                    .get(dependency.as_str())
+                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
+                ReleaseReason::Changeset { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        let changelog = generate_changelog(
+            ctx,
+            repo,
+            changesets,
+            package_name,
+            &package_release.next_version.to_string(),
+            &dependency_updates,
+        )
+        .await?;
+        file_edits.push(plan_changelog_edit(
+            root,
+            package_config,
+            package_id,
+            &changelog,
+        )?);
+        changelogs_map.insert(package_name.to_string(), changelog);
+    }
+    FileEditExecutor::new(edit_root).apply(&file_edits)?;
+
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
         let package_config = config
@@ -113,33 +167,27 @@ pub(crate) async fn version(
             let mut resolver = ctx.create_resolver(package_config.resolver);
             let resolved_package = resolver.resolve(root, package_config)?;
             resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
-        }
 
-        let dependency_updates = package_release
-            .reasons
-            .iter()
-            .filter_map(|reason| match reason {
-                ReleaseReason::DependencyPropagation { dependency, .. } => version_map
-                    .get(dependency.as_str())
-                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
-                ReleaseReason::Changeset { .. } => None,
-            })
-            .collect::<Vec<_>>();
-
-        let changelog = generate_changelog(
-            ctx,
-            repo,
-            changesets,
-            package_name,
-            &bumped_version.to_string(),
-            &dependency_updates,
-        )
-        .await?;
-        changelogs_map.insert(package_name.to_string(), changelog.clone());
-
-        log::debug!("changelog for {}:\n{}", package_name, changelog);
-
-        if !ctx.dry_run {
+            let dependency_updates = package_release
+                .reasons
+                .iter()
+                .filter_map(|reason| match reason {
+                    ReleaseReason::DependencyPropagation { dependency, .. } => version_map
+                        .get(dependency.as_str())
+                        .map(|version| (dependency.as_str().to_string(), version.to_string())),
+                    ReleaseReason::Changeset { .. } => None,
+                })
+                .collect::<Vec<_>>();
+            let changelog = generate_changelog(
+                ctx,
+                repo,
+                changesets,
+                package_name,
+                &bumped_version.to_string(),
+                &dependency_updates,
+            )
+            .await?;
+            changelogs_map.insert(package_name.to_string(), changelog.clone());
             insert_changelog(
                 root.join(&package_config.path).join("CHANGELOG.md"),
                 &changelog,
@@ -154,6 +202,40 @@ pub(crate) async fn version(
     }
 
     Ok(changelogs_map)
+}
+
+fn plan_changelog_edit(
+    root: &Path,
+    package_config: &PackageConfig,
+    package: &PackageId,
+    entry: &str,
+) -> anyhow::Result<FileEdit> {
+    let relative_path = package_config.path.join("CHANGELOG.md");
+    let path = Utf8PathBuf::from_path_buf(relative_path.clone())
+        .map_err(|_| anyhow::anyhow!(t!("cli.version.edit_non_utf8_path")))?;
+    let absolute_path = root.join(&relative_path);
+    let content = match std::fs::read_to_string(&absolute_path) {
+        Ok(content) => Some(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error.into()),
+    };
+    let expected = content
+        .as_ref()
+        .map_or(FileEditExpectation::Missing, |content| {
+            FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(content.as_bytes()),
+            }
+        });
+    let new_content = render_changelog(&absolute_path, content.as_deref(), entry)?;
+
+    Ok(FileEdit {
+        path,
+        expected,
+        new_content,
+        source: EditSource::Changelog {
+            package: package.clone(),
+        },
+    })
 }
 
 pub(crate) async fn run(opts: &Version, ctx: &Context) -> anyhow::Result<()> {
@@ -185,13 +267,14 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use semifold_core::PackageId;
+    use semifold_core::{FileEditExpectation, PackageId};
     use semifold_resolver::{
         changeset::Changeset,
         config::{BranchesConfig, Config, PackageConfig, ReleaseChannel},
         resolver::ResolverType,
     };
 
+    use super::plan_changelog_edit;
     use crate::release::plan_release;
 
     fn temporary_root() -> PathBuf {
@@ -276,6 +359,29 @@ mod tests {
                 .new_content
                 .contains("\"version\": \"1.0.1\"")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_new_and_existing_changelog_edits() {
+        let root = temporary_root();
+        let package = package_config("package", ResolverType::Nodejs);
+        fs::create_dir_all(root.join("package")).unwrap();
+
+        let new_edit =
+            plan_changelog_edit(&root, &package, &PackageId::new("app"), "## v1.0.0").unwrap();
+        assert_eq!(new_edit.path.as_str(), "package/CHANGELOG.md");
+        assert_eq!(new_edit.expected, FileEditExpectation::Missing);
+        assert_eq!(new_edit.new_content, "# Changelog\n\n## v1.0.0\n");
+
+        fs::write(root.join("package/CHANGELOG.md"), "# Changelog\n").unwrap();
+        let existing_edit =
+            plan_changelog_edit(&root, &package, &PackageId::new("app"), "## v1.0.0").unwrap();
+        assert!(matches!(
+            existing_edit.expected,
+            FileEditExpectation::Existing { .. }
+        ));
+        assert_eq!(existing_edit.new_content, "# Changelog\n\n## v1.0.0\n");
         fs::remove_dir_all(root).unwrap();
     }
 }

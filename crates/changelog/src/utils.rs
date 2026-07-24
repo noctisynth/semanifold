@@ -100,18 +100,18 @@ pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<Comm
     None
 }
 
-pub async fn insert_changelog<P: AsRef<Path>>(
+/// Renders the complete changelog content after inserting one newest entry.
+pub fn render_changelog<P: AsRef<Path>>(
     path: P,
+    content: Option<&str>,
     new_entry: &str,
-) -> Result<(), ResolveError> {
+) -> Result<String, ResolveError> {
     let path = path.as_ref();
     let header = "# Changelog";
 
-    let content = if path.exists() {
-        std::fs::read_to_string(path)?
-    } else {
-        format!("{header}\n\n")
-    };
+    let content = content
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("{header}\n\n"));
 
     let insert_pos = content.find(header).ok_or(ResolveError::InvalidChangelog {
         path: path.to_path_buf(),
@@ -134,6 +134,20 @@ pub async fn insert_changelog<P: AsRef<Path>>(
     }
     new_content.push('\n');
 
+    Ok(new_content)
+}
+
+pub async fn insert_changelog<P: AsRef<Path>>(
+    path: P,
+    new_entry: &str,
+) -> Result<(), ResolveError> {
+    let path = path.as_ref();
+    let content = if path.exists() {
+        Some(std::fs::read_to_string(path)?)
+    } else {
+        None
+    };
+    let new_content = render_changelog(path, content.as_deref(), new_entry)?;
     std::fs::write(path, new_content)?;
     Ok(())
 }

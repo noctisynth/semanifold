@@ -5,7 +5,8 @@ use std::{
 
 use saphyr::LoadableYamlNode;
 use semifold_core::{
-    DependencyKind, EditSource, FileEdit, FileHash, PackageId, PackageSnapshot, VersionMap,
+    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    PackageSnapshot, VersionMap,
 };
 use serde::Deserialize;
 
@@ -103,7 +104,9 @@ impl NodejsResolver {
 
         Ok(FileEdit {
             path: package.path.join("package.json"),
-            expected_hash: FileHash::from_bytes(original.as_bytes()),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(original.as_bytes()),
+            },
             new_content: updated,
             source: EditSource::PackageVersion {
                 package: package.id.clone(),
@@ -657,8 +660,10 @@ mod tests {
 
         assert_eq!(edit.path.as_str(), "packages/app/package.json");
         assert_eq!(
-            edit.expected_hash,
-            semifold_core::FileHash::from_bytes(original.as_bytes())
+            edit.expected,
+            semifold_core::FileEditExpectation::Existing {
+                hash: semifold_core::FileHash::from_bytes(original.as_bytes()),
+            }
         );
         assert!(edit.new_content.contains("\"version\": \"1.0.1\""));
         assert!(edit.new_content.contains("\"core\": \"^1.1.0\""));

@@ -4,7 +4,8 @@ use std::{
 };
 
 use semifold_core::{
-    DependencyKind, EditSource, FileEdit, FileHash, PackageId, PackageSnapshot, VersionMap,
+    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    PackageSnapshot, VersionMap,
 };
 use serde::Deserialize;
 
@@ -100,7 +101,9 @@ impl RustResolver {
 
         Ok(FileEdit {
             path: package.path.join("Cargo.toml"),
-            expected_hash: FileHash::from_bytes(original.as_bytes()),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(original.as_bytes()),
+            },
             new_content: document.to_string(),
             source: EditSource::PackageVersion {
                 package: package.id.clone(),
@@ -715,8 +718,10 @@ mod tests {
 
         assert_eq!(edit.path.as_str(), "crates/app/Cargo.toml");
         assert_eq!(
-            edit.expected_hash,
-            semifold_core::FileHash::from_bytes(original.as_bytes())
+            edit.expected,
+            semifold_core::FileEditExpectation::Existing {
+                hash: semifold_core::FileHash::from_bytes(original.as_bytes()),
+            }
         );
         assert!(edit.new_content.contains("# keep this comment"));
         assert!(edit.new_content.contains("version = \"1.0.1\""));

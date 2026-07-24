@@ -8,7 +8,7 @@ use std::{
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use rust_i18n::t;
-use semifold_core::{FileEdit, FileHash};
+use semifold_core::{FileEdit, FileEditExpectation, FileHash};
 
 static NEXT_TEMPORARY_FILE: AtomicU64 = AtomicU64::new(0);
 
@@ -28,7 +28,7 @@ impl<'root> FileEditExecutor<'root> {
         let mut temporary_files = Vec::with_capacity(edits.len());
 
         for (target, edit) in targets.iter().zip(edits) {
-            let temporary = temporary_path(target);
+            let temporary = temporary_path(&target.path);
             let result = (|| -> Result<(), FileEditApplyError> {
                 let mut file = fs::OpenOptions::new()
                     .write(true)
@@ -55,15 +55,21 @@ impl<'root> FileEditExecutor<'root> {
 
         let mut applied = Vec::with_capacity(edits.len());
         for (target, temporary) in targets.iter().zip(&temporary_files) {
-            if let Err(source) = fs::rename(temporary, target) {
+            let result = match &target.expectation {
+                FileEditExpectation::Existing { .. } => fs::rename(temporary, &target.path),
+                FileEditExpectation::Missing => {
+                    fs::hard_link(temporary, &target.path).and_then(|()| fs::remove_file(temporary))
+                }
+            };
+            if let Err(source) = result {
                 cleanup_temporary_files(&temporary_files[applied.len() + 1..]);
                 return Err(FileEditApplyError::Replace {
-                    path: target.clone(),
+                    path: target.path.clone(),
                     applied,
                     source,
                 });
             }
-            applied.push(target.clone());
+            applied.push(target.path.clone());
         }
         Ok(())
     }
@@ -73,7 +79,10 @@ impl<'root> FileEditExecutor<'root> {
         self.validate_targets(edits).map(|_| ())
     }
 
-    fn validate_targets(&self, edits: &[FileEdit]) -> Result<Vec<Utf8PathBuf>, FileEditApplyError> {
+    fn validate_targets(
+        &self,
+        edits: &[FileEdit],
+    ) -> Result<Vec<ValidatedTarget>, FileEditApplyError> {
         let mut paths = BTreeSet::new();
         let mut targets = Vec::with_capacity(edits.len());
         for edit in edits {
@@ -89,22 +98,45 @@ impl<'root> FileEditExecutor<'root> {
                 return Err(FileEditApplyError::DuplicateTarget { path: path.clone() });
             }
             let target = self.project_root.join(path);
-            let content = fs::read(&target).map_err(|source| FileEditApplyError::Read {
-                path: target.clone(),
-                source,
-            })?;
-            let actual = FileHash::from_bytes(&content);
-            if actual != edit.expected_hash {
-                return Err(FileEditApplyError::HashMismatch {
-                    path: target,
-                    expected: edit.expected_hash.clone(),
-                    actual,
-                });
+            match &edit.expected {
+                FileEditExpectation::Existing { hash } => {
+                    let content = fs::read(&target).map_err(|source| FileEditApplyError::Read {
+                        path: target.clone(),
+                        source,
+                    })?;
+                    let actual = FileHash::from_bytes(&content);
+                    if actual != *hash {
+                        return Err(FileEditApplyError::HashMismatch {
+                            path: target,
+                            expected: hash.clone(),
+                            actual,
+                        });
+                    }
+                }
+                FileEditExpectation::Missing => match fs::symlink_metadata(&target) {
+                    Ok(_) => return Err(FileEditApplyError::TargetExists { path: target }),
+                    Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(source) => {
+                        return Err(FileEditApplyError::Read {
+                            path: target,
+                            source,
+                        });
+                    }
+                },
             }
-            targets.push(target);
+            targets.push(ValidatedTarget {
+                path: target,
+                expectation: edit.expected.clone(),
+            });
         }
         Ok(targets)
     }
+}
+
+#[derive(Clone)]
+struct ValidatedTarget {
+    path: Utf8PathBuf,
+    expectation: FileEditExpectation,
 }
 
 fn temporary_path(target: &Utf8Path) -> Utf8PathBuf {
@@ -138,6 +170,9 @@ pub enum FileEditApplyError {
         path: Utf8PathBuf,
         expected: FileHash,
         actual: FileHash,
+    },
+    TargetExists {
+        path: Utf8PathBuf,
     },
     CreateTemporary {
         path: Utf8PathBuf,
@@ -177,6 +212,11 @@ impl fmt::Display for FileEditApplyError {
                 "{}",
                 t!("cli.version.edit_hash_mismatch", path = path)
             ),
+            Self::TargetExists { path } => write!(
+                formatter,
+                "{}",
+                t!("cli.version.edit_target_exists", path = path)
+            ),
             Self::CreateTemporary { path, source } => write!(
                 formatter,
                 "{}",
@@ -215,9 +255,10 @@ impl Error for FileEditApplyError {
             | Self::CreateTemporary { source, .. }
             | Self::WriteTemporary { source, .. }
             | Self::Replace { source, .. } => Some(source),
-            Self::InvalidPath { .. } | Self::DuplicateTarget { .. } | Self::HashMismatch { .. } => {
-                None
-            }
+            Self::InvalidPath { .. }
+            | Self::DuplicateTarget { .. }
+            | Self::HashMismatch { .. }
+            | Self::TargetExists { .. } => None,
         }
     }
 }
@@ -230,7 +271,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use semifold_core::{EditSource, FileEdit, FileHash, PackageId};
+    use semifold_core::{EditSource, FileEdit, FileEditExpectation, FileHash, PackageId};
 
     use super::{FileEditApplyError, FileEditExecutor};
 
@@ -253,7 +294,9 @@ mod tests {
     fn edit(path: &str, old: &str, new: &str) -> FileEdit {
         FileEdit {
             path: path.into(),
-            expected_hash: FileHash::from_bytes(old.as_bytes()),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(old.as_bytes()),
+            },
             new_content: new.to_string(),
             source: EditSource::PackageVersion {
                 package: PackageId::new("app"),
@@ -325,6 +368,31 @@ mod tests {
             .unwrap_err();
         assert!(matches!(escaping, FileEditApplyError::InvalidPath { .. }));
         assert_eq!(fs::read_to_string(root.join("one.txt")).unwrap(), "one");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn creates_a_missing_target_without_overwriting_existing_files() {
+        let root = temporary_root();
+        let executor = FileEditExecutor::new(&root);
+        let create = FileEdit {
+            path: "CHANGELOG.md".into(),
+            expected: FileEditExpectation::Missing,
+            new_content: "# Changelog\n".to_string(),
+            source: EditSource::Changelog {
+                package: PackageId::new("app"),
+            },
+        };
+
+        executor.apply(std::slice::from_ref(&create)).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("CHANGELOG.md")).unwrap(),
+            "# Changelog\n"
+        );
+        assert!(matches!(
+            executor.apply(&[create]).unwrap_err(),
+            FileEditApplyError::TargetExists { .. }
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 }

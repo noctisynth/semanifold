@@ -190,7 +190,7 @@ mod tests {
     use camino::Utf8PathBuf;
 
     use super::*;
-    use crate::{EditSource, FileHash};
+    use crate::{EditSource, FileEditExpectation, FileHash};
 
     fn package_release(
         id: &str,
@@ -212,7 +212,9 @@ mod tests {
     fn file_edit(package: &str, path: &str) -> FileEdit {
         FileEdit {
             path: Utf8PathBuf::from(path),
-            expected_hash: FileHash::from_bytes(format!("hash-{package}").as_bytes()),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(format!("hash-{package}").as_bytes()),
+            },
             new_content: format!("updated {package}"),
             source: EditSource::PackageVersion {
                 package: PackageId::new(package),

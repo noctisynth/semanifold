@@ -78,10 +78,12 @@ edit_path_invalid = "Planned file edit path %{path} is outside the project root"
 duplicate_edit = "Multiple planned edits target %{path}"
 edit_read_failed = "Failed to read planned edit target %{path}: %{error}"
 edit_hash_mismatch = "Planned edit target %{path} changed after planning"
+edit_target_exists = "Planned new file %{path} was created after planning"
 edit_temp_create_failed = "Failed to create temporary file %{path}: %{error}"
 edit_temp_write_failed = "Failed to write temporary file %{path}: %{error}"
 edit_replace_failed = "Failed to replace planned edit target %{path}: %{error}"
 edit_non_utf8_root = "Versioning requires a UTF-8 project root"
+edit_non_utf8_path = "Versioning requires UTF-8 package paths"
 
 [cli.version.flags]
 allow_dirty = "Allow versioning packages with dirty Git working tree"

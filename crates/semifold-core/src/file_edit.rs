@@ -37,11 +37,19 @@ pub enum EditSource {
     },
 }
 
+/// Required target state when a planned edit is applied.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FileEditExpectation {
+    Existing { hash: FileHash },
+    Missing,
+}
+
 /// A validated, not-yet-applied file content replacement.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct FileEdit {
     pub path: Utf8PathBuf,
-    pub expected_hash: FileHash,
+    pub expected: FileEditExpectation,
     pub new_content: String,
     pub source: EditSource,
 }

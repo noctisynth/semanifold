@@ -156,6 +156,29 @@ fn dry_run_version_does_not_run_post_version_commands() {
 }
 
 #[test]
+fn version_applies_manifest_and_changelog_edits_together() {
+    let root = temporary_project("version-file-edits", &config("channel = \"stable\""));
+    let manifest = root.join("Cargo.toml");
+    let changelog = root.join("CHANGELOG.md");
+    let changeset = root.join(".changes/feature.md");
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    assert!(
+        fs::read_to_string(&manifest)
+            .unwrap()
+            .contains("version = \"1.0.1\"")
+    );
+    assert_eq!(
+        fs::read_to_string(&changelog).unwrap(),
+        "# Changelog\n\n## v1.0.1\n\n### Chores\n\n- Exercise the CLI.\n"
+    );
+    assert!(!changeset.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn config_migrate_and_channel_check_preserve_expected_file_state() {
     let root = temporary_project(
         "config",

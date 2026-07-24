@@ -16,7 +16,7 @@ pub use config_sync::{
     ConfiguredPackage, DiscoveredPackage, PackageMove, PackageRename,
 };
 pub use dependency::{Dependency, DependencyKind};
-pub use file_edit::{EditSource, FileEdit, FileHash};
+pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash};
 pub use package::{Ecosystem, PackageId, PackageSnapshot};
 pub use planner::{
     ChangesetInput, PackageReleasePolicy, ReleasePlanner, ReleasePlannerError, ReleasePolicies,

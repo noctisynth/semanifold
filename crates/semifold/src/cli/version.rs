@@ -213,6 +213,16 @@ pub(crate) async fn version(
                 true,
             )
             .await?;
+            if changelog.remote_metadata_failed {
+                log::warn!(
+                    "{}",
+                    t!(
+                        "cli.version.changelog_metadata_degraded",
+                        package = package_name
+                    )
+                );
+            }
+            let changelog = changelog.content;
             changelogs_map.insert(package_name.to_string(), changelog.clone());
             insert_changelog(
                 root.join(&package_config.path).join("CHANGELOG.md"),
@@ -297,6 +307,16 @@ async fn plan_changelog_edits(
             !ctx.dry_run,
         )
         .await?;
+        if changelog.remote_metadata_failed {
+            log::warn!(
+                "{}",
+                t!(
+                    "cli.version.changelog_metadata_degraded",
+                    package = package_name
+                )
+            );
+        }
+        let changelog = changelog.content;
         file_edits.push(plan_changelog_edit(
             root,
             package_config,

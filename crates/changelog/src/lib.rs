@@ -12,6 +12,11 @@ use crate::utils::PrInfo;
 pub mod types;
 pub mod utils;
 
+pub struct GeneratedChangelog {
+    pub content: String,
+    pub remote_metadata_failed: bool,
+}
+
 pub fn format_line(
     changeset: &changeset::Changeset,
     repo_info: &Option<context::RepoInfo>,
@@ -54,8 +59,9 @@ pub async fn generate_changelog(
     package_version: &str,
     dependency_updates: &[(String, String)],
     collect_remote_metadata: bool,
-) -> Result<String, ResolveError> {
+) -> Result<GeneratedChangelog, ResolveError> {
     let mut changes_map = HashMap::new();
+    let mut remote_metadata_failed = false;
 
     let tags = ctx
         .config
@@ -96,6 +102,7 @@ pub async fn generate_changelog(
                 Ok(pr_info) => pr_info,
                 Err(error) => {
                     eprintln!("{error:?}");
+                    remote_metadata_failed = true;
                     None
                 }
             }
@@ -135,7 +142,10 @@ pub async fn generate_changelog(
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    Ok(header + &body)
+    Ok(GeneratedChangelog {
+        content: header + &body,
+        remote_metadata_failed,
+    })
 }
 
 pub fn format_dependency_updates(dependency_updates: &[(String, String)]) -> String {

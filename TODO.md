@@ -195,7 +195,7 @@
 - [ ] 让 changelog 格式化成为纯函数
 - [x] 为依赖传播自动加入发布闭包的 package 生成 `Dependencies` changelog 条目
 - [x] 将 Rust/Node changelog 修改表示为 `FileEdit`
-- [ ] 明确 GitHub 元数据查询失败时的降级策略
+- [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`
 
 ### 接入 `version`
 
@@ -369,7 +369,7 @@
 - [ ] peer、optional 和其他生态依赖类别的传播规则
 - [ ] 相同包名跨生态时的 `PackageId` namespace
 - [x] Post-version 命令失败时保留已写入文件和 changeset，不自动回滚，并返回结构化恢复指引
-- [ ] GitHub 元数据查询失败时是否降级
+- [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`
 - [ ] 是否长期支持 JSON 配置更新
 - [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`
 - [ ] 是否提供 `--rewrite-changesets` 辅助包重命名

@@ -86,15 +86,19 @@ pub async fn generate_changelog(
             && let Some(repo_info) = ctx.repo_info.as_ref()
             && let Some(commit_info) = commit_info.as_ref()
         {
-            utils::query_pr_for_commit(
+            match utils::query_pr_for_commit(
                 repo_info.owner.as_str(),
                 repo_info.repo_name.as_str(),
                 commit_info,
             )
             .await
-            .map_err(|e| ResolveError::GitHubError {
-                message: format!("Failed to query PR for commit: {:?}", e),
-            })?
+            {
+                Ok(pr_info) => pr_info,
+                Err(error) => {
+                    eprintln!("{error:?}");
+                    None
+                }
+            }
         } else {
             None
         };

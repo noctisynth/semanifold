@@ -699,7 +699,7 @@ Changelog 生成应分为两部分：
 1. 可选元数据收集：从 Git 和 Forge 获取 commit、PR 和 author；
 2. 纯格式化：根据 changeset、版本和元数据生成 Markdown。
 
-格式化器接收 `ChangelogContext` 或其序列化后的模板视图，不应持有 `Context`、`git2::Repository` 或自行创建 `Octocrab`。GitHub 查询失败是否中断版本流程也应是显式策略，而不是格式化函数的隐式行为。
+格式化器接收 `ChangelogContext` 或其序列化后的模板视图，不应持有 `Context`、`git2::Repository` 或自行创建 `Octocrab`。GitHub PR 元数据查询失败时记录诊断并降级为不含 PR 信息的 changelog，不中断 `version`；该策略必须在收集层实现，不能成为格式化函数的隐式行为。
 
 依赖传播而自动加入发布闭包的 package 仍会被发布，不能生成空 changelog。规划器必须为它记录 `ReleaseReason::DependencyPropagation { dependency, next_version }`；格式化器将该原因渲染为独立的 `Dependencies` 区段，例如：
 
@@ -1388,7 +1388,7 @@ fixtures/rust/
 3. peer、optional 和其他生态依赖类别分别采用什么传播策略。
 4. 不同生态包名相同时，`PackageId` 是否需要 `ecosystem:name` namespace。
 5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
-6. GitHub PR 元数据查询失败时，是否默认降级为无 PR 信息的 changelog，而不中断 `version`。
+6. [已决定] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`，并保留可诊断的收集错误。
 7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。
 8. 未启用 resolver 但发现对应生态 manifest 时，是提示用户启用，还是允许 `--resolver` 自动创建默认 resolver 配置。
 9. rename 后是否提供独立 `--rewrite-changesets` 选项更新尚未消费的 changeset，默认行为仍是不修改。

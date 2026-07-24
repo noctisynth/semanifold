@@ -1,6 +1,6 @@
 [package]
 name = "semifold-core"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition.workspace = true
 description.workspace = true
 license.workspace = true

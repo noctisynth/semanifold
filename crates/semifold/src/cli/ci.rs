@@ -83,7 +83,11 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return publish::publish(ctx, true).await;
     }
 
-    let changelogs_map = version::version(ctx, &changesets).await?;
+    let version::ApplyReport {
+        changelogs: changelogs_map,
+        file_edits,
+    } = version::version(ctx, &changesets).await?;
+    let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;

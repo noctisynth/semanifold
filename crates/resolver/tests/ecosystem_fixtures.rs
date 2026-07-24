@@ -7,6 +7,7 @@ use std::{
 };
 
 use insta::assert_snapshot;
+use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 use semifold_resolver::{
     config::{PackageConfig, ReleaseChannel},
     context::Context,
@@ -47,6 +48,18 @@ fn package(path: &str, name: &str) -> ResolvedPackage {
         version: semver::Version::parse("1.0.0").unwrap(),
         path: PathBuf::from(path),
         private: false,
+    }
+}
+
+fn snapshot(path: &str, name: &str, ecosystem: Ecosystem) -> PackageSnapshot {
+    PackageSnapshot {
+        id: PackageId::new(name),
+        manifest_name: name.to_string(),
+        version: semver::Version::parse("1.0.0").unwrap(),
+        ecosystem,
+        path: path.into(),
+        publishable: true,
+        dependencies: vec![],
     }
 }
 
@@ -186,19 +199,22 @@ fn rust_manifest_rewrite_matches_snapshot() {
     let manifest = root.join("crates/app/Cargo.toml");
     copy_fixture("rust/app.before.toml", &manifest);
 
-    let context = Context::default();
-    context
-        .version_bumps
-        .borrow_mut()
-        .insert("core".to_string(), semver::Version::parse("1.1.0").unwrap());
-    RustResolver
-        .bump(
-            &context,
-            &root,
-            &package("crates/app", "app"),
-            &semver::Version::parse("1.0.1").unwrap(),
-        )
-        .unwrap();
+    let edit = RustResolver::plan_file_edit(
+        &root,
+        &snapshot("crates/app", "app", Ecosystem::Rust),
+        &VersionMap::from([
+            (
+                PackageId::new("app"),
+                semver::Version::parse("1.0.1").unwrap(),
+            ),
+            (
+                PackageId::new("core"),
+                semver::Version::parse("1.1.0").unwrap(),
+            ),
+        ]),
+    )
+    .unwrap();
+    fs::write(&manifest, edit.new_content).unwrap();
 
     assert_snapshot!(
         "rust_manifest_rewrite",
@@ -213,14 +229,16 @@ fn node_manifest_rewrite_matches_snapshot() {
     let manifest = root.join("packages/app/package.json");
     copy_fixture("node/app.before.json", &manifest);
 
-    NodejsResolver
-        .bump(
-            &Context::default(),
-            &root,
-            &package("packages/app", "app"),
-            &semver::Version::parse("1.0.1").unwrap(),
-        )
-        .unwrap();
+    let edit = NodejsResolver::plan_file_edit(
+        &root,
+        &snapshot("packages/app", "app", Ecosystem::Node),
+        &VersionMap::from([(
+            PackageId::new("app"),
+            semver::Version::parse("1.0.1").unwrap(),
+        )]),
+    )
+    .unwrap();
+    fs::write(&manifest, edit.new_content).unwrap();
 
     assert_snapshot!(
         "node_manifest_rewrite",

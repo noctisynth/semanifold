@@ -12,7 +12,6 @@ use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
-    context,
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -311,52 +310,6 @@ impl Resolver for NodejsResolver {
         Ok(dependencies)
     }
 
-    fn bump(
-        &mut self,
-        ctx: &context::Context,
-        root: &Path,
-        package: &ResolvedPackage,
-        version: &semver::Version,
-    ) -> Result<(), ResolveError> {
-        let bumped_version = version.to_string();
-        let package_json_path = root.join(&package.path).join("package.json");
-        let package_json_str = std::fs::read_to_string(&package_json_path)?;
-
-        let mut package_json: serde_json::Value =
-            serde_json::from_str(&package_json_str).map_err(|e| ResolveError::ParseError {
-                path: package_json_path.clone(),
-                reason: e.to_string(),
-            })?;
-        let object = package_json
-            .as_object_mut()
-            .ok_or(ResolveError::ParseError {
-                path: package_json_path.clone(),
-                reason: "package.json root must be an object".to_string(),
-            })?;
-        object.insert(
-            "version".to_string(),
-            serde_json::Value::String(bumped_version.clone()),
-        );
-        let mut package_json_content =
-            serde_json::to_string_pretty(&package_json).map_err(|error| {
-                ResolveError::ParseError {
-                    path: package_json_path.clone(),
-                    reason: error.to_string(),
-                }
-            })?;
-        package_json_content.push('\n');
-        if !ctx.dry_run {
-            std::fs::write(package_json_path, package_json_content)?;
-        } else {
-            log::warn!(
-                "Skip bump for {} to version {} due to dry run",
-                package.name,
-                bumped_version
-            );
-        }
-        Ok(())
-    }
-
     fn sort_packages(
         &mut self,
         root: &Path,
@@ -475,8 +428,7 @@ mod tests {
 
     use crate::{
         config::{PackageConfig, ReleaseChannel},
-        context::Context,
-        resolver::{ResolvedPackage, Resolver, ResolverType},
+        resolver::{Resolver, ResolverType},
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -584,43 +536,6 @@ mod tests {
         assert_eq!(packages[2].name, "root");
         assert_eq!(packages[2].path, PathBuf::from("."));
         assert!(packages[2].private);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn bumps_package_version_without_removing_other_json_fields() {
-        let root = temp_dir("bump");
-        write_package(
-            &root,
-            "packages/app",
-            "app",
-            "1.0.0",
-            false,
-            ",\n  \"dependencies\": { \"core\": \"^1.0.0\" },\n  \"custom\": { \"preserved\": true }",
-        );
-        let app = ResolvedPackage {
-            name: "app".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("packages/app"),
-            private: false,
-        };
-
-        NodejsResolver
-            .bump(
-                &Context::default(),
-                &root,
-                &app,
-                &semver::Version::parse("1.0.1").unwrap(),
-            )
-            .unwrap();
-
-        let package_json = serde_json::from_str::<serde_json::Value>(
-            &fs::read_to_string(root.join("packages/app/package.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(package_json["version"], "1.0.1");
-        assert_eq!(package_json["dependencies"]["core"], "^1.0.0");
-        assert_eq!(package_json["custom"]["preserved"], true);
         fs::remove_dir_all(root).unwrap();
     }
 

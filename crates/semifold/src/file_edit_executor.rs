@@ -23,7 +23,7 @@ impl<'root> FileEditExecutor<'root> {
         Self { project_root }
     }
 
-    pub fn apply(&self, edits: &[FileEdit]) -> Result<(), FileEditApplyError> {
+    pub fn apply(&self, edits: &[FileEdit]) -> Result<FileEditApplyReport, FileEditApplyError> {
         let targets = self.validate_targets(edits)?;
         let mut temporary_files = Vec::with_capacity(edits.len());
 
@@ -71,7 +71,7 @@ impl<'root> FileEditExecutor<'root> {
             }
             applied.push(target.path.clone());
         }
-        Ok(())
+        Ok(FileEditApplyReport { applied })
     }
 
     /// Validates every target without writing files.
@@ -131,6 +131,12 @@ impl<'root> FileEditExecutor<'root> {
         }
         Ok(targets)
     }
+}
+
+/// Files successfully replaced by one completed apply operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileEditApplyReport {
+    pub applied: Vec<Utf8PathBuf>,
 }
 
 #[derive(Clone)]
@@ -310,12 +316,14 @@ mod tests {
         fs::write(root.join("one.txt"), "one").unwrap();
         fs::write(root.join("two.txt"), "two").unwrap();
 
-        FileEditExecutor::new(&root)
+        let report = FileEditExecutor::new(&root)
             .apply(&[
                 edit("one.txt", "one", "next-one"),
                 edit("two.txt", "two", "next-two"),
             ])
             .unwrap();
+
+        assert_eq!(report.applied, [root.join("one.txt"), root.join("two.txt")]);
 
         assert_eq!(
             fs::read_to_string(root.join("one.txt")).unwrap(),
@@ -384,7 +392,8 @@ mod tests {
             },
         };
 
-        executor.apply(std::slice::from_ref(&create)).unwrap();
+        let report = executor.apply(std::slice::from_ref(&create)).unwrap();
+        assert_eq!(report.applied, [root.join("CHANGELOG.md")]);
         assert_eq!(
             fs::read_to_string(root.join("CHANGELOG.md")).unwrap(),
             "# Changelog\n"

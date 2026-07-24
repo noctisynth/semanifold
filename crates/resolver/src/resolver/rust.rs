@@ -11,7 +11,6 @@ use serde::Deserialize;
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
-    context,
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -401,57 +400,6 @@ impl Resolver for RustResolver {
         Self::manifest_dependencies(root, pkg_config)
     }
 
-    fn bump(
-        &mut self,
-        ctx: &context::Context,
-        root: &Path,
-        package: &ResolvedPackage,
-        version: &semver::Version,
-    ) -> Result<(), ResolveError> {
-        let bumped_version = version.to_string();
-        let cargo_toml_path = root.join(&package.path).join("Cargo.toml");
-        let toml_str = std::fs::read_to_string(&cargo_toml_path)?;
-
-        let mut toml_doc =
-            toml_str
-                .parse::<toml_edit::DocumentMut>()
-                .map_err(|e| ResolveError::ParseError {
-                    path: cargo_toml_path.clone(),
-                    reason: e.to_string(),
-                })?;
-        let package_table = toml_doc["package"]
-            .as_table_mut()
-            .ok_or(ResolveError::ParseError {
-                path: cargo_toml_path.clone(),
-                reason: "package table not found".to_string(),
-            })?;
-        package_table["version"] = toml_edit::value(&bumped_version);
-
-        for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            if let Some(deps_table) = toml_doc[dependency_table].as_table_mut() {
-                for (name, bumped_version) in ctx.version_bumps.borrow().iter() {
-                    if let Some(dep) = deps_table.get_mut(name)
-                        && dep.get("version").is_some_and(|version| version.is_str())
-                    {
-                        dep["version"] = toml_edit::value(bumped_version.to_string());
-                    }
-                }
-            }
-        }
-
-        let toml_content = toml_doc.to_string();
-        if !ctx.dry_run {
-            std::fs::write(cargo_toml_path, toml_content)?;
-        } else {
-            log::warn!(
-                "Skip bump for {} to version {} due to dry run",
-                package.name,
-                bumped_version
-            );
-        }
-        Ok(())
-    }
-
     fn sort_packages(
         &mut self,
         root: &Path,
@@ -563,8 +511,7 @@ mod tests {
 
     use crate::{
         config::{PackageConfig, ReleaseChannel},
-        context::Context,
-        resolver::{ResolvedPackage, Resolver, ResolverType},
+        resolver::{Resolver, ResolverType},
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -658,40 +605,6 @@ mod tests {
         assert_eq!(packages[1].name, "internal");
         assert_eq!(packages[1].path, PathBuf::from("crates/internal"));
         assert!(packages[1].private);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn bumps_a_package_and_its_inline_internal_dependency() {
-        let root = temp_dir("bump");
-        write_package(&root, "crates/core", "core", "1.0.0", None, None);
-        write_package(
-            &root,
-            "crates/app",
-            "app",
-            "1.0.0",
-            None,
-            Some("core = { version = \"1.0.0\", path = \"../core\" }"),
-        );
-
-        let ctx = Context::default();
-        ctx.version_bumps
-            .borrow_mut()
-            .insert("core".to_string(), semver::Version::parse("1.1.0").unwrap());
-        let app = ResolvedPackage {
-            name: "app".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("crates/app"),
-            private: false,
-        };
-
-        RustResolver
-            .bump(&ctx, &root, &app, &semver::Version::parse("1.0.1").unwrap())
-            .unwrap();
-
-        let manifest = fs::read_to_string(root.join("crates/app/Cargo.toml")).unwrap();
-        assert!(manifest.contains("version = \"1.0.1\""));
-        assert!(manifest.contains("core = { version = \"1.1.0\", path = \"../core\" }"));
         fs::remove_dir_all(root).unwrap();
     }
 

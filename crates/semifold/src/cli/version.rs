@@ -19,7 +19,10 @@ use semifold_resolver::{
     resolver, utils,
 };
 
-use crate::{file_edit_executor::FileEditExecutor, release::plan_release};
+use crate::{
+    file_edit_executor::{FileEditApplyReport, FileEditExecutor},
+    release::plan_release,
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -70,10 +73,16 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct ApplyReport {
+    pub changelogs: HashMap<String, String>,
+    pub file_edits: Option<FileEditApplyReport>,
+}
+
 pub(crate) async fn version(
     ctx: &Context,
     changesets: &[Changeset],
-) -> anyhow::Result<HashMap<String, String>> {
+) -> anyhow::Result<ApplyReport> {
     let config = ctx
         .config
         .as_ref()
@@ -91,7 +100,7 @@ pub(crate) async fn version(
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
     if ctx.dry_run {
         FileEditExecutor::new(edit_root).validate(release_plan.file_edits())?;
-        return Ok(HashMap::new());
+        return Ok(ApplyReport::default());
     }
 
     let version_map = release_plan
@@ -99,7 +108,7 @@ pub(crate) async fn version(
         .iter()
         .map(|(package, version)| (package.as_str().to_string(), version.clone()))
         .collect::<HashMap<_, _>>();
-    FileEditExecutor::new(edit_root).apply(release_plan.file_edits())?;
+    let file_edits = FileEditExecutor::new(edit_root).apply(release_plan.file_edits())?;
 
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
@@ -157,7 +166,10 @@ pub(crate) async fn version(
         changesets.iter().try_for_each(|c| c.clean())?;
     }
 
-    Ok(changelogs_map)
+    Ok(ApplyReport {
+        changelogs: changelogs_map,
+        file_edits: Some(file_edits),
+    })
 }
 
 async fn plan_changelog_edits(

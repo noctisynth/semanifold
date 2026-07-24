@@ -71,11 +71,16 @@ pub trait Resolver {
     /// Bump version
     fn bump(
         &mut self,
-        ctx: &Context,
-        root: &Path,
-        package: &ResolvedPackage,
-        version: &semver::Version,
-    ) -> Result<(), ResolveError>;
+        _ctx: &Context,
+        _root: &Path,
+        _package: &ResolvedPackage,
+        _version: &semver::Version,
+    ) -> Result<(), ResolveError> {
+        Err(ResolveError::InvalidConfig {
+            path: PathBuf::new(),
+            reason: "legacy direct version writes are not supported by this resolver".to_string(),
+        })
+    }
     /// Sort packages by their dependencies
     fn sort_packages(
         &mut self,

@@ -185,7 +185,7 @@
 - [ ] 正确更新 Rust dependencies、dev-dependencies、build-dependencies 和 workspace dependencies
 - [x] 将 Node.js resolver 改为生成 `FileEdit`
 - [x] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies
-- [ ] 移除 Rust/Node.js 对 `Context.version_bumps` 的依赖
+- [x] 移除 Rust/Node.js 对 `Context.version_bumps` 的依赖
 - [ ] Resolver 不再直接写文件或处理 dry-run
 
 ### Changelog
@@ -204,7 +204,7 @@
 - [x] Rust 与 Node.js manifest 由 `ReleasePlan.file_edits` 统一规划、校验并原子应用
 - [ ] `smif version --dry-run` 只渲染计划，不调用写入器或命令运行器
 - [x] 删除 `version` 内逐包填充可变版本 map 的逻辑
-- [ ] 返回结构化 `ApplyReport`
+- [x] 返回结构化 `ApplyReport`
 
 ### 阶段完成条件
 

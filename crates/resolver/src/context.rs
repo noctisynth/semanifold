@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, env, path::PathBuf};
+use std::{env, path::PathBuf};
 
 use crate::{config, error, resolver};
 
@@ -17,7 +17,6 @@ pub struct Context {
     pub repo_root: Option<PathBuf>,
     pub repo_info: Option<RepoInfo>,
     pub git_repo: Option<git2::Repository>,
-    pub version_bumps: RefCell<HashMap<String, semver::Version>>,
     pub dry_run: bool,
 }
 

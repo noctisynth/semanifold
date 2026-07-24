@@ -176,8 +176,8 @@
 - [x] 检查多个 edit 是否修改同一文件
 - [x] 使用 expected hash 检测规划后的并发修改
 - [x] 实现临时文件写入和原子替换
-- [ ] 所有文件成功写入后再删除 changeset
-- [ ] 明确 post-version 失败后的恢复策略
+- [x] 所有文件成功写入后再删除 changeset
+- [x] post-version 失败时保留已写入文件和 changeset，并在 `ApplyReport` 中返回恢复事实
 
 ### Rust 与 Node.js
 
@@ -368,7 +368,7 @@
 - [x] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播
 - [ ] peer、optional 和其他生态依赖类别的传播规则
 - [ ] 相同包名跨生态时的 `PackageId` namespace
-- [ ] Post-version 命令失败后的文件恢复策略
+- [x] Post-version 命令失败时保留已写入文件和 changeset，不自动回滚，并返回结构化恢复指引
 - [ ] GitHub 元数据查询失败时是否降级
 - [ ] 是否长期支持 JSON 配置更新
 - [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`

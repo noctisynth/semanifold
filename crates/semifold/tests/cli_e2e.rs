@@ -181,6 +181,39 @@ fn dry_run_version_does_not_run_post_version_commands() {
 }
 
 #[test]
+fn post_version_failure_keeps_applied_files_and_changesets_for_recovery() {
+    let root = temporary_project(
+        "post-version-failure",
+        &format!(
+            "{}\n[[resolver.rust.post-version]]\ncommand = \"sh\"\nargs = [\"-c\", \"exit 7\"]\n",
+            config("channel = \"stable\"")
+        ),
+    );
+    let manifest = root.join("Cargo.toml");
+    let changelog = root.join("CHANGELOG.md");
+    let changeset = root.join(".changes/feature.md");
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(!version.status.success(), "{version:?}");
+    assert!(
+        fs::read_to_string(&manifest)
+            .unwrap()
+            .contains("version = \"1.0.1\"")
+    );
+    assert!(changelog.exists());
+    assert!(changeset.exists());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&version.stdout),
+        String::from_utf8_lossy(&version.stderr)
+    );
+    assert!(output.contains("feature"), "{output}");
+    assert!(output.contains("sh -c exit 7"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn version_applies_manifest_and_changelog_edits_together() {
     let root = temporary_project("version-file-edits", &config("channel = \"stable\""));
     let manifest = root.join("Cargo.toml");

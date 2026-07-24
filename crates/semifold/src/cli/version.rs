@@ -10,7 +10,7 @@ use semifold_changelog::{
     utils::{insert_changelog, render_changelog},
 };
 use semifold_core::{
-    EditSource, FileEdit, FileEditExpectation, FileHash, PackageId, ReleaseReason,
+    ChangesetId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId, ReleaseReason,
 };
 use semifold_resolver::{
     changeset::Changeset,
@@ -30,7 +30,14 @@ pub(crate) struct Version {
     allow_dirty: bool,
 }
 
-pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
+#[derive(Debug)]
+pub(crate) struct PostVersionFailure {
+    package: String,
+    command: String,
+    source: semifold_resolver::error::ResolveError,
+}
+
+pub(crate) fn post_version(ctx: &Context) -> Result<(), PostVersionFailure> {
     let packages = ctx.get_packages();
     for (package_name, package_config) in packages {
         let resolver_config = ctx.get_resolver_config(package_config.resolver);
@@ -57,7 +64,13 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
                         package = package_name.cyan()
                     )
                 );
-                utils::run_command(command, &package_config.path)?;
+                if let Err(source) = utils::run_command(command, &package_config.path) {
+                    return Err(PostVersionFailure {
+                        package: package_name.to_string(),
+                        command: format!("{} {}", command.command, args.join(" ")),
+                        source,
+                    });
+                }
             }
         } else {
             log::warn!(
@@ -77,6 +90,54 @@ pub(crate) fn post_version(ctx: &Context) -> anyhow::Result<()> {
 pub(crate) struct ApplyReport {
     pub changelogs: HashMap<String, String>,
     pub file_edits: Option<FileEditApplyReport>,
+    pub unconsumed_changesets: Vec<ChangesetId>,
+}
+
+#[derive(Debug)]
+pub(crate) struct VersionApplyError {
+    pub report: ApplyReport,
+    pub post_version: PostVersionFailure,
+}
+
+impl std::fmt::Display for VersionApplyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let files = self.report.file_edits.as_ref().map_or_else(
+            || "-".to_string(),
+            |report| {
+                report
+                    .applied
+                    .iter()
+                    .map(|path| path.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            },
+        );
+        let changesets = self
+            .report
+            .unconsumed_changesets
+            .iter()
+            .map(ChangesetId::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(
+            formatter,
+            "{}",
+            t!(
+                "cli.version.post_version_recovery",
+                package = self.post_version.package,
+                command = self.post_version.command,
+                error = self.post_version.source,
+                files = files,
+                changesets = changesets
+            )
+        )
+    }
+}
+
+impl std::error::Error for VersionApplyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.post_version.source)
+    }
 }
 
 pub(crate) async fn version(
@@ -161,7 +222,20 @@ pub(crate) async fn version(
         }
     }
 
-    post_version(ctx)?;
+    if let Err(post_version) = post_version(ctx) {
+        return Err(VersionApplyError {
+            report: ApplyReport {
+                changelogs: changelogs_map,
+                file_edits: Some(file_edits),
+                unconsumed_changesets: changesets
+                    .iter()
+                    .map(|changeset| ChangesetId::new(&changeset.name))
+                    .collect(),
+            },
+            post_version,
+        }
+        .into());
+    }
     if !ctx.dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
     }
@@ -169,6 +243,7 @@ pub(crate) async fn version(
     Ok(ApplyReport {
         changelogs: changelogs_map,
         file_edits: Some(file_edits),
+        unconsumed_changesets: Vec::new(),
     })
 }
 

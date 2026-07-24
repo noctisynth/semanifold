@@ -306,7 +306,7 @@ impl ReleasePlanner {
 
 planner 合并同一 package 的最高 bump，并为每个贡献 changeset 保留独立原因。依赖约束失效时，将尚未发布的依赖方加入 patch 发布闭包；依赖方已有显式发布时保留其更高 bump，同时追加依赖传播原因。完整闭包计算后一次生成所有 package 的 `VersionMap`，再按 `WorkspaceGraph` 拓扑顺序生成发布顺序。
 
-changeset 只能在 manifest、changelog 和 post-version 命令均成功后删除。post-version 失败时必须保留 changeset；后续阶段再将整个流程收敛为原子 `Plan → Validate → Apply`。
+changeset 只能在 manifest、changelog 和 post-version 命令均成功后删除。post-version 失败时保留已经写入的文件和全部 changeset，不尝试跨进程回滚；`ApplyReport` 必须列出已替换文件、失败命令和仍待消费的 changeset，并提供恢复所需的事实。
 
 `status` 只渲染该计划，`version` 验证并应用该计划。
 
@@ -686,7 +686,7 @@ pub trait ForgeClient {
 
 每个 `FileEdit` 必须显式声明其规划时的目标状态：已有文件使用源内容哈希，首次创建文件则要求目标在应用时仍不存在。执行器必须在写入任何临时文件前验证全部前置条件；不得将“不存在”隐式当作空文件，否则并发创建的 changelog 可能被无意覆盖。
 
-Post-version 子进程不可能真正纳入跨进程事务。在执行前应尽可能完成所有静态验证，并在失败时清楚报告已完成和未完成步骤。
+Post-version 子进程不可能真正纳入跨进程事务。在执行前应尽可能完成所有静态验证。命令失败时保留已写入的文件和 changeset，不尝试不可靠的自动回滚；`ApplyReport` 清楚报告已完成文件、失败命令和未消费 changeset，供用户修复命令后重试。
 
 生产代码不得使用会 panic 的 `unwrap()` 处理外部输入、文件系统、配置或领域查询结果；这些失败必须通过类型化错误或可传播错误返回。只有已由类型、构造器或同一函数内穷尽分支证明的内部不变量可以使用 `expect()`，且消息必须说明该不变量；不得把可恢复失败标记为不变量。测试代码中的断言性使用不属于运行时失败路径。
 
@@ -1387,7 +1387,7 @@ fixtures/rust/
 2. [已决定] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播。
 3. peer、optional 和其他生态依赖类别分别采用什么传播策略。
 4. 不同生态包名相同时，`PackageId` 是否需要 `ecosystem:name` namespace。
-5. post-version 命令失败后，是自动恢复已修改文件，还是保留工作区并输出结构化恢复指引。
+5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
 6. GitHub PR 元数据查询失败时，是否默认降级为无 PR 信息的 changelog，而不中断 `version`。
 7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。
 8. 未启用 resolver 但发现对应生态 manifest 时，是提示用户启用，还是允许 `--resolver` 自动创建默认 resolver 配置。

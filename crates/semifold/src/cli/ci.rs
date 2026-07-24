@@ -86,6 +86,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let version::ApplyReport {
         changelogs: changelogs_map,
         file_edits,
+        unconsumed_changesets: _,
     } = version::version(ctx, &changesets).await?;
     let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
 

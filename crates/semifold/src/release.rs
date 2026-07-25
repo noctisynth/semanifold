@@ -27,23 +27,22 @@ pub(crate) fn plan_release(
     let file_edits = plan
         .packages()
         .iter()
-        .filter_map(|release| {
+        .map(|release| {
             let package = graph
                 .package(&release.id)
                 .expect("release plan packages are derived from the workspace graph");
             match package.ecosystem {
-                Ecosystem::Rust => {
-                    Some(RustResolver::plan_file_edit(root, package, plan.versions()))
-                }
-                Ecosystem::Node => Some(NodejsResolver::plan_file_edit(
-                    root,
-                    package,
-                    plan.versions(),
-                )),
-                Ecosystem::Python | Ecosystem::Cpp => None,
+                Ecosystem::Rust => RustResolver::plan_file_edit(root, package, plan.versions())
+                    .map(|edit| vec![edit]),
+                Ecosystem::Node => NodejsResolver::plan_file_edit(root, package, plan.versions())
+                    .map(|edit| vec![edit]),
+                Ecosystem::Python | Ecosystem::Cpp => Ok(Vec::new()),
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect();
     Ok(plan.with_file_edits(file_edits)?)
 }
 

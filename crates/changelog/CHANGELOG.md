@@ -1,17 +1,5 @@
 # Changelog
 
-## v0.3.0-alpha.2
-
-### Bug Fixes
-
-- [`66edf18`](https://github.com/noctisynth/semifold/commit/66edf18a2445f8543d051e750010a5ab75e9cf91): Continue versioning without pull request details when GitHub changelog metadata lookup fails.
-- [`3ef7c05`](https://github.com/noctisynth/semifold/commit/3ef7c0538172b0e3fd4e3755d44dfe5c26255e40): Warn when changelog generation continues without pull request metadata.
-
-### Refactors
-
-- [`2a25a56`](https://github.com/noctisynth/semifold/commit/2a25a562cdaff0917873efa3a9ba3c15a8e4b747): Introduce an immutable changelog formatting context and pure Markdown renderer.
-- [`02b0c7c`](https://github.com/noctisynth/semifold/commit/02b0c7c8e4bb2bed8b41091adc1336f10a167462): Separate changelog context collection from pure Markdown formatting.
-
 ## v0.3.0-alpha.1
 
 ### Bug Fixes

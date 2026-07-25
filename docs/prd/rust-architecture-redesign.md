@@ -466,6 +466,22 @@ pub struct PackageLocation {
     pub path: Utf8PathBuf,
 }
 
+pub struct ManifestDependency {
+    pub manifest_name: String,
+    pub kind: DependencyKind,
+    pub requirement: Option<String>,
+}
+
+pub struct PackageInspection {
+    pub id: PackageId,
+    pub manifest_name: String,
+    pub version: semver::Version,
+    pub ecosystem: Ecosystem,
+    pub path: Utf8PathBuf,
+    pub publishable: bool,
+    pub dependencies: Vec<ManifestDependency>,
+}
+
 pub struct EcosystemPlanInput<'a> {
     pub project_root: &'a Utf8Path,
     pub workspace_packages: &'a [PackageSnapshot],
@@ -479,12 +495,12 @@ pub trait EcosystemAdapter: Send + Sync {
     fn discover(
         &self,
         root: &Utf8Path,
-    ) -> Result<Vec<PackageSnapshot>, AdapterError>;
+    ) -> Result<Vec<PackageInspection>, AdapterError>;
 
     fn inspect(
         &self,
         package: &PackageLocation,
-    ) -> Result<PackageSnapshot, AdapterError>;
+    ) -> Result<PackageInspection, AdapterError>;
 
     fn plan_edits(
         &self,
@@ -494,7 +510,15 @@ pub trait EcosystemAdapter: Send + Sync {
 ```
 
 `PackageLocation.project_root` 是已规范化的绝对项目根，`path` 是项目根内的规范化相对
-package path。`EcosystemPlanInput.workspace_packages` 只包含当前 adapter 所属生态的完整
+package path。adapter 从 manifest 只能解析依赖声明中的原生名称，因此 `discover()` 与
+`inspect()` 返回 `ManifestDependency`，不得在 adapter 内猜测该名称对应的 Semifold
+`PackageId`。应用层收集完整的 `PackageInspection` 后，按 `(Ecosystem, manifest_name)`
+建立到稳定 `PackageId` 的唯一映射，仅将同一生态内唯一匹配的声明转换为
+`PackageSnapshot.dependencies`；未匹配项视为外部依赖，重复 manifest name 则在构造
+`WorkspaceGraph` 前报错。这样配置键可以与 manifest 名称不同，adapter 也无需读取全局
+配置。
+
+`EcosystemPlanInput.workspace_packages` 只包含当前 adapter 所属生态的完整
 package 快照，`released_packages` 只包含本次实际发布的对应生态 package，并且
 `versions` 仍是全工作区完整版本映射。批量输入允许 Rust adapter 在一个调用中合并共享
 workspace manifest；不拥有共享 manifest 的生态也必须返回与 released package 输入顺序

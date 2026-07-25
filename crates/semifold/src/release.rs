@@ -6,6 +6,7 @@ use semifold_core::{
     WorkspaceGraph,
 };
 use semifold_resolver::{
+    adapter::{EcosystemAdapter, EcosystemPlanInput},
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{Config, ReleaseChannel as ResolverReleaseChannel},
     resolver::{
@@ -29,23 +30,22 @@ pub(crate) fn plan_release(
     let rust_workspace_packages = graph
         .packages()
         .filter(|package| package.ecosystem == Ecosystem::Rust)
+        .cloned()
         .collect::<Vec<_>>();
     let rust_released_packages = plan
         .packages()
         .iter()
         .filter(|release| release.ecosystem == Ecosystem::Rust)
-        .map(|release| {
-            graph
-                .package(&release.id)
-                .expect("release plan packages are derived from the workspace graph")
-        })
+        .map(|release| release.id.clone())
         .collect::<Vec<_>>();
-    let mut file_edits = RustResolver::plan_file_edits(
-        root,
-        &rust_released_packages,
-        &rust_workspace_packages,
-        plan.versions(),
-    )?;
+    let project_root = camino::Utf8Path::from_path(root)
+        .ok_or_else(|| anyhow::anyhow!("project root is not valid UTF-8"))?;
+    let mut file_edits = RustResolver.plan_edits(EcosystemPlanInput {
+        project_root,
+        workspace_packages: &rust_workspace_packages,
+        released_packages: &rust_released_packages,
+        versions: plan.versions(),
+    })?;
     file_edits.extend(
         plan.packages()
             .iter()
@@ -150,6 +150,7 @@ mod tests {
     use std::{
         fs,
         path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -162,14 +163,17 @@ mod tests {
 
     use super::*;
 
+    static NEXT_TEMPORARY_ROOT: AtomicU64 = AtomicU64::new(0);
+
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "semifold-release-plan-{}-{nonce}",
-            std::process::id()
+            "semifold-release-plan-{}-{nonce}-{}",
+            std::process::id(),
+            NEXT_TEMPORARY_ROOT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&root).unwrap();
         root

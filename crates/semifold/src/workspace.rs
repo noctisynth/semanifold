@@ -3,8 +3,11 @@ use std::{collections::BTreeMap, path::Path};
 use anyhow::Context as _;
 use semifold_core::{Dependency, Ecosystem, PackageId, PackageSnapshot, WorkspaceGraph};
 use semifold_resolver::{
+    adapter::{EcosystemAdapter, ManifestDependency, PackageLocation},
     config::Config,
-    resolver::{ResolvedDependency, ResolvedPackage, create_resolver},
+    resolver::{
+        ResolvedDependency, ResolvedPackage, ResolverType, create_resolver, rust::RustResolver,
+    },
 };
 
 use crate::{discovery::ResolverRegistry, package_path::normalize_package_path};
@@ -20,17 +23,53 @@ struct ResolvedSnapshot {
 pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<WorkspaceGraph> {
     let mut resolved = Vec::with_capacity(config.packages.len());
     for (id, package_config) in &config.packages {
-        let mut resolver = create_resolver(package_config.resolver);
-        let package = resolver.resolve(root, package_config)?;
-        let dependencies = resolver.dependencies(root, package_config)?;
-        resolved.push(ResolvedSnapshot {
-            id: PackageId::new(id),
-            ecosystem: ResolverRegistry::ecosystem(package_config.resolver),
-            package,
-            dependencies,
-        });
+        if package_config.resolver == ResolverType::Rust {
+            let project_root =
+                camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).map_err(|path| {
+                    anyhow::anyhow!("project root is not valid UTF-8: {}", path.display())
+                })?;
+            let path = normalize_package_path(root, &package_config.path)?;
+            let inspection = RustResolver.inspect(&PackageLocation {
+                id: PackageId::new(id),
+                project_root,
+                path,
+            })?;
+            resolved.push(ResolvedSnapshot {
+                id: inspection.id,
+                ecosystem: inspection.ecosystem,
+                package: ResolvedPackage {
+                    name: inspection.manifest_name,
+                    version: inspection.version,
+                    path: inspection.path.into_std_path_buf(),
+                    private: !inspection.publishable,
+                },
+                dependencies: inspection
+                    .dependencies
+                    .into_iter()
+                    .map(manifest_dependency)
+                    .collect(),
+            });
+        } else {
+            let mut resolver = create_resolver(package_config.resolver);
+            let package = resolver.resolve(root, package_config)?;
+            let dependencies = resolver.dependencies(root, package_config)?;
+            resolved.push(ResolvedSnapshot {
+                id: PackageId::new(id),
+                ecosystem: ResolverRegistry::ecosystem(package_config.resolver),
+                package,
+                dependencies,
+            });
+        }
     }
     workspace_graph_from_resolved(root, resolved)
+}
+
+fn manifest_dependency(dependency: ManifestDependency) -> ResolvedDependency {
+    ResolvedDependency {
+        manifest_name: dependency.manifest_name,
+        kind: dependency.kind,
+        requirement: dependency.requirement,
+    }
 }
 
 fn workspace_graph_from_resolved(

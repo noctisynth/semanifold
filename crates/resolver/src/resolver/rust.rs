@@ -4,12 +4,16 @@ use std::{
 };
 
 use semifold_core::{
-    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, VersionMap,
 };
 use serde::Deserialize;
 
 use crate::{
+    adapter::{
+        AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
+        PackageLocation,
+    },
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
@@ -57,6 +61,43 @@ struct PlannedManifest {
 }
 
 impl RustResolver {
+    fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Rust,
+            channel: ReleaseChannel::Stable,
+            assets: Vec::new(),
+        }
+    }
+
+    fn package_inspection(
+        id: PackageId,
+        package: ResolvedPackage,
+        dependencies: Vec<ResolvedDependency>,
+    ) -> Result<PackageInspection, AdapterError> {
+        let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
+            AdapterError::InvalidInput {
+                reason: format!("Rust package path is not valid UTF-8: {}", path.display()),
+            }
+        })?;
+        Ok(PackageInspection {
+            id,
+            manifest_name: package.name,
+            version: package.version,
+            ecosystem: Ecosystem::Rust,
+            path,
+            publishable: !package.private,
+            dependencies: dependencies
+                .into_iter()
+                .map(|dependency| ManifestDependency {
+                    manifest_name: dependency.manifest_name,
+                    kind: dependency.kind,
+                    requirement: dependency.requirement,
+                })
+                .collect(),
+        })
+    }
+
     /// Plans package and shared workspace manifest replacements as one deterministic batch.
     pub fn plan_file_edits(
         root: &Path,
@@ -395,6 +436,95 @@ impl RustResolver {
     }
 }
 
+impl EcosystemAdapter for RustResolver {
+    fn ecosystem(&self) -> Ecosystem {
+        Ecosystem::Rust
+    }
+
+    fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
+        let mut resolver = Self;
+        let packages = resolver.resolve_all(root.as_std_path())?;
+        let mut inspections = packages
+            .into_iter()
+            .map(|package| {
+                let dependencies = Self::manifest_dependencies(
+                    root.as_std_path(),
+                    &Self::package_config(package.path.clone()),
+                )?;
+                Self::package_inspection(
+                    PackageId::new(package.name.clone()),
+                    package,
+                    dependencies,
+                )
+            })
+            .collect::<Result<Vec<_>, AdapterError>>()?;
+        inspections.sort_by(|left, right| {
+            left.id
+                .cmp(&right.id)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        Ok(inspections)
+    }
+
+    fn inspect(&self, location: &PackageLocation) -> Result<PackageInspection, AdapterError> {
+        if location.path.is_absolute()
+            || location
+                .path
+                .components()
+                .any(|component| component == camino::Utf8Component::ParentDir)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: format!(
+                    "Rust package path must be relative to the project root: {}",
+                    location.path
+                ),
+            });
+        }
+        let config = Self::package_config(location.path.as_std_path());
+        let mut resolver = Self;
+        let package = resolver.resolve(location.project_root.as_std_path(), &config)?;
+        let dependencies =
+            Self::manifest_dependencies(location.project_root.as_std_path(), &config)?;
+        Self::package_inspection(location.id.clone(), package, dependencies)
+    }
+
+    fn plan_edits(&self, input: EcosystemPlanInput<'_>) -> Result<Vec<FileEdit>, AdapterError> {
+        if input
+            .workspace_packages
+            .iter()
+            .any(|package| package.ecosystem != Ecosystem::Rust)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: "Rust edit planning received a non-Rust workspace package".to_string(),
+            });
+        }
+        let workspace_packages = input
+            .workspace_packages
+            .iter()
+            .map(|package| (package.id.clone(), package))
+            .collect::<BTreeMap<_, _>>();
+        let released_packages = input
+            .released_packages
+            .iter()
+            .map(|id| {
+                workspace_packages
+                    .get(id)
+                    .copied()
+                    .ok_or_else(|| AdapterError::InvalidInput {
+                        reason: format!("released Rust package {id} is not in the workspace"),
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let workspace_package_refs = input.workspace_packages.iter().collect::<Vec<_>>();
+        Ok(Self::plan_file_edits(
+            input.project_root.as_std_path(),
+            &released_packages,
+            &workspace_package_refs,
+            input.versions,
+        )?)
+    }
+}
+
 impl Resolver for RustResolver {
     fn resolve(
         &mut self,
@@ -624,6 +754,7 @@ mod tests {
     };
 
     use crate::{
+        adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
         resolver::{Resolver, ResolverType},
     };
@@ -723,6 +854,53 @@ mod tests {
     }
 
     #[test]
+    fn adapter_discovers_and_inspects_manifest_dependencies_before_id_binding() {
+        let root = temp_dir("adapter-inspection");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        write_package(&root, "crates/core", "core", "1.0.0", None, None);
+        write_package(
+            &root,
+            "crates/app",
+            "app",
+            "1.0.0",
+            None,
+            Some("core = { version = \"1\", path = \"../core\" }\nserde = \"1\""),
+        );
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        let discovered = RustResolver.discover(&project_root).unwrap();
+        assert_eq!(
+            discovered
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>(),
+            ["app", "core"]
+        );
+        let app = RustResolver
+            .inspect(&PackageLocation {
+                id: PackageId::new("configured-app"),
+                project_root,
+                path: "crates/app".into(),
+            })
+            .unwrap();
+
+        assert_eq!(app.id, PackageId::new("configured-app"));
+        assert_eq!(app.manifest_name, "app");
+        assert_eq!(
+            app.dependencies
+                .iter()
+                .map(|dependency| dependency.manifest_name.as_str())
+                .collect::<Vec<_>>(),
+            ["core", "serde"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn plans_a_manifest_edit_from_the_complete_version_map() {
         let root = temp_dir("plan-file-edit");
         let manifest_path = root.join("crates/app/Cargo.toml");
@@ -785,13 +963,15 @@ mod tests {
             (PackageId::new("build-id"), semver::Version::new(4, 1, 0)),
         ]);
 
-        let edits = RustResolver::plan_file_edits(
-            &root,
-            &[&package],
-            &internal.iter().collect::<Vec<_>>(),
-            &versions,
-        )
-        .unwrap();
+        let project_root = camino::Utf8Path::from_path(&root).unwrap();
+        let edits = RustResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root,
+                workspace_packages: &internal,
+                released_packages: std::slice::from_ref(&package.id),
+                versions: &versions,
+            })
+            .unwrap();
         let edit = &edits[0];
 
         assert_eq!(edit.path.as_str(), "crates/app/Cargo.toml");

@@ -7,9 +7,10 @@ use std::{
 
 use semifold_core::{DiscoveredPackage, Ecosystem, PackageId};
 use semifold_resolver::{
+    adapter::{AdapterError, EcosystemAdapter},
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{Resolver, ResolverType, create_resolver},
+    resolver::{Resolver, ResolverType, create_resolver, rust::RustResolver},
 };
 
 use crate::package_path::{PackagePathError, normalize_package_path};
@@ -90,31 +91,58 @@ impl PackageDiscoveryService {
         let resolvers = ResolverRegistry::normalize_selection(resolvers);
         let mut packages = Vec::new();
         for resolver_type in &resolvers {
-            let mut resolver = self.registry.create(*resolver_type);
-            let resolved = resolver.resolve_all(project_root).map_err(|source| {
-                PackageDiscoveryError::Resolver {
-                    resolver: *resolver_type,
-                    source,
-                }
-            })?;
-            let mut discovered = resolved
-                .into_iter()
-                .map(|package| {
-                    let path =
-                        normalize_package_path(project_root, &package.path).map_err(|source| {
-                            PackageDiscoveryError::PackagePath {
+            let mut discovered = if *resolver_type == ResolverType::Rust {
+                let root = camino::Utf8Path::from_path(project_root).ok_or_else(|| {
+                    PackageDiscoveryError::InvalidProjectRoot {
+                        path: project_root.to_path_buf(),
+                    }
+                })?;
+                RustResolver
+                    .discover(root)
+                    .map_err(|source| PackageDiscoveryError::Adapter {
+                        resolver: *resolver_type,
+                        source,
+                    })?
+                    .into_iter()
+                    .map(|package| {
+                        let path = normalize_package_path(project_root, package.path.as_std_path())
+                            .map_err(|source| PackageDiscoveryError::PackagePath {
+                                resolver: *resolver_type,
+                                package: package.manifest_name.clone(),
+                                source,
+                            })?;
+                        Ok(DiscoveredPackage {
+                            id: package.id,
+                            ecosystem: package.ecosystem,
+                            path,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, PackageDiscoveryError>>()?
+            } else {
+                let mut resolver = self.registry.create(*resolver_type);
+                resolver
+                    .resolve_all(project_root)
+                    .map_err(|source| PackageDiscoveryError::Resolver {
+                        resolver: *resolver_type,
+                        source,
+                    })?
+                    .into_iter()
+                    .map(|package| {
+                        let path = normalize_package_path(project_root, &package.path).map_err(
+                            |source| PackageDiscoveryError::PackagePath {
                                 resolver: *resolver_type,
                                 package: package.name.clone(),
                                 source,
-                            }
-                        })?;
-                    Ok(DiscoveredPackage {
-                        id: PackageId::new(package.name),
-                        ecosystem: ResolverRegistry::ecosystem(*resolver_type),
-                        path,
+                            },
+                        )?;
+                        Ok(DiscoveredPackage {
+                            id: PackageId::new(package.name),
+                            ecosystem: ResolverRegistry::ecosystem(*resolver_type),
+                            path,
+                        })
                     })
-                })
-                .collect::<Result<Vec<_>, PackageDiscoveryError>>()?;
+                    .collect::<Result<Vec<_>, PackageDiscoveryError>>()?
+            };
             packages.append(&mut discovered);
         }
         packages.sort();
@@ -132,6 +160,13 @@ pub(crate) enum PackageDiscoveryError {
         resolver: ResolverType,
         source: ResolveError,
     },
+    Adapter {
+        resolver: ResolverType,
+        source: AdapterError,
+    },
+    InvalidProjectRoot {
+        path: PathBuf,
+    },
     PackagePath {
         resolver: ResolverType,
         package: String,
@@ -147,6 +182,16 @@ impl fmt::Display for PackageDiscoveryError {
         match self {
             Self::Resolver { resolver, source } => {
                 write!(formatter, "{resolver} package discovery failed: {source}")
+            }
+            Self::Adapter { resolver, source } => {
+                write!(formatter, "{resolver} package discovery failed: {source}")
+            }
+            Self::InvalidProjectRoot { path } => {
+                write!(
+                    formatter,
+                    "package discovery project root is not valid UTF-8: {}",
+                    path.display()
+                )
             }
             Self::PackagePath {
                 resolver,
@@ -170,8 +215,9 @@ impl Error for PackageDiscoveryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Resolver { source, .. } => Some(source),
+            Self::Adapter { source, .. } => Some(source),
             Self::PackagePath { source, .. } => Some(source),
-            Self::DuplicatePackageId { .. } => None,
+            Self::InvalidProjectRoot { .. } | Self::DuplicatePackageId { .. } => None,
         }
     }
 }

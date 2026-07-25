@@ -1,5 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use semifold_core::{Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap};
+use semifold_core::{DependencyKind, Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap};
+use semver::Version;
 
 use crate::error::ResolveError;
 
@@ -9,6 +10,26 @@ pub struct PackageLocation {
     pub id: PackageId,
     pub project_root: Utf8PathBuf,
     pub path: Utf8PathBuf,
+}
+
+/// A dependency declaration whose manifest name has not yet been bound to a stable package id.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManifestDependency {
+    pub manifest_name: String,
+    pub kind: DependencyKind,
+    pub requirement: Option<String>,
+}
+
+/// Immutable package data parsed by an adapter before workspace dependency binding.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackageInspection {
+    pub id: PackageId,
+    pub manifest_name: String,
+    pub version: Version,
+    pub ecosystem: Ecosystem,
+    pub path: Utf8PathBuf,
+    pub publishable: bool,
+    pub dependencies: Vec<ManifestDependency>,
 }
 
 /// Immutable, complete input for one ecosystem's edit planning pass.
@@ -24,9 +45,9 @@ pub struct EcosystemPlanInput<'input> {
 pub trait EcosystemAdapter: Send + Sync {
     fn ecosystem(&self) -> Ecosystem;
 
-    fn discover(&self, root: &Utf8Path) -> Result<Vec<PackageSnapshot>, AdapterError>;
+    fn discover(&self, root: &Utf8Path) -> Result<Vec<PackageInspection>, AdapterError>;
 
-    fn inspect(&self, package: &PackageLocation) -> Result<PackageSnapshot, AdapterError>;
+    fn inspect(&self, package: &PackageLocation) -> Result<PackageInspection, AdapterError>;
 
     fn plan_edits(&self, input: EcosystemPlanInput<'_>) -> Result<Vec<FileEdit>, AdapterError>;
 }
@@ -44,7 +65,6 @@ pub enum AdapterError {
 mod tests {
     use std::collections::BTreeMap;
 
-    use semifold_core::Dependency;
     use semver::Version;
 
     use super::*;
@@ -56,19 +76,19 @@ mod tests {
             Ecosystem::Node
         }
 
-        fn discover(&self, _root: &Utf8Path) -> Result<Vec<PackageSnapshot>, AdapterError> {
+        fn discover(&self, _root: &Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
             Ok(Vec::new())
         }
 
-        fn inspect(&self, package: &PackageLocation) -> Result<PackageSnapshot, AdapterError> {
-            Ok(PackageSnapshot {
+        fn inspect(&self, package: &PackageLocation) -> Result<PackageInspection, AdapterError> {
+            Ok(PackageInspection {
                 id: package.id.clone(),
                 manifest_name: "example".to_string(),
                 version: Version::new(1, 0, 0),
                 ecosystem: self.ecosystem(),
                 path: package.path.clone(),
                 publishable: true,
-                dependencies: Vec::<Dependency>::new(),
+                dependencies: Vec::new(),
             })
         }
 
@@ -95,11 +115,20 @@ mod tests {
             project_root: "/project".into(),
             path: "packages/example".into(),
         };
-        let snapshot = adapter.inspect(&location).unwrap();
+        let inspection = adapter.inspect(&location).unwrap();
+        let snapshot = PackageSnapshot {
+            id: inspection.id.clone(),
+            manifest_name: inspection.manifest_name.clone(),
+            version: inspection.version.clone(),
+            ecosystem: inspection.ecosystem,
+            path: inspection.path.clone(),
+            publishable: inspection.publishable,
+            dependencies: Vec::new(),
+        };
         let versions = BTreeMap::from([(PackageId::new("configured-id"), Version::new(1, 0, 1))]);
 
-        assert_eq!(snapshot.id, PackageId::new("configured-id"));
-        assert_eq!(snapshot.path, "packages/example");
+        assert_eq!(inspection.id, PackageId::new("configured-id"));
+        assert_eq!(inspection.path, "packages/example");
         assert!(
             adapter
                 .plan_edits(EcosystemPlanInput {

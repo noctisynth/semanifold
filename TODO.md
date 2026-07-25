@@ -186,7 +186,7 @@
 - [x] 将 Node.js resolver 改为生成 `FileEdit`
 - [x] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies
 - [x] 移除 Rust/Node.js 对 `Context.version_bumps` 的依赖
-- [ ] Resolver 不再直接写文件或处理 dry-run
+- [x] Resolver 不再直接写版本文件或处理 `version` dry-run；publish 命令与 publish dry-run 在阶段 4 随 `Resolver::publish()` 移除
 
 ### Python 与 C++
 

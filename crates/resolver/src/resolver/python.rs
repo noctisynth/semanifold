@@ -4,12 +4,16 @@ use std::{
 };
 
 use semifold_core::{
-    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageSnapshot,
-    VersionMap,
+    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    PackageSnapshot, VersionMap,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    adapter::{
+        AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
+        PackageLocation,
+    },
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
@@ -68,6 +72,43 @@ struct CargoPackage {
 pub struct PythonResolver;
 
 impl PythonResolver {
+    fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Python,
+            channel: ReleaseChannel::Stable,
+            assets: Vec::new(),
+        }
+    }
+
+    fn package_inspection(
+        id: PackageId,
+        package: ResolvedPackage,
+        dependencies: Vec<ResolvedDependency>,
+    ) -> Result<PackageInspection, AdapterError> {
+        let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
+            AdapterError::InvalidInput {
+                reason: format!("Python package path is not valid UTF-8: {}", path.display()),
+            }
+        })?;
+        Ok(PackageInspection {
+            id,
+            manifest_name: package.name,
+            version: package.version,
+            ecosystem: Ecosystem::Python,
+            path,
+            publishable: !package.private,
+            dependencies: dependencies
+                .into_iter()
+                .map(|dependency| ManifestDependency {
+                    manifest_name: dependency.manifest_name,
+                    kind: dependency.kind,
+                    requirement: dependency.requirement,
+                })
+                .collect(),
+        })
+    }
+
     pub fn plan_file_edits(
         root: &Path,
         package: &PackageSnapshot,
@@ -445,6 +486,27 @@ impl PythonResolver {
         })
     }
 
+    fn resolve_package(
+        &self,
+        root: &Path,
+        pkg_path: &Path,
+    ) -> Result<ResolvedPackage, ResolveError> {
+        let setup_cfg_exists = root.join(pkg_path).join("setup.cfg").exists();
+        if root.join(pkg_path).join("pyproject.toml").exists() {
+            match self.resolve_pyproject(root, pkg_path) {
+                Ok(package) => return Ok(package),
+                Err(ResolveError::InvalidConfig { .. }) if setup_cfg_exists => {}
+                Err(error) => return Err(error),
+            }
+        }
+        if setup_cfg_exists {
+            return self.resolve_setup_cfg(root, pkg_path);
+        }
+        Err(ResolveError::FileOrDirNotFound {
+            path: root.join(pkg_path),
+        })
+    }
+
     /// 从源文件中提取动态版本号
     /// 当 pyproject.toml 中声明 `dynamic = ["version"]` 时使用
     ///
@@ -596,23 +658,104 @@ impl PythonResolver {
     }
 }
 
+impl EcosystemAdapter for PythonResolver {
+    fn ecosystem(&self) -> Ecosystem {
+        Ecosystem::Python
+    }
+
+    fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
+        let mut resolver = Self;
+        let packages = resolver.resolve_all(root.as_std_path())?;
+        let mut inspections = packages
+            .into_iter()
+            .map(|package| {
+                let dependencies = self.manifest_dependencies(root.as_std_path(), &package.path)?;
+                Self::package_inspection(
+                    PackageId::new(package.name.clone()),
+                    package,
+                    dependencies,
+                )
+            })
+            .collect::<Result<Vec<_>, AdapterError>>()?;
+        inspections.sort_by(|left, right| {
+            left.id
+                .cmp(&right.id)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        Ok(inspections)
+    }
+
+    fn inspect(&self, location: &PackageLocation) -> Result<PackageInspection, AdapterError> {
+        if location.path.is_absolute()
+            || location
+                .path
+                .components()
+                .any(|component| component == camino::Utf8Component::ParentDir)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: format!(
+                    "Python package path must be relative to the project root: {}",
+                    location.path
+                ),
+            });
+        }
+        let package = self.resolve_package(
+            location.project_root.as_std_path(),
+            location.path.as_std_path(),
+        )?;
+        let dependencies = self.manifest_dependencies(
+            location.project_root.as_std_path(),
+            location.path.as_std_path(),
+        )?;
+        Self::package_inspection(location.id.clone(), package, dependencies)
+    }
+
+    fn plan_edits(&self, input: EcosystemPlanInput<'_>) -> Result<Vec<FileEdit>, AdapterError> {
+        if input
+            .workspace_packages
+            .iter()
+            .any(|package| package.ecosystem != Ecosystem::Python)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: "Python edit planning received a non-Python workspace package".to_string(),
+            });
+        }
+        let workspace_packages = input
+            .workspace_packages
+            .iter()
+            .map(|package| (package.id.clone(), package))
+            .collect::<BTreeMap<_, _>>();
+        let released_packages = input
+            .released_packages
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>();
+
+        released_packages
+            .into_iter()
+            .map(|id| {
+                let package = workspace_packages.get(id).copied().ok_or_else(|| {
+                    AdapterError::InvalidInput {
+                        reason: format!("released Python package {id} is not in the workspace"),
+                    }
+                })?;
+                Ok(Self::plan_file_edits(
+                    input.project_root.as_std_path(),
+                    package,
+                    input.versions,
+                )?)
+            })
+            .collect::<Result<Vec<_>, AdapterError>>()
+            .map(|edits| edits.into_iter().flatten().collect())
+    }
+}
+
 impl Resolver for PythonResolver {
     fn resolve(
         &mut self,
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<ResolvedPackage, ResolveError> {
-        if let Ok(package) = self.resolve_pyproject(root, &pkg_config.path) {
-            return Ok(package);
-        }
-
-        if let Ok(package) = self.resolve_setup_cfg(root, &pkg_config.path) {
-            return Ok(package);
-        }
-
-        Err(ResolveError::FileOrDirNotFound {
-            path: root.join(&pkg_config.path),
-        })
+        self.resolve_package(root, &pkg_config.path)
     }
 
     fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
@@ -620,15 +763,7 @@ impl Resolver for PythonResolver {
 
         // 检查是否是单包项目
         if root.join("pyproject.toml").exists() || root.join("setup.cfg").exists() {
-            packages.push(self.resolve(
-                root,
-                &PackageConfig {
-                    path: ".".into(),
-                    resolver: ResolverType::Python,
-                    channel: ReleaseChannel::Stable,
-                    assets: vec![],
-                },
-            )?);
+            packages.push(self.resolve(root, &Self::package_config("."))?);
         }
 
         // 检查常见的 monorepo 结构
@@ -647,15 +782,7 @@ impl Resolver for PythonResolver {
             for path in paths {
                 if path.join("pyproject.toml").exists() || path.join("setup.cfg").exists() {
                     let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
-                    packages.push(self.resolve(
-                        root,
-                        &PackageConfig {
-                            path: rel_path,
-                            resolver: ResolverType::Python,
-                            channel: ReleaseChannel::Stable,
-                            assets: vec![],
-                        },
-                    )?);
+                    packages.push(self.resolve(root, &Self::package_config(rel_path))?);
                 }
             }
         }
@@ -768,7 +895,9 @@ mod tests {
     };
 
     use crate::{
+        adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
+        error::ResolveError,
         resolver::{Resolver, ResolverType},
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
@@ -864,6 +993,11 @@ mod tests {
     fn falls_back_to_setup_cfg_metadata() {
         let root = temp_dir("setup-cfg");
         fs::write(
+            root.join("pyproject.toml"),
+            "[build-system]\nrequires = [\"setuptools\"]\n",
+        )
+        .unwrap();
+        fs::write(
             root.join("setup.cfg"),
             "[metadata]\nname = cfg-example\nversion = 4.5.6\n\n[options]\npackages = find:\n",
         )
@@ -914,6 +1048,73 @@ mod tests {
         assert_eq!(packages[2].path, PathBuf::from("libs/helpers"));
         assert_eq!(packages[3].name, "root");
         assert_eq!(packages[3].path, PathBuf::from("."));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adapter_discovers_and_inspects_manifest_dependencies_before_id_binding() {
+        let root = temp_dir("adapter-inspection");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"root\"\nversion = \"1.0.0\"\n",
+        );
+        write_pyproject(
+            &root,
+            "packages/core",
+            "[project]\nname = \"core\"\nversion = \"1.0.0\"\n",
+        );
+        write_pyproject(
+            &root,
+            "packages/app",
+            "[project]\nname = \"app\"\nversion = \"1.0.0\"\ndependencies = [\"core>=1\", \"requests>=2\"]\n",
+        );
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        let discovered = PythonResolver.discover(&project_root).unwrap();
+        assert_eq!(
+            discovered
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>(),
+            ["app", "core", "root"]
+        );
+        let app = PythonResolver
+            .inspect(&PackageLocation {
+                id: PackageId::new("configured-app"),
+                project_root,
+                path: "packages/app".into(),
+            })
+            .unwrap();
+
+        assert_eq!(app.id, PackageId::new("configured-app"));
+        assert_eq!(app.manifest_name, "app");
+        assert_eq!(
+            app.dependencies
+                .iter()
+                .map(|dependency| dependency.manifest_name.as_str())
+                .collect::<Vec<_>>(),
+            ["core", "requests"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adapter_propagates_an_invalid_pyproject_instead_of_falling_back() {
+        let root = temp_dir("invalid-pyproject");
+        fs::write(root.join("pyproject.toml"), "[project\nname = \"broken\"\n").unwrap();
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        assert!(matches!(
+            PythonResolver.inspect(&PackageLocation {
+                id: PackageId::new("broken"),
+                project_root,
+                path: ".".into(),
+            }),
+            Err(crate::adapter::AdapterError::LegacyResolver(
+                ResolveError::ParseError { .. }
+            ))
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1103,15 +1304,18 @@ mod tests {
             dependencies: vec![],
         };
 
-        let edits = PythonResolver::plan_file_edits(
-            &root,
-            &package,
-            &VersionMap::from([(
-                PackageId::new("native-example"),
-                semver::Version::new(1, 0, 1),
-            )]),
-        )
-        .unwrap();
+        let versions = VersionMap::from([(
+            PackageId::new("native-example"),
+            semver::Version::new(1, 0, 1),
+        )]);
+        let edits = PythonResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&package),
+                released_packages: std::slice::from_ref(&package.id),
+                versions: &versions,
+            })
+            .unwrap();
 
         assert!(edits.is_empty());
         assert!(

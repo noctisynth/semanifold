@@ -11,7 +11,8 @@ use semifold_resolver::{
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
     resolver::{
-        Resolver, ResolverType, create_resolver, nodejs::NodejsResolver, rust::RustResolver,
+        Resolver, ResolverType, create_resolver, nodejs::NodejsResolver, python::PythonResolver,
+        rust::RustResolver,
     },
 };
 
@@ -85,7 +86,8 @@ impl ResolverRegistry {
         match resolver {
             ResolverType::Rust => Some(Box::new(RustResolver)),
             ResolverType::Nodejs => Some(Box::new(NodejsResolver)),
-            ResolverType::Python | ResolverType::Cpp => None,
+            ResolverType::Python => Some(Box::new(PythonResolver)),
+            ResolverType::Cpp => None,
         }
     }
 }

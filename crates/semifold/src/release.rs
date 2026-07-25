@@ -8,7 +8,7 @@ use semifold_core::{
 use semifold_resolver::{
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{Config, ReleaseChannel as ResolverReleaseChannel},
-    resolver::{nodejs::NodejsResolver, rust::RustResolver},
+    resolver::{cpp::CppResolver, nodejs::NodejsResolver, rust::RustResolver},
 };
 use semver::VersionReq;
 
@@ -36,7 +36,8 @@ pub(crate) fn plan_release(
                     .map(|edit| vec![edit]),
                 Ecosystem::Node => NodejsResolver::plan_file_edit(root, package, plan.versions())
                     .map(|edit| vec![edit]),
-                Ecosystem::Python | Ecosystem::Cpp => Ok(Vec::new()),
+                Ecosystem::Cpp => CppResolver::plan_file_edits(root, package, plan.versions()),
+                Ecosystem::Python => Ok(Vec::new()),
             }
         })
         .collect::<Result<Vec<_>, _>>()?

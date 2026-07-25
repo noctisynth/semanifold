@@ -4,7 +4,10 @@ use std::{
 };
 
 use regex::Regex;
-use semifold_core::DependencyKind;
+use semifold_core::{
+    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageSnapshot,
+    VersionMap,
+};
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
@@ -18,6 +21,62 @@ use crate::{
 pub struct CppResolver;
 
 impl CppResolver {
+    pub fn plan_file_edits(
+        root: &Path,
+        package: &PackageSnapshot,
+        versions: &VersionMap,
+    ) -> Result<Vec<FileEdit>, ResolveError> {
+        let version = versions
+            .get(&package.id)
+            .ok_or_else(|| ResolveError::InvalidConfig {
+                path: root.join(package.path.as_std_path()),
+                reason: format!("missing planned version for {}", package.id),
+            })?
+            .to_string();
+        let package_path = root.join(package.path.as_std_path());
+        let cmake_path = package_path.join("CMakeLists.txt");
+        let cmake = std::fs::read_to_string(&cmake_path)?;
+        let re = Regex::new(
+            r"(?i)(project\s*\([^)]*VERSION\s+)([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
+        )
+        .map_err(|error| ResolveError::ParseError {
+            path: cmake_path.clone(),
+            reason: error.to_string(),
+        })?;
+        let cmake_updated = re.replace(&cmake, |caps: &regex::Captures| {
+            format!("{}{}", &caps[1], version)
+        });
+        let mut edits = vec![FileEdit {
+            path: package.path.join("CMakeLists.txt"),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(cmake.as_bytes()),
+            },
+            new_content: cmake_updated.into_owned(),
+            source: EditSource::PackageVersion {
+                package: package.id.clone(),
+            },
+        }];
+        let vcpkg_path = package_path.join("vcpkg.json");
+        if vcpkg_path.exists() {
+            let content = std::fs::read_to_string(&vcpkg_path)?;
+            let updated = utils::replace_root_json_string_field(&content, "version", &version)
+                .ok_or_else(|| ResolveError::ParseError {
+                    path: vcpkg_path.clone(),
+                    reason: "vcpkg.json version field could not be replaced".to_string(),
+                })?;
+            edits.push(FileEdit {
+                path: package.path.join("vcpkg.json"),
+                expected: FileEditExpectation::Existing {
+                    hash: FileHash::from_bytes(content.as_bytes()),
+                },
+                new_content: updated,
+                source: EditSource::PackageVersion {
+                    package: package.id.clone(),
+                },
+            });
+        }
+        Ok(edits)
+    }
     fn direct_workspace_members(&self, root: &Path) -> Result<Vec<PathBuf>, ResolveError> {
         let cmake_path = root.join("CMakeLists.txt");
         let content = std::fs::read_to_string(&cmake_path)?;
@@ -403,6 +462,7 @@ mod tests {
         context::Context,
         resolver::{ResolvedPackage, Resolver, ResolverType},
     };
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
     use super::CppResolver;
 
@@ -511,6 +571,51 @@ mod tests {
         assert_eq!(vcpkg["version"], "1.1.0");
         assert_eq!(vcpkg["dependencies"], serde_json::json!(["fmt"]));
         assert_eq!(vcpkg["custom"]["preserved"], true);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_cmake_and_optional_vcpkg_edits_without_writing() {
+        let root = temp_dir("plan-file-edits");
+        write_cmake_project(&root, "library", "demo-library", "1.0.0");
+        fs::write(
+            root.join("library/vcpkg.json"),
+            "{\"version\": \"1.0.0\"}\n",
+        )
+        .unwrap();
+        let package = PackageSnapshot {
+            id: PackageId::new("demo-library"),
+            manifest_name: "demo-library".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Cpp,
+            path: "library".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+
+        let edits = CppResolver::plan_file_edits(
+            &root,
+            &package,
+            &VersionMap::from([(
+                PackageId::new("demo-library"),
+                semver::Version::new(1, 0, 1),
+            )]),
+        )
+        .unwrap();
+
+        assert_eq!(edits.len(), 2);
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit.path == "library/CMakeLists.txt"
+                    && edit.new_content.contains("VERSION 1.0.1"))
+        );
+        assert!(edits.iter().any(|edit| edit.path == "library/vcpkg.json" && edit.new_content.contains("1.0.1")));
+        assert!(
+            fs::read_to_string(root.join("library/CMakeLists.txt"))
+                .unwrap()
+                .contains("VERSION 1.0.0")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

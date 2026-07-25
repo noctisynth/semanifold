@@ -1,7 +1,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
@@ -15,6 +15,31 @@ pub mod utils;
 pub struct GeneratedChangelog {
     pub content: String,
     pub remote_metadata_failed: bool,
+}
+
+/// Immutable, fully collected input for pure changelog Markdown formatting.
+pub struct ChangelogContext {
+    pub package_version: String,
+    pub sections: BTreeMap<String, Vec<String>>,
+    pub dependency_updates: Vec<(String, String)>,
+}
+
+pub fn format_changelog(context: &ChangelogContext) -> String {
+    let header = format!("## v{}\n\n", context.package_version);
+    let changes_body = context
+        .sections
+        .iter()
+        .map(|(tag, lines)| format!("### {tag}\n\n{}", lines.join("\n")))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let dependencies_body = format_dependency_updates(&context.dependency_updates);
+    let body = [changes_body, dependencies_body]
+        .into_iter()
+        .filter(|section| !section.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    header + &body
 }
 
 pub fn format_line(
@@ -60,7 +85,7 @@ pub async fn generate_changelog(
     dependency_updates: &[(String, String)],
     collect_remote_metadata: bool,
 ) -> Result<GeneratedChangelog, ResolveError> {
-    let mut changes_map = HashMap::new();
+    let mut changes_map = BTreeMap::new();
     let mut remote_metadata_failed = false;
 
     let tags = ctx
@@ -116,7 +141,8 @@ pub async fn generate_changelog(
                 .tag
                 .as_ref()
                 .and_then(|t| tags.get(t).map(|s| s.as_str()))
-                .unwrap_or("Changes");
+                .unwrap_or("Changes")
+                .to_string();
             changes_map
                 .entry(tag)
                 .or_insert_with(Vec::new)
@@ -129,21 +155,12 @@ pub async fn generate_changelog(
         }
     }
 
-    let header = format!("## v{package_version}\n\n");
-    let changes_body = changes_map
-        .iter()
-        .map(|(tag, lines)| format!("### {tag}\n\n{}", lines.join("\n")))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let dependencies_body = format_dependency_updates(dependency_updates);
-    let body = [changes_body, dependencies_body]
-        .into_iter()
-        .filter(|section| !section.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-
     Ok(GeneratedChangelog {
-        content: header + &body,
+        content: format_changelog(&ChangelogContext {
+            package_version: package_version.to_string(),
+            sections: changes_map,
+            dependency_updates: dependency_updates.to_vec(),
+        }),
         remote_metadata_failed,
     })
 }
@@ -212,7 +229,28 @@ pub async fn read_latest_changelog<P: AsRef<Path>>(
 mod tests {
     use std::path::Path;
 
-    use super::{format_dependency_updates, utils::render_changelog};
+    use std::collections::BTreeMap;
+
+    use super::{
+        ChangelogContext, format_changelog, format_dependency_updates, utils::render_changelog,
+    };
+
+    #[test]
+    fn formats_an_immutable_context_without_external_clients() {
+        let context = ChangelogContext {
+            package_version: "1.0.0".to_string(),
+            sections: BTreeMap::from([(
+                "Changes".to_string(),
+                vec!["- Add release planning".to_string()],
+            )]),
+            dependency_updates: vec![("core".to_string(), "1.0.0".to_string())],
+        };
+
+        assert_eq!(
+            format_changelog(&context),
+            "## v1.0.0\n\n### Changes\n\n- Add release planning\n\n### Dependencies\n\n- Update core to 1.0.0."
+        );
+    }
 
     #[test]
     fn formats_propagated_dependency_updates_as_a_separate_section() {

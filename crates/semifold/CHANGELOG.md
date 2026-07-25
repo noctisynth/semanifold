@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.0-beta.1
+
+### Bug Fixes
+
+- [`fd19bf0`](https://github.com/noctisynth/semifold/commit/fd19bf09d523d07f75813c064b97b8ca899d2d64): Preserve configured package IDs when manifests share names across ecosystems.
+
+### New Features
+
+- [`e015e6d`](https://github.com/noctisynth/semifold/commit/e015e6d234f97b87e7422431b4b3e659a3a218df): Validate ecosystem release channels and encode Python PEP 440 pre- and post-release versions.
+- [`e108ed0`](https://github.com/noctisynth/semifold/commit/e108ed0721d928d8ca543ce7bc3c00db0030afe3): Support explicit cross-ecosystem dependency ordering and release propagation.
+
+### Refactors
+
+- [`0dab79f`](https://github.com/noctisynth/semifold/commit/0dab79fe5ac1ba645820c831e4605da4b1aa7a1f): Move publish command execution and dry-run handling out of ecosystem resolvers.
+- [`1932935`](https://github.com/noctisynth/semifold/commit/1932935da7bd936f07c4f3bc58b01e9552350994): Document and enforce dependency-kind ordering and propagation policies.
+- [`f74c91a`](https://github.com/noctisynth/semifold/commit/f74c91a25ae2fe97f4657a77f3ac1a5f1156a2f8): Converge ecosystem discovery, inspection, publishing, and fixture coverage on the EcosystemAdapter interface.
+
 ## v0.3.0-beta.0
 
 ### Refactors

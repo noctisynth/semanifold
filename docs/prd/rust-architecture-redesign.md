@@ -390,6 +390,13 @@ pub struct PackagePublish {
 
 Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem adapter 中。它们由 engine 根据统一包模型和用户配置组装。
 
+在完整 `PublishPlan` 落地前，阶段 4 使用 application 层的统一发布命令执行桥接：按 package 的
+拓扑顺序依次执行全部 `prepublish`，成功后再执行全部 `publish`；命令工作目录为 package path，任一
+命令失败立即停止该 package 和后续发布。全局 dry-run 时，仅执行配置中
+`dry_run = true` 的命令，其余命令明确报告跳过。private package、registry pre-check、GitHub Release
+与 assets 仍由同一 application 流程编排，不回到 adapter。四个旧 resolver 不再暴露 `publish()`，
+也不接收 dry-run；该桥接后续由 `PublishPlan` 与注入的 `CommandRunner` 取代。
+
 ### 6.6 `ReleaseUnit`、发布身份与模板上下文
 
 一个发布分支或 release PR 不必等同于一个 package。Semifold 应将其建模为 `ReleaseUnit`：一次发布流程的命名、成员和分支边界。

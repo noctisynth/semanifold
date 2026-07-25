@@ -14,6 +14,7 @@ use semifold_resolver::{
     config::{Config, PackageConfig, ResolverConfig},
     context::Context,
     resolver::ResolvedPackage,
+    utils,
 };
 
 use crate::workspace::load_workspace_graph;
@@ -131,6 +132,82 @@ fn package_publish_order(root: &std::path::Path, config: &Config) -> anyhow::Res
         .collect())
 }
 
+fn command_display(command: &semifold_resolver::config::CommandConfig) -> String {
+    let args = command.args.as_deref().unwrap_or_default();
+    format!("{} {}", command.command, args.join(" "))
+        .trim_end()
+        .to_string()
+}
+
+fn run_publish_commands(
+    package: &ResolvedPackage,
+    resolver_config: &ResolverConfig,
+    dry_run: bool,
+) -> Result<(), semifold_resolver::error::ResolveError> {
+    log::info!(
+        "{}",
+        t!(
+            "cli.publish.run_prepublish_commands",
+            package = package.name.cyan()
+        )
+    );
+    for command in &resolver_config.prepublish {
+        let display = command_display(command);
+        if dry_run && !command.dry_run.unwrap_or(false) {
+            log::warn!(
+                "{}",
+                t!(
+                    "cli.publish.skip_prepublish_command",
+                    command = display.magenta(),
+                    package = package.name.cyan()
+                )
+            );
+            continue;
+        }
+        log::info!(
+            "{}",
+            t!(
+                "cli.publish.run_prepublish_command",
+                command = display.magenta(),
+                package = package.name.cyan()
+            )
+        );
+        utils::run_command(command, &package.path)?;
+    }
+
+    log::info!(
+        "{}",
+        t!(
+            "cli.publish.run_publish_commands",
+            package = package.name.cyan()
+        )
+    );
+    for command in &resolver_config.publish {
+        let display = command_display(command);
+        if dry_run && !command.dry_run.unwrap_or(false) {
+            log::warn!(
+                "{}",
+                t!(
+                    "cli.publish.skip_publish_command",
+                    command = display.magenta(),
+                    package = package.name.cyan()
+                )
+            );
+            continue;
+        }
+        log::info!(
+            "{}",
+            t!(
+                "cli.publish.run_publish_command",
+                command = display.magenta(),
+                package = package.name.cyan()
+            )
+        );
+        utils::run_command(command, &package.path)?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Result<()> {
     let config = ctx
         .config
@@ -187,7 +264,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
         }
 
         if !resolved_package.private {
-            resolver.publish(&resolved_package, resolver_config, ctx.dry_run)?;
+            run_publish_commands(&resolved_package, resolver_config, ctx.dry_run)?;
         } else {
             log::warn!(
                 "{}",
@@ -280,11 +357,14 @@ mod tests {
     };
 
     use semifold_resolver::{
-        config::{BranchesConfig, PackageConfig, ReleaseChannel},
-        resolver::ResolverType,
+        config::{
+            BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
+            ResolverConfig, StdioType,
+        },
+        resolver::{ResolvedPackage, ResolverType},
     };
 
-    use super::{Config, package_publish_order};
+    use super::{Config, package_publish_order, run_publish_commands};
 
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
@@ -359,6 +439,82 @@ mod tests {
             package_publish_order(&root, &config).unwrap(),
             ["core", "resolver", "changelog", "semifold"]
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn command(script: &str, dry_run: bool) -> CommandConfig {
+        CommandConfig {
+            command: "sh".to_string(),
+            args: Some(vec!["-c".to_string(), script.to_string()]),
+            extra_env: BTreeMap::new(),
+            stdout: StdioType::Null,
+            stderr: StdioType::Null,
+            dry_run: Some(dry_run),
+        }
+    }
+
+    fn resolver_config(prepublish: CommandConfig, publish: CommandConfig) -> ResolverConfig {
+        ResolverConfig {
+            pre_check: PreCheckConfig {
+                url: String::new(),
+                extra_headers: BTreeMap::new(),
+            },
+            prepublish: vec![prepublish],
+            publish: vec![publish],
+            post_version: vec![],
+        }
+    }
+
+    #[test]
+    fn unified_publish_commands_preserve_phase_order_and_dry_run_rules() {
+        let root = temporary_root();
+        let package = ResolvedPackage {
+            name: "example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            path: root.clone(),
+            private: false,
+        };
+        let commands = resolver_config(
+            command("printf 'prepublish\\n' >> commands.log", false),
+            command("printf 'publish\\n' >> commands.log", true),
+        );
+
+        run_publish_commands(&package, &commands, false).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("commands.log")).unwrap(),
+            "prepublish\npublish\n"
+        );
+
+        fs::remove_file(root.join("commands.log")).unwrap();
+        run_publish_commands(&package, &commands, true).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("commands.log")).unwrap(),
+            "publish\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unified_publish_commands_stop_before_publish_after_prepublish_failure() {
+        let root = temporary_root();
+        let package = ResolvedPackage {
+            name: "example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            path: root.clone(),
+            private: false,
+        };
+        let commands = resolver_config(
+            command("exit 7", false),
+            command("touch publish-marker", false),
+        );
+
+        let error = run_publish_commands(&package, &commands, false).unwrap_err();
+
+        assert!(matches!(
+            error,
+            semifold_resolver::error::ResolveError::CommandError { code: Some(7), .. }
+        ));
+        assert!(!root.join("publish-marker").exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

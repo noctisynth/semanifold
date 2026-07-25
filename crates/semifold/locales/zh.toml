@@ -93,6 +93,12 @@ allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"
 [cli.publish]
 skip_private = "由于包 %{package} %{version} 是私有的，跳过发布"
 pre_check = "包 %{package} %{version} 的预检查通过，跳过发布"
+run_prepublish_commands = "正在为包 %{package} 运行预发布命令"
+run_publish_commands = "正在为包 %{package} 运行发布命令"
+skip_prepublish_command = "由于处于模拟运行模式，跳过包 %{package} 的预发布命令 %{command}"
+skip_publish_command = "由于处于模拟运行模式，跳过包 %{package} 的发布命令 %{command}"
+run_prepublish_command = "正在为包 %{package} 运行预发布命令 %{command}"
+run_publish_command = "正在为包 %{package} 运行发布命令 %{command}"
 
 [cli.publish.flags]
 github_release = "为发布的包创建 GitHub Release，仅在 CI 环境中可用"

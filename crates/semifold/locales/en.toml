@@ -93,6 +93,12 @@ allow_dirty = "Allow versioning packages with dirty Git working tree"
 [cli.publish]
 skip_private = "Skip publishing %{package} %{version} as it is private"
 pre_check = "Pre-check passed for %{package} %{version}, skipping publish"
+run_prepublish_commands = "Running prepublish commands for %{package}"
+run_publish_commands = "Running publish commands for %{package}"
+skip_prepublish_command = "Skipping prepublish command %{command} for %{package} due to dry run"
+skip_publish_command = "Skipping publish command %{command} for %{package} due to dry run"
+run_prepublish_command = "Running prepublish command %{command} for %{package}"
+run_publish_command = "Running publish command %{command} for %{package}"
 
 [cli.publish.flags]
 github_release = "Create GitHub releases for published packages, only available in CI environment"

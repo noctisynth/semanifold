@@ -1,11 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    changeset::Changeset,
-    config::{PackageConfig, ResolverConfig},
-    context::Context,
-    error::ResolveError,
-    utils,
+    changeset::Changeset, config::PackageConfig, context::Context, error::ResolveError, utils,
 };
 use core::fmt;
 use std::path::{Path, PathBuf};
@@ -68,13 +64,6 @@ pub trait Resolver {
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError>;
-    /// Publish a package
-    fn publish(
-        &mut self,
-        package: &ResolvedPackage,
-        resolver_config: &ResolverConfig,
-        dry_run: bool,
-    ) -> Result<(), ResolveError>;
 }
 
 pub fn create_resolver(resolver_type: ResolverType) -> Box<dyn Resolver> {

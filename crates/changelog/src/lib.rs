@@ -17,6 +17,11 @@ pub struct GeneratedChangelog {
     pub remote_metadata_failed: bool,
 }
 
+pub struct CollectedChangelogContext {
+    pub context: ChangelogContext,
+    pub remote_metadata_failed: bool,
+}
+
 /// Immutable, fully collected input for pure changelog Markdown formatting.
 pub struct ChangelogContext {
     pub package_version: String,
@@ -76,7 +81,7 @@ pub fn format_line(
     line
 }
 
-pub async fn generate_changelog(
+pub async fn collect_changelog_context(
     ctx: &context::Context,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
@@ -84,7 +89,7 @@ pub async fn generate_changelog(
     package_version: &str,
     dependency_updates: &[(String, String)],
     collect_remote_metadata: bool,
-) -> Result<GeneratedChangelog, ResolveError> {
+) -> Result<CollectedChangelogContext, ResolveError> {
     let mut changes_map = BTreeMap::new();
     let mut remote_metadata_failed = false;
 
@@ -155,13 +160,38 @@ pub async fn generate_changelog(
         }
     }
 
-    Ok(GeneratedChangelog {
-        content: format_changelog(&ChangelogContext {
+    Ok(CollectedChangelogContext {
+        context: ChangelogContext {
             package_version: package_version.to_string(),
             sections: changes_map,
             dependency_updates: dependency_updates.to_vec(),
-        }),
+        },
         remote_metadata_failed,
+    })
+}
+
+pub async fn generate_changelog(
+    ctx: &context::Context,
+    repo: &git2::Repository,
+    changesets: &[changeset::Changeset],
+    package_name: &str,
+    package_version: &str,
+    dependency_updates: &[(String, String)],
+    collect_remote_metadata: bool,
+) -> Result<GeneratedChangelog, ResolveError> {
+    let collected = collect_changelog_context(
+        ctx,
+        repo,
+        changesets,
+        package_name,
+        package_version,
+        dependency_updates,
+        collect_remote_metadata,
+    )
+    .await?;
+    Ok(GeneratedChangelog {
+        content: format_changelog(&collected.context),
+        remote_metadata_failed: collected.remote_metadata_failed,
     })
 }
 

@@ -190,7 +190,7 @@
 
 ### Changelog
 
-- [ ] 分离 Git/Forge 元数据收集与 Markdown 格式化
+- [x] 分离 Git/Forge 元数据收集与 Markdown 格式化
 - [x] 定义不可变 `ChangelogContext`
 - [x] 让 changelog 格式化成为纯函数
 - [x] 为依赖传播自动加入发布闭包的 package 生成 `Dependencies` changelog 条目

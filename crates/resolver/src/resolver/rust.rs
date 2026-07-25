@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,
 };
 
@@ -49,65 +49,179 @@ pub struct RuntimeDependency {
     pub version_requirement: Option<semver::VersionReq>,
 }
 
-impl RustResolver {
-    /// Plans a manifest replacement from immutable package and version snapshots.
-    pub fn plan_file_edit(
-        root: &Path,
-        package: &PackageSnapshot,
-        versions: &VersionMap,
-    ) -> Result<FileEdit, ResolveError> {
-        let cargo_toml_path = root.join(package.path.as_std_path()).join("Cargo.toml");
-        let original = std::fs::read_to_string(&cargo_toml_path)?;
-        let next_version =
-            versions
-                .get(&package.id)
-                .ok_or_else(|| ResolveError::InvalidConfig {
-                    path: cargo_toml_path.clone(),
-                    reason: format!("missing planned version for {}", package.id),
-                })?;
-        let mut document = original
-            .parse::<toml_edit::DocumentMut>()
-            .map_err(|error| ResolveError::ParseError {
-                path: cargo_toml_path.clone(),
-                reason: error.to_string(),
-            })?;
-        let package_table = document["package"]
-            .as_table_mut()
-            .ok_or(ResolveError::ParseError {
-                path: cargo_toml_path.clone(),
-                reason: "package table not found".to_string(),
-            })?;
-        package_table["version"] = toml_edit::value(next_version.to_string());
+struct PlannedManifest {
+    original: String,
+    document: toml_edit::DocumentMut,
+    package: Option<PackageId>,
+    dependencies: BTreeSet<PackageId>,
+}
 
-        for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            if let Some(dependencies) = document[dependency_table].as_table_mut() {
-                for (name, dependency) in dependencies.iter_mut() {
-                    let manifest_name = dependency
-                        .get("package")
-                        .and_then(toml_edit::Item::as_str)
-                        .unwrap_or(name.get());
-                    let Some(version) = versions.get(&PackageId::new(manifest_name)) else {
-                        continue;
-                    };
-                    if dependency.is_str() {
-                        *dependency = toml_edit::value(version.to_string());
-                    } else if dependency.get("version").is_some() {
-                        dependency["version"] = toml_edit::value(version.to_string());
-                    }
+impl RustResolver {
+    /// Plans package and shared workspace manifest replacements as one deterministic batch.
+    pub fn plan_file_edits(
+        root: &Path,
+        released_packages: &[&PackageSnapshot],
+        workspace_packages: &[&PackageSnapshot],
+        versions: &VersionMap,
+    ) -> Result<Vec<FileEdit>, ResolveError> {
+        let changed_versions = workspace_packages
+            .iter()
+            .filter_map(|package| {
+                versions
+                    .get(&package.id)
+                    .filter(|version| *version != &package.version)
+                    .map(|version| {
+                        (
+                            package.manifest_name.clone(),
+                            (package.id.clone(), version.clone()),
+                        )
+                    })
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut manifests = BTreeMap::<String, PlannedManifest>::new();
+
+        for package in released_packages {
+            let relative_path = Self::manifest_path(package);
+            let manifest = Self::load_manifest(root, &relative_path, &mut manifests)?;
+            let next_version =
+                versions
+                    .get(&package.id)
+                    .ok_or_else(|| ResolveError::InvalidConfig {
+                        path: root.join(&relative_path),
+                        reason: format!("missing planned version for {}", package.id),
+                    })?;
+            let package_table =
+                manifest.document["package"]
+                    .as_table_mut()
+                    .ok_or(ResolveError::ParseError {
+                        path: root.join(&relative_path),
+                        reason: "package table not found".to_string(),
+                    })?;
+            package_table["version"] = toml_edit::value(next_version.to_string());
+            manifest.package = Some(package.id.clone());
+
+            for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                if let Some(dependencies) = manifest.document[dependency_table].as_table_mut() {
+                    manifest
+                        .dependencies
+                        .extend(Self::update_dependency_versions(
+                            dependencies,
+                            &changed_versions,
+                        ));
                 }
             }
         }
 
-        Ok(FileEdit {
-            path: package.path.join("Cargo.toml"),
-            expected: FileEditExpectation::Existing {
-                hash: FileHash::from_bytes(original.as_bytes()),
-            },
-            new_content: document.to_string(),
-            source: EditSource::PackageVersion {
-                package: package.id.clone(),
-            },
-        })
+        let workspace_path = "Cargo.toml";
+        let workspace_absolute = root.join(workspace_path);
+        if workspace_absolute.exists() {
+            let manifest = Self::load_manifest(root, workspace_path, &mut manifests)?;
+            if let Some(dependencies) = manifest
+                .document
+                .get_mut("workspace")
+                .and_then(toml_edit::Item::as_table_mut)
+                .and_then(|workspace| workspace.get_mut("dependencies"))
+                .and_then(toml_edit::Item::as_table_mut)
+            {
+                manifest
+                    .dependencies
+                    .extend(Self::update_dependency_versions(
+                        dependencies,
+                        &changed_versions,
+                    ));
+            }
+        }
+
+        manifests
+            .into_iter()
+            .filter_map(|(path, manifest)| {
+                let new_content = manifest.document.to_string();
+                (new_content != manifest.original).then_some((path, manifest, new_content))
+            })
+            .map(|(path, manifest, new_content)| {
+                let source = manifest.package.map_or_else(
+                    || EditSource::WorkspaceDependencies {
+                        dependencies: manifest.dependencies.into_iter().collect(),
+                    },
+                    |package| EditSource::PackageVersion { package },
+                );
+                Ok(FileEdit {
+                    path: path.into(),
+                    expected: FileEditExpectation::Existing {
+                        hash: FileHash::from_bytes(manifest.original.as_bytes()),
+                    },
+                    new_content,
+                    source,
+                })
+            })
+            .collect()
+    }
+
+    fn manifest_path(package: &PackageSnapshot) -> String {
+        if package.path.as_str().is_empty() || package.path == "." {
+            "Cargo.toml".to_string()
+        } else {
+            format!("{}/Cargo.toml", package.path.as_str().trim_end_matches('/'))
+        }
+    }
+
+    fn load_manifest<'manifests>(
+        root: &Path,
+        relative_path: &str,
+        manifests: &'manifests mut BTreeMap<String, PlannedManifest>,
+    ) -> Result<&'manifests mut PlannedManifest, ResolveError> {
+        if !manifests.contains_key(relative_path) {
+            let absolute_path = root.join(relative_path);
+            let original = std::fs::read_to_string(&absolute_path)?;
+            let document = original
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|error| ResolveError::ParseError {
+                    path: absolute_path,
+                    reason: error.to_string(),
+                })?;
+            manifests.insert(
+                relative_path.to_string(),
+                PlannedManifest {
+                    original,
+                    document,
+                    package: None,
+                    dependencies: BTreeSet::new(),
+                },
+            );
+        }
+        Ok(manifests
+            .get_mut(relative_path)
+            .expect("the Rust manifest is inserted immediately before this lookup"))
+    }
+
+    fn update_dependency_versions(
+        dependencies: &mut toml_edit::Table,
+        changed_versions: &BTreeMap<String, (PackageId, semver::Version)>,
+    ) -> BTreeSet<PackageId> {
+        let mut updated = BTreeSet::new();
+        for (name, dependency) in dependencies.iter_mut() {
+            let manifest_name = dependency
+                .get("package")
+                .and_then(toml_edit::Item::as_str)
+                .unwrap_or(name.get());
+            let Some((package, version)) = changed_versions.get(manifest_name) else {
+                continue;
+            };
+            let version = version.to_string();
+            if dependency.is_str() {
+                if dependency.as_str() != Some(version.as_str()) {
+                    *dependency = toml_edit::value(version);
+                    updated.insert(package.clone());
+                }
+            } else if dependency.get("version").is_some()
+                && dependency.get("version").and_then(toml_edit::Item::as_str)
+                    != Some(version.as_str())
+            {
+                dependency["version"] = toml_edit::value(version);
+                updated.insert(package.clone());
+            }
+        }
+        updated
     }
 
     fn dependency_requirement(dependency: &serde_json::Value) -> Option<String> {
@@ -513,7 +627,7 @@ mod tests {
         config::{PackageConfig, ReleaseChannel},
         resolver::{Resolver, ResolverType},
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
+    use semifold_core::{Ecosystem, EditSource, PackageId, PackageSnapshot, VersionMap};
 
     use super::RustResolver;
 
@@ -624,15 +738,61 @@ mod tests {
             publishable: true,
             dependencies: vec![],
         };
+        let internal = [
+            package.clone(),
+            PackageSnapshot {
+                id: PackageId::new("core-id"),
+                manifest_name: "core".to_string(),
+                version: semver::Version::new(1, 0, 0),
+                ecosystem: Ecosystem::Rust,
+                path: "crates/core".into(),
+                publishable: true,
+                dependencies: vec![],
+            },
+            PackageSnapshot {
+                id: PackageId::new("renamed-id"),
+                manifest_name: "renamed".to_string(),
+                version: semver::Version::new(2, 0, 0),
+                ecosystem: Ecosystem::Rust,
+                path: "crates/renamed".into(),
+                publishable: true,
+                dependencies: vec![],
+            },
+            PackageSnapshot {
+                id: PackageId::new("dev-id"),
+                manifest_name: "dev".to_string(),
+                version: semver::Version::new(3, 0, 0),
+                ecosystem: Ecosystem::Rust,
+                path: "crates/dev".into(),
+                publishable: true,
+                dependencies: vec![],
+            },
+            PackageSnapshot {
+                id: PackageId::new("build-id"),
+                manifest_name: "build".to_string(),
+                version: semver::Version::new(4, 0, 0),
+                ecosystem: Ecosystem::Rust,
+                path: "crates/build".into(),
+                publishable: true,
+                dependencies: vec![],
+            },
+        ];
         let versions = VersionMap::from([
             (PackageId::new("app"), semver::Version::new(1, 0, 1)),
-            (PackageId::new("core"), semver::Version::new(1, 1, 0)),
-            (PackageId::new("renamed"), semver::Version::new(2, 1, 0)),
-            (PackageId::new("dev"), semver::Version::new(3, 1, 0)),
-            (PackageId::new("build"), semver::Version::new(4, 1, 0)),
+            (PackageId::new("core-id"), semver::Version::new(1, 1, 0)),
+            (PackageId::new("renamed-id"), semver::Version::new(2, 1, 0)),
+            (PackageId::new("dev-id"), semver::Version::new(3, 1, 0)),
+            (PackageId::new("build-id"), semver::Version::new(4, 1, 0)),
         ]);
 
-        let edit = RustResolver::plan_file_edit(&root, &package, &versions).unwrap();
+        let edits = RustResolver::plan_file_edits(
+            &root,
+            &[&package],
+            &internal.iter().collect::<Vec<_>>(),
+            &versions,
+        )
+        .unwrap();
+        let edit = &edits[0];
 
         assert_eq!(edit.path.as_str(), "crates/app/Cargo.toml");
         assert_eq!(
@@ -653,6 +813,107 @@ mod tests {
         assert!(edit.new_content.contains("dev = \"3.1.0\""));
         assert!(edit.new_content.contains("build = { version = \"4.1.0\" }"));
         assert_eq!(fs::read_to_string(manifest_path).unwrap(), original);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn merges_workspace_dependency_updates_independently_of_release_order() {
+        let root = temp_dir("workspace-edit-plan");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.dependencies]\ncore-alias = { package = \"core\", version = \"1.0.0\", path = \"crates/core\" }\nhelper = \"2.0.0\"\nexternal = \"^9\"\n",
+        )
+        .unwrap();
+        write_package(&root, "crates/core", "core", "1.0.0", None, None);
+        write_package(&root, "crates/helper", "helper", "2.0.0", None, None);
+        let app_manifest = root.join("crates/app/Cargo.toml");
+        fs::create_dir_all(app_manifest.parent().unwrap()).unwrap();
+        fs::write(
+            &app_manifest,
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[dependencies]\ncore-alias = { workspace = true }\n\n[dev-dependencies]\nhelper = { workspace = true }\n",
+        )
+        .unwrap();
+
+        let app = PackageSnapshot {
+            id: PackageId::new("app-id"),
+            manifest_name: "app".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Rust,
+            path: "crates/app".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let core = PackageSnapshot {
+            id: PackageId::new("core-id"),
+            manifest_name: "core".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Rust,
+            path: "crates/core".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let helper = PackageSnapshot {
+            id: PackageId::new("helper-id"),
+            manifest_name: "helper".to_string(),
+            version: semver::Version::new(2, 0, 0),
+            ecosystem: Ecosystem::Rust,
+            path: "crates/helper".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([
+            (PackageId::new("app-id"), semver::Version::new(1, 0, 1)),
+            (PackageId::new("core-id"), semver::Version::new(1, 1, 0)),
+            (PackageId::new("helper-id"), semver::Version::new(2, 1, 0)),
+        ]);
+        let workspace = [&app, &core, &helper];
+
+        let first =
+            RustResolver::plan_file_edits(&root, &[&app, &core, &helper], &workspace, &versions)
+                .unwrap();
+        let second =
+            RustResolver::plan_file_edits(&root, &[&helper, &core, &app], &workspace, &versions)
+                .unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(
+            first
+                .iter()
+                .filter(|edit| edit.path == "Cargo.toml")
+                .count(),
+            1
+        );
+        let workspace_edit = first.iter().find(|edit| edit.path == "Cargo.toml").unwrap();
+        assert!(workspace_edit.new_content.contains(
+            "core-alias = { package = \"core\", version = \"1.1.0\", path = \"crates/core\" }"
+        ));
+        assert!(workspace_edit.new_content.contains("helper = \"2.1.0\""));
+        assert!(workspace_edit.new_content.contains("external = \"^9\""));
+        assert!(matches!(
+            &workspace_edit.source,
+            EditSource::WorkspaceDependencies { dependencies }
+                if dependencies
+                    == &[PackageId::new("core-id"), PackageId::new("helper-id")]
+        ));
+        let app_edit = first
+            .iter()
+            .find(|edit| edit.path == "crates/app/Cargo.toml")
+            .unwrap();
+        assert!(
+            app_edit
+                .new_content
+                .contains("core-alias = { workspace = true }")
+        );
+        assert!(
+            app_edit
+                .new_content
+                .contains("helper = { workspace = true }")
+        );
+        assert!(
+            fs::read_to_string(root.join("Cargo.toml"))
+                .unwrap()
+                .contains("version = \"1.0.0\"")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

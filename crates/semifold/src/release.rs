@@ -26,28 +26,53 @@ pub(crate) fn plan_release(
     let changesets = changeset_inputs(changesets);
     let policies = release_policies(&graph, config)?;
     let plan = ReleasePlanner::plan(&graph, &changesets, &policies)?;
-    let file_edits = plan
+    let rust_workspace_packages = graph
+        .packages()
+        .filter(|package| package.ecosystem == Ecosystem::Rust)
+        .collect::<Vec<_>>();
+    let rust_released_packages = plan
         .packages()
         .iter()
+        .filter(|release| release.ecosystem == Ecosystem::Rust)
         .map(|release| {
-            let package = graph
+            graph
                 .package(&release.id)
-                .expect("release plan packages are derived from the workspace graph");
-            match package.ecosystem {
-                Ecosystem::Rust => RustResolver::plan_file_edit(root, package, plan.versions())
-                    .map(|edit| vec![edit]),
-                Ecosystem::Node => NodejsResolver::plan_file_edit(root, package, plan.versions())
-                    .map(|edit| vec![edit]),
-                Ecosystem::Cpp => CppResolver::plan_file_edits(root, package, plan.versions()),
-                Ecosystem::Python => {
-                    PythonResolver::plan_file_edits(root, package, plan.versions())
-                }
-            }
+                .expect("release plan packages are derived from the workspace graph")
         })
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .flatten()
-        .collect();
+        .collect::<Vec<_>>();
+    let mut file_edits = RustResolver::plan_file_edits(
+        root,
+        &rust_released_packages,
+        &rust_workspace_packages,
+        plan.versions(),
+    )?;
+    file_edits.extend(
+        plan.packages()
+            .iter()
+            .filter_map(|release| {
+                let package = graph
+                    .package(&release.id)
+                    .expect("release plan packages are derived from the workspace graph");
+                match package.ecosystem {
+                    Ecosystem::Rust => None,
+                    Ecosystem::Node => Some(
+                        NodejsResolver::plan_file_edit(root, package, plan.versions())
+                            .map(|edit| vec![edit]),
+                    ),
+                    Ecosystem::Cpp => {
+                        Some(CppResolver::plan_file_edits(root, package, plan.versions()))
+                    }
+                    Ecosystem::Python => Some(PythonResolver::plan_file_edits(
+                        root,
+                        package,
+                        plan.versions(),
+                    )),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten(),
+    );
     Ok(plan.with_file_edits(file_edits)?)
 }
 
@@ -227,6 +252,72 @@ mod tests {
                 .contains("version = \"2.0.0\"")
         );
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_one_shared_workspace_dependency_edit_for_aliased_package_ids() {
+        let root = temporary_root();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"app\", \"core\"]\n\n[workspace.dependencies]\ncore-alias = { package = \"core\", version = \"^1.0.0\", path = \"core\" }\n",
+        )
+        .unwrap();
+        for (path, manifest) in [
+            ("core", "[package]\nname = \"core\"\nversion = \"1.0.0\"\n"),
+            (
+                "app",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[dependencies]\ncore-alias = { workspace = true }\n",
+            ),
+        ] {
+            fs::create_dir_all(root.join(path)).unwrap();
+            fs::write(root.join(path).join("Cargo.toml"), manifest).unwrap();
+        }
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("app-id".to_string(), package("app")),
+                ("core-id".to_string(), package("core")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("core-major".to_string(), &root);
+        changeset.add_package("core-id".to_string(), ResolverBumpLevel::Major, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(
+            plan.order(),
+            [PackageId::new("core-id"), PackageId::new("app-id")]
+        );
+        assert_eq!(
+            plan.file_edits()
+                .iter()
+                .map(|edit| edit.path.as_str())
+                .collect::<Vec<_>>(),
+            ["Cargo.toml", "app/Cargo.toml", "core/Cargo.toml"]
+        );
+        let workspace_edit = plan
+            .file_edits()
+            .iter()
+            .find(|edit| edit.path == "Cargo.toml")
+            .unwrap();
+        assert!(
+            workspace_edit.new_content.contains(
+                "core-alias = { package = \"core\", version = \"2.0.0\", path = \"core\" }"
+            )
+        );
+        assert_eq!(
+            plan.file_edits()
+                .iter()
+                .filter(|edit| edit.path == "Cargo.toml")
+                .count(),
+            1
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

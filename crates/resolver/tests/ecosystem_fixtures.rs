@@ -189,9 +189,12 @@ fn rust_manifest_rewrite_matches_snapshot() {
     let manifest = root.join("crates/app/Cargo.toml");
     copy_fixture("rust/app.before.toml", &manifest);
 
-    let edit = RustResolver::plan_file_edit(
+    let app = snapshot("crates/app", "app", Ecosystem::Rust);
+    let core = snapshot("crates/core", "core", Ecosystem::Rust);
+    let edits = RustResolver::plan_file_edits(
         &root,
-        &snapshot("crates/app", "app", Ecosystem::Rust),
+        &[&app],
+        &[&app, &core],
         &VersionMap::from([
             (
                 PackageId::new("app"),
@@ -204,7 +207,7 @@ fn rust_manifest_rewrite_matches_snapshot() {
         ]),
     )
     .unwrap();
-    fs::write(&manifest, edit.new_content).unwrap();
+    fs::write(&manifest, &edits[0].new_content).unwrap();
 
     assert_snapshot!(
         "rust_manifest_rewrite",

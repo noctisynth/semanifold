@@ -493,6 +493,17 @@ Python 或 Node binding 可以读取 Rust manifest 作为动态版本来源或�
 
 Rust manifest 与 Semifold TOML 配置必须使用保格式编辑器，保留无关的文本布局。`package.json` 则允许在完成 `serde_json::Value` 语义校验后使用启用 `preserve_order` 的序列化器规范化输出：对象键顺序必须保持，输出使用标准缩进并始终以一个换行结束。不得为 `package.json` 版本修改维护自定义字节级 JSON 解析或扫描器；JSON 结构、转义和边缘语法应完全由 `serde_json` 处理。
 
+Rust adapter 规划依赖版本时必须同时处理 package manifest 中的 `dependencies`、
+`dev-dependencies`、`build-dependencies`，以及 workspace 根 manifest 中的
+`workspace.dependencies`。依赖使用别名时，以 `package` 字段解析真实 manifest name；
+使用 `workspace = true` 时只修改共享的 `workspace.dependencies` 声明，不在成员
+manifest 中插入重复版本。共享 workspace manifest 必须在一次 Rust 批量规划中合并所有
+package version 与 dependency version 变化，同一路径只生成一个 `FileEdit`，结果不得依赖
+release package 的遍历顺序。只有目标 package 的计划版本相对当前版本发生变化时才重写
+对应依赖约束，避免将未变化的宽松约束无意义地规范化为精确版本。虚拟 workspace 根
+没有可归属的 package 时，edit source 使用 `EditSource::WorkspaceDependencies` 并按
+`PackageId` 稳定记录所有被更新的内部依赖。
+
 Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。
 
 对于 manifest 内部依赖，adapter 必须同时提供依赖类别与可发布版本约束。`ReleasePlanner` 只在依赖的计划新版本不满足该约束时，才将运行时依赖方自动加入发布闭包并规划 manifest 版本更新；约束仍满足时，依赖方不因该依赖单独发布。首版只将 Rust `[dependencies]` 视为运行时依赖，`dev-dependencies`、`build-dependencies`、Node peer/optional 及其他生态依赖类别必须在对应传播策略确定前保持不自动传播。

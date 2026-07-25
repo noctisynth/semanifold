@@ -32,6 +32,9 @@ pub enum EditSource {
         package: PackageId,
         dependency: PackageId,
     },
+    WorkspaceDependencies {
+        dependencies: Vec<PackageId>,
+    },
     Changelog {
         package: PackageId,
     },

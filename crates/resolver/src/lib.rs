@@ -1,5 +1,6 @@
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 
+pub mod adapter;
 pub mod changeset;
 pub mod config;
 pub mod context;

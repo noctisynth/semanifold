@@ -223,11 +223,11 @@
 
 ### 新接口
 
-- [ ] 定义 `EcosystemAdapter`
+- [x] 定义 `EcosystemAdapter`
 - [ ] 实现 `discover()`
 - [ ] 实现 `inspect()`
 - [ ] 实现 `plan_edits()`
-- [ ] Adapter 接收完整 `VersionMap`
+- [x] Adapter 接收完整 `VersionMap`
 - [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
 
 ### 迁移

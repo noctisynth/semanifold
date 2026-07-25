@@ -460,6 +460,19 @@ MiniJinja 必须使用严格未定义变量模式，并在渲染后验证 branch
 ### 7.1 接口
 
 ```rust
+pub struct PackageLocation {
+    pub id: PackageId,
+    pub project_root: Utf8PathBuf,
+    pub path: Utf8PathBuf,
+}
+
+pub struct EcosystemPlanInput<'a> {
+    pub project_root: &'a Utf8Path,
+    pub workspace_packages: &'a [PackageSnapshot],
+    pub released_packages: &'a [PackageId],
+    pub versions: &'a VersionMap,
+}
+
 pub trait EcosystemAdapter: Send + Sync {
     fn ecosystem(&self) -> Ecosystem;
 
@@ -475,11 +488,17 @@ pub trait EcosystemAdapter: Send + Sync {
 
     fn plan_edits(
         &self,
-        package: &PackageSnapshot,
-        versions: &VersionMap,
+        input: EcosystemPlanInput<'_>,
     ) -> Result<Vec<FileEdit>, AdapterError>;
 }
 ```
+
+`PackageLocation.project_root` 是已规范化的绝对项目根，`path` 是项目根内的规范化相对
+package path。`EcosystemPlanInput.workspace_packages` 只包含当前 adapter 所属生态的完整
+package 快照，`released_packages` 只包含本次实际发布的对应生态 package，并且
+`versions` 仍是全工作区完整版本映射。批量输入允许 Rust adapter 在一个调用中合并共享
+workspace manifest；不拥有共享 manifest 的生态也必须返回与 released package 输入顺序
+无关的稳定 edit 集合。
 
 ### 7.2 职责边界
 

@@ -209,6 +209,12 @@ pub enum DependencySource {
 
 `PackageId` 是 Semifold 配置和依赖图中的稳定身份，不应继续在所有层使用无约束 `String`。加载时应验证配置键、manifest 包名和依赖引用的关系。
 
+`PackageId` 在一份 Semifold 配置中全局唯一，但不自动采用 `ecosystem:name` namespace。manifest name
+只要求在同一生态内唯一：不同生态可以声明相同 manifest name，并通过用户选择的稳定 `PackageId`
+（例如 `rust-shared` 与 `node-shared`）区分；同一生态内出现重复 manifest name 时无法无歧义绑定
+manifest 依赖，工作区加载必须失败。manifest 依赖始终按 `(Ecosystem, manifest_name)` 解析，绝不因
+跨生态名称相同而推断跨生态边；跨生态关系只能通过 `depends-on` 引用稳定 `PackageId`。
+
 `DependencySource` 区分生态 manifest 推导的依赖与 `depends-on` 配置补充的依赖。两者都参与同一个
 `WorkspaceGraph`；同一 package 同时通过两种来源指向同一目标时，图边去重，但配置来源的发布传播语义仍必须保留。
 
@@ -969,7 +975,19 @@ pub enum ConfigSyncWarning {
 
 输出使用 `missing` 而不是 `removed`：它只表示配置项未被发现；是否删除由应用阶段结合完整扫描状态和 `--prune` 决定。rename 命中旧 package id 的未消费 changeset 时生成 `ChangesetReferencesRenamedPackage` warning，但不修改 changeset。所有结果按 package id、路径、生态和 changeset id 稳定排序。同一输入无论迭代顺序如何都必须产生相同计划。
 
-匹配前先验证 discovery 建议的 `PackageId` 唯一；同一 id 对应多个发现结果时分类为 `AmbiguousMatch`。随后严格分两轮匹配：第一轮匹配相同 ecosystem 与相同规范化 path，package id 不同时分类为 rename；第二轮在剩余项中匹配相同 `PackageId` 与相同 ecosystem，path 不同时分类为 move。相同路径或相同 `PackageId` 的 ecosystem 改变分类为 `ResolverChanged`。任一轮存在多对一或一对多候选时，将全部相关项分类为 `AmbiguousMatch`，不得同时把它们报告为 added 或 missing。剩余 discovery 项为 added，剩余 config 项为 missing。
+discovery 从 manifest name 生成的 `PackageId` 只是新增和 rename 的默认建议，不得覆盖已经配置的稳定
+身份。匹配前先识别同一生态内的重复建议；这代表 manifest name 本身有歧义，直接分类为
+`AmbiguousMatch`。随后严格按以下顺序匹配：
+
+1. 第一轮匹配相同 ecosystem 与相同规范化 path。默认建议唯一且 package id 不同时分类为 rename；
+   当同一默认建议被不同生态复用时，保留现有配置的 `PackageId`，不产生 rename；
+2. 对仍未匹配的 discovery 建议检查全局唯一性。多个未匹配 package 竞争同一建议，或建议已被第一轮
+   匹配的另一个 package 占用时，分类为 `AmbiguousMatch`，不得自动生成 namespace；
+3. 第二轮在剩余项中匹配相同 `PackageId` 与相同 ecosystem，path 不同时分类为 move；
+4. 相同路径或相同 `PackageId` 的 ecosystem 改变分类为 `ResolverChanged`。
+
+任一轮存在多对一或一对多候选时，将全部相关项分类为 `AmbiguousMatch`，不得同时把它们报告为
+added 或 missing。剩余 discovery 项为 added，剩余 config 项为 missing。
 
 执行流程：
 
@@ -989,7 +1007,8 @@ pub enum ConfigSyncWarning {
 
 同步不能只按包名匹配，否则重命名会被误判为“一删一增”，并丢失原配置中的手工字段。建议按以下优先级匹配：
 
-1. resolver 与规范化 package path 完全相同：视为同一个包，manifest name 改变时识别为 rename；
+1. resolver 与规范化 package path 完全相同：视为同一个包；manifest name 改变且默认
+   `PackageId` 建议唯一时识别为 rename，跨生态同名导致建议冲突时保留已配置 ID；
 2. `PackageId` 相同：path 改变时识别为 move；discovery 的默认 `PackageId` 从 manifest name 派生；
 3. 名称和路径均不匹配：视为新增和缺失；
 4. 多个包同时命中同一候选：产生冲突，不自动修改。
@@ -1186,7 +1205,7 @@ impl PackageDiscoveryService {
 }
 ```
 
-resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId`，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复 `PackageId` 保留在发现快照中，由 `ConfigSyncPlanner` 产生多义冲突，`init` 在无法生成唯一 package table key 时停止。
+resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId` 建议，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复建议保留在发现快照中。`ConfigSyncPlanner` 可用相同 ecosystem 与 path 将跨生态同名结果绑定到已有稳定 ID；首次 `init` 或未配置的多个新增 package 仍竞争同一建议时产生多义冲突并停止，不猜测 namespace。
 
 一次 discovery 只有“完整成功”或“失败”两种结果：任一所选 resolver 的 glob 遍历、manifest 读取、package 解析或路径规范化失败时，整个调用返回结构化错误，不得返回看似完整的部分快照。未选择的 resolver 不属于扫描范围；应用层据此禁止在部分 resolver 模式下 prune 其他生态的配置。现有 `resolve_all` 中记录 warning 后跳过损坏 package 的路径必须改为传播错误，避免把扫描失败误判为 package 已删除。
 
@@ -1483,7 +1502,7 @@ fixtures/rust/
 1. [已决定] 运行时内部依赖的新版本不满足依赖方 manifest 约束时，才自动触发依赖方 patch bump；显式 changeset 的更高 bump 优先。约束仍满足时不自动发布依赖方。
 2. [已决定] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播。
 3. peer、optional 和其他生态依赖类别分别采用什么传播策略。
-4. 不同生态包名相同时，`PackageId` 是否需要 `ecosystem:name` namespace。
+4. [已决定] `PackageId` 全局唯一但不自动添加 namespace；跨生态同名 manifest 由已有配置的稳定 ID 区分，首次发现无法唯一落盘时报告冲突。
 5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
 6. [已决定] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`，并保留可诊断的收集错误。
 7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。

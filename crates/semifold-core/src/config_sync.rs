@@ -116,15 +116,28 @@ impl ConfigSyncPlanner {
                 .or_default()
                 .push(index);
         }
-        for (id, discovered_indexes) in discovered_by_id {
+        let colliding_discovered_ids = discovered_by_id
+            .iter()
+            .filter_map(|(id, indexes)| (indexes.len() > 1).then_some(id.clone()))
+            .collect::<BTreeSet<_>>();
+        for (id, discovered_indexes) in &discovered_by_id {
             if discovered_indexes.len() < 2 {
+                continue;
+            }
+            let mut ecosystems = BTreeMap::<Ecosystem, usize>::new();
+            for discovered_index in discovered_indexes {
+                *ecosystems
+                    .entry(discovered[*discovered_index].ecosystem)
+                    .or_default() += 1;
+            }
+            if ecosystems.values().all(|count| *count == 1) {
                 continue;
             }
             let configured_indexes = configured
                 .iter()
                 .enumerate()
                 .filter_map(|(index, package)| {
-                    (package.id == id
+                    (package.id == *id
                         || discovered_indexes.iter().any(|discovered_index| {
                             let found = &discovered[*discovered_index];
                             package.ecosystem == found.ecosystem && package.path == found.path
@@ -134,7 +147,7 @@ impl ConfigSyncPlanner {
                 .collect::<Vec<_>>();
             matches.push_ambiguous(
                 &configured_indexes,
-                &discovered_indexes,
+                discovered_indexes,
                 &configured,
                 &discovered,
             );
@@ -169,7 +182,7 @@ impl ConfigSyncPlanner {
                 let discovered_index = discovered_indexes[0];
                 let current = &configured[configured_index];
                 let found = &discovered[discovered_index];
-                if current.id != found.id {
+                if current.id != found.id && !colliding_discovered_ids.contains(&found.id) {
                     renamed.push(PackageRename {
                         from: current.id.clone(),
                         to: found.id.clone(),
@@ -183,6 +196,36 @@ impl ConfigSyncPlanner {
                 matches.push_ambiguous(
                     &configured_indexes,
                     discovered_indexes,
+                    &configured,
+                    &discovered,
+                );
+            }
+        }
+
+        for (id, discovered_indexes) in &discovered_by_id {
+            if discovered_indexes.len() < 2 {
+                continue;
+            }
+            let remaining_discovered_indexes = discovered_indexes
+                .iter()
+                .copied()
+                .filter(|index| !matches.discovered.contains(index))
+                .collect::<Vec<_>>();
+            if remaining_discovered_indexes.is_empty() {
+                continue;
+            }
+            let configured_indexes = configured
+                .iter()
+                .enumerate()
+                .filter_map(|(index, package)| (package.id == *id).then_some(index))
+                .collect::<Vec<_>>();
+            let suggestion_is_already_bound = configured_indexes
+                .iter()
+                .any(|index| matches.configured.contains(index));
+            if remaining_discovered_indexes.len() > 1 || suggestion_is_already_bound {
+                matches.push_ambiguous(
+                    &configured_indexes,
+                    &remaining_discovered_indexes,
                     &configured,
                     &discovered,
                 );
@@ -492,6 +535,70 @@ mod tests {
             }]
         );
         assert!(plan.added.is_empty());
+    }
+
+    #[test]
+    fn preserves_configured_ids_for_cross_ecosystem_manifest_name_collisions() {
+        let plan = plan(
+            &[
+                configured("rust-shared", Ecosystem::Rust, "crates/shared"),
+                configured("node-shared", Ecosystem::Node, "packages/shared"),
+            ],
+            &[
+                discovered("shared", Ecosystem::Node, "packages/shared"),
+                discovered("shared", Ecosystem::Rust, "crates/shared"),
+            ],
+        );
+
+        assert!(!plan.has_drift());
+        assert!(plan.renamed.is_empty());
+        assert!(plan.conflicts.is_empty());
+    }
+
+    #[test]
+    fn rejects_an_unconfigured_collision_with_an_already_bound_package_id() {
+        let rust = configured("shared", Ecosystem::Rust, "crates/shared");
+        let node = discovered("shared", Ecosystem::Node, "packages/shared");
+        let plan = plan(
+            std::slice::from_ref(&rust),
+            &[
+                discovered("shared", Ecosystem::Rust, "crates/shared"),
+                node.clone(),
+            ],
+        );
+
+        assert_eq!(
+            plan.conflicts,
+            [ConfigConflict::AmbiguousMatch {
+                configured: vec![rust],
+                discovered: vec![node],
+            }]
+        );
+        assert!(plan.added.is_empty());
+        assert!(plan.renamed.is_empty());
+    }
+
+    #[test]
+    fn rejects_same_ecosystem_manifest_name_collisions_even_when_ids_are_configured() {
+        let first_configured = configured("first", Ecosystem::Rust, "crates/first");
+        let second_configured = configured("second", Ecosystem::Rust, "crates/second");
+        let first_discovered = discovered("shared", Ecosystem::Rust, "crates/first");
+        let second_discovered = discovered("shared", Ecosystem::Rust, "crates/second");
+
+        let plan = plan(
+            &[first_configured.clone(), second_configured.clone()],
+            &[second_discovered.clone(), first_discovered.clone()],
+        );
+
+        assert_eq!(
+            plan.conflicts,
+            [ConfigConflict::AmbiguousMatch {
+                configured: vec![first_configured, second_configured],
+                discovered: vec![first_discovered, second_discovered],
+            }]
+        );
+        assert!(plan.added.is_empty());
+        assert!(plan.missing.is_empty());
     }
 
     #[test]

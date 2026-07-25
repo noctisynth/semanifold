@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0-alpha.8
+
+### Bug Fixes
+
+- [`3ef7c05`](https://github.com/noctisynth/semifold/commit/3ef7c0538172b0e3fd4e3755d44dfe5c26255e40): Warn when changelog generation continues without pull request metadata.
+- [`47b85dc`](https://github.com/noctisynth/semifold/commit/47b85dc4e83fa33f0981efcc7dc12b11fb7ddae8): Publish packages in the deterministic WorkspaceGraph topological order so registry dependencies are available before their dependents.
+
+### New Features
+
+- [`419d267`](https://github.com/noctisynth/semifold/commit/419d267f7f15a2ff930f5fc9f8cd256735b8b07a): Plan CMake and vcpkg version edits before applying C++ release changes.
+
+### Refactors
+
+- [`472c745`](https://github.com/noctisynth/semifold/commit/472c745c771e29a9bc1c741cdbdd8d8e70a259cb): Prepare release planning for ecosystem adapters that produce multiple file edits per package.
+
 ## v0.3.0-alpha.7
 
 ### Refactors

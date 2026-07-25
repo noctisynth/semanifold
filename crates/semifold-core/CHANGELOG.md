@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.0-beta.0
+
+### Bug Fixes
+
+- [`fd19bf0`](https://github.com/noctisynth/semifold/commit/fd19bf09d523d07f75813c064b97b8ca899d2d64): Preserve configured package IDs when manifests share names across ecosystems.
+
+### New Features
+
+- [`e108ed0`](https://github.com/noctisynth/semifold/commit/e108ed0721d928d8ca543ce7bc3c00db0030afe3): Support explicit cross-ecosystem dependency ordering and release propagation.
+
+### Refactors
+
+- [`1932935`](https://github.com/noctisynth/semifold/commit/1932935da7bd936f07c4f3bc58b01e9552350994): Document and enforce dependency-kind ordering and propagation policies.
+
 ## v0.1.0-alpha.5
 
 ### Bug Fixes

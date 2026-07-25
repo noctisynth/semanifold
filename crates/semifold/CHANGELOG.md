@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0-alpha.9
+
+### Bug Fixes
+
+- [`6dabc7d`](https://github.com/noctisynth/semifold/commit/6dabc7d6dce7c4f69048f7cc86030621f7c1ba6c): Clean the current and remaining temporary files when a release file replacement fails.
+- [`fce12df`](https://github.com/noctisynth/semifold/commit/fce12dff6bf2282af11f9129d3620ef852daf1e8): Plan Rust package and workspace dependency version edits as one deterministic batch.
+
+### New Features
+
+- [`04e0a5e`](https://github.com/noctisynth/semifold/commit/04e0a5e5da84a3e5703ba9eaa839a54b17f178ad): Plan Python manifest and source version edits through the unified release plan without modifying Cargo.toml.
+
+### Refactors
+
+- [`4f10fcf`](https://github.com/noctisynth/semifold/commit/4f10fcf62ed28085c1bd9a2d6db5f4578895b742): Separate read-only release edit validation from file application and strengthen zero-write failure coverage.
+
 ## v0.3.0-alpha.8
 
 ### Bug Fixes

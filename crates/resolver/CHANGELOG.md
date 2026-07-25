@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.0-alpha.7
+
+### Bug Fixes
+
+- [`fce12df`](https://github.com/noctisynth/semifold/commit/fce12dff6bf2282af11f9129d3620ef852daf1e8): Plan Rust package and workspace dependency version edits as one deterministic batch.
+
+### New Features
+
+- [`38e7011`](https://github.com/noctisynth/semifold/commit/38e7011afb86e2a2cf04c9bb90f1b258bda8df87): Define the side-effect-free ecosystem adapter contract and complete batch edit planning input.
+- [`04e0a5e`](https://github.com/noctisynth/semifold/commit/04e0a5e5da84a3e5703ba9eaa839a54b17f178ad): Plan Python manifest and source version edits through the unified release plan without modifying Cargo.toml.
+
 ## v0.4.0-alpha.6
 
 ### New Features

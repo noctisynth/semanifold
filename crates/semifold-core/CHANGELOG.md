@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.0-alpha.5
+
+### Bug Fixes
+
+- [`fce12df`](https://github.com/noctisynth/semifold/commit/fce12dff6bf2282af11f9129d3620ef852daf1e8): Plan Rust package and workspace dependency version edits as one deterministic batch.
+
 ## v0.1.0-alpha.4
 
 ### Bug Fixes

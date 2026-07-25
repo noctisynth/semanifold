@@ -224,9 +224,9 @@
 ### 新接口
 
 - [x] 定义 `EcosystemAdapter`
-- [ ] 实现 `discover()`
-- [ ] 实现 `inspect()`
-- [ ] 实现 `plan_edits()`
+- [x] 实现 `discover()`
+- [x] 实现 `inspect()`
+- [x] 实现 `plan_edits()`
 - [x] Adapter 接收完整 `VersionMap`
 - [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
 
@@ -235,7 +235,7 @@
 - [x] 迁移 Rust adapter（discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
 - [x] 迁移 Node.js adapter（discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
 - [x] 迁移 Python adapter（discovery、workspace inspection 与 version edit planning 已接入；动态版本只读 Cargo.toml，旧 publish 桥接由统一发布引擎移除）
-- [ ] 迁移 C++ adapter
+- [x] 迁移 C++ adapter（递归 discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
 - [ ] 删除 `Resolver::sort_packages()`
 - [ ] 删除 `Resolver::publish()`
 - [ ] 删除 adapter 对 `Context` 的依赖

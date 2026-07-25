@@ -1,15 +1,19 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::{Path, PathBuf},
 };
 
 use regex::Regex;
 use semifold_core::{
-    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageSnapshot,
-    VersionMap,
+    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    PackageSnapshot, VersionMap,
 };
 
 use crate::{
+    adapter::{
+        AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
+        PackageLocation,
+    },
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
@@ -20,6 +24,43 @@ use crate::{
 pub struct CppResolver;
 
 impl CppResolver {
+    fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Cpp,
+            channel: ReleaseChannel::Stable,
+            assets: Vec::new(),
+        }
+    }
+
+    fn package_inspection(
+        id: PackageId,
+        package: ResolvedPackage,
+        dependencies: Vec<ResolvedDependency>,
+    ) -> Result<PackageInspection, AdapterError> {
+        let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
+            AdapterError::InvalidInput {
+                reason: format!("C++ package path is not valid UTF-8: {}", path.display()),
+            }
+        })?;
+        Ok(PackageInspection {
+            id,
+            manifest_name: package.name,
+            version: package.version,
+            ecosystem: Ecosystem::Cpp,
+            path,
+            publishable: !package.private,
+            dependencies: dependencies
+                .into_iter()
+                .map(|dependency| ManifestDependency {
+                    manifest_name: dependency.manifest_name,
+                    kind: dependency.kind,
+                    requirement: dependency.requirement,
+                })
+                .collect(),
+        })
+    }
+
     pub fn plan_file_edits(
         root: &Path,
         package: &PackageSnapshot,
@@ -76,8 +117,8 @@ impl CppResolver {
         }
         Ok(edits)
     }
-    fn direct_workspace_members(&self, root: &Path) -> Result<Vec<PathBuf>, ResolveError> {
-        let cmake_path = root.join("CMakeLists.txt");
+    fn literal_subdirectories(&self, directory: &Path) -> Result<Vec<PathBuf>, ResolveError> {
+        let cmake_path = directory.join("CMakeLists.txt");
         let content = std::fs::read_to_string(&cmake_path)?;
         let re =
             Regex::new(r#"(?im)^\s*add_subdirectory\s*\(\s*["']?([^"'\s\)]+)"#).map_err(|e| {
@@ -90,9 +131,65 @@ impl CppResolver {
         Ok(re
             .captures_iter(&content)
             .filter_map(|captures| captures.get(1))
-            .map(|member| root.join(member.as_str()))
+            .map(|member| directory.join(member.as_str()))
             .filter(|member| member.join("CMakeLists.txt").exists())
             .collect())
+    }
+
+    fn workspace_members(&self, root: &Path) -> Result<Vec<PathBuf>, ResolveError> {
+        let canonical_root = std::fs::canonicalize(root)?;
+        let mut pending = BTreeSet::from([canonical_root.clone()]);
+        let mut visited = BTreeSet::new();
+        let mut members = BTreeSet::new();
+
+        while let Some(directory) = pending.pop_first() {
+            if !visited.insert(directory.clone()) {
+                continue;
+            }
+            if directory != canonical_root {
+                let cmake_path = directory.join("CMakeLists.txt");
+                let content = std::fs::read_to_string(&cmake_path)?;
+                if self.has_versioned_project(&content, &cmake_path)? {
+                    members.insert(directory.clone());
+                }
+            }
+            for child in self.literal_subdirectories(&directory)? {
+                let canonical_child = std::fs::canonicalize(&child)?;
+                if !canonical_child.starts_with(&canonical_root) {
+                    return Err(ResolveError::InvalidConfig {
+                        path: child,
+                        reason: "add_subdirectory path escapes the project root".to_string(),
+                    });
+                }
+                pending.insert(canonical_child);
+            }
+        }
+
+        members
+            .into_iter()
+            .map(|member| {
+                member
+                    .strip_prefix(&canonical_root)
+                    .map(Path::to_path_buf)
+                    .map_err(|_| ResolveError::InvalidConfig {
+                        path: member,
+                        reason: "C++ workspace member is outside the project root".to_string(),
+                    })
+            })
+            .collect()
+    }
+
+    fn has_versioned_project(
+        &self,
+        content: &str,
+        cmake_path: &Path,
+    ) -> Result<bool, ResolveError> {
+        Regex::new(r"(?i)project\s*\([^)]*VERSION\s+")
+            .map(|regex| regex.is_match(content))
+            .map_err(|error| ResolveError::ParseError {
+                path: cmake_path.to_path_buf(),
+                reason: format!("Invalid regex: {error}"),
+            })
     }
 
     fn internal_dependencies(
@@ -123,6 +220,22 @@ impl CppResolver {
                     .filter(|dependency| !matches!(*dependency, "PUBLIC" | "PRIVATE" | "INTERFACE"))
                     .map(str::to_string)
                     .collect::<Vec<_>>()
+            })
+            .collect())
+    }
+
+    fn manifest_dependencies(
+        &self,
+        root: &Path,
+        pkg_config: &PackageConfig,
+    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+        Ok(self
+            .internal_dependencies(root, pkg_config)?
+            .into_iter()
+            .map(|manifest_name| ResolvedDependency {
+                manifest_name,
+                kind: DependencyKind::Runtime,
+                requirement: None,
             })
             .collect())
     }
@@ -181,6 +294,94 @@ impl CppResolver {
     }
 }
 
+impl EcosystemAdapter for CppResolver {
+    fn ecosystem(&self) -> Ecosystem {
+        Ecosystem::Cpp
+    }
+
+    fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
+        let mut resolver = Self;
+        let packages = resolver.resolve_all(root.as_std_path())?;
+        let mut inspections = packages
+            .into_iter()
+            .map(|package| {
+                let dependencies = self.manifest_dependencies(
+                    root.as_std_path(),
+                    &Self::package_config(package.path.clone()),
+                )?;
+                Self::package_inspection(
+                    PackageId::new(package.name.clone()),
+                    package,
+                    dependencies,
+                )
+            })
+            .collect::<Result<Vec<_>, AdapterError>>()?;
+        inspections.sort_by(|left, right| {
+            left.id
+                .cmp(&right.id)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+        Ok(inspections)
+    }
+
+    fn inspect(&self, location: &PackageLocation) -> Result<PackageInspection, AdapterError> {
+        if location.path.is_absolute()
+            || location
+                .path
+                .components()
+                .any(|component| component == camino::Utf8Component::ParentDir)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: format!(
+                    "C++ package path must be relative to the project root: {}",
+                    location.path
+                ),
+            });
+        }
+        let config = Self::package_config(location.path.as_std_path());
+        let mut resolver = Self;
+        let package = resolver.resolve(location.project_root.as_std_path(), &config)?;
+        let dependencies =
+            self.manifest_dependencies(location.project_root.as_std_path(), &config)?;
+        Self::package_inspection(location.id.clone(), package, dependencies)
+    }
+
+    fn plan_edits(&self, input: EcosystemPlanInput<'_>) -> Result<Vec<FileEdit>, AdapterError> {
+        if input
+            .workspace_packages
+            .iter()
+            .any(|package| package.ecosystem != Ecosystem::Cpp)
+        {
+            return Err(AdapterError::InvalidInput {
+                reason: "C++ edit planning received a non-C++ workspace package".to_string(),
+            });
+        }
+        let workspace_packages = input
+            .workspace_packages
+            .iter()
+            .map(|package| (package.id.clone(), package))
+            .collect::<BTreeMap<_, _>>();
+        let released_packages = input.released_packages.iter().collect::<BTreeSet<_>>();
+
+        released_packages
+            .into_iter()
+            .map(|id| {
+                let package = workspace_packages.get(id).copied().ok_or_else(|| {
+                    AdapterError::InvalidInput {
+                        reason: format!("released C++ package {id} is not in the workspace"),
+                    }
+                })?;
+                Ok(Self::plan_file_edits(
+                    input.project_root.as_std_path(),
+                    package,
+                    input.versions,
+                )?)
+            })
+            .collect::<Result<Vec<_>, AdapterError>>()
+            .map(|edits| edits.into_iter().flatten().collect())
+    }
+}
+
 impl Resolver for CppResolver {
     fn resolve(
         &mut self,
@@ -219,28 +420,11 @@ impl Resolver for CppResolver {
             return Ok(vec![]);
         }
 
-        let root_package = self.resolve(
-            root,
-            &PackageConfig {
-                path: ".".into(),
-                resolver: ResolverType::Cpp,
-                channel: ReleaseChannel::Stable,
-                assets: vec![],
-            },
-        )?;
+        let root_package = self.resolve(root, &Self::package_config("."))?;
 
         let mut packages = vec![root_package];
-        for member in self.direct_workspace_members(root)? {
-            let relative_path = pathdiff::diff_paths(&member, root).unwrap_or(member);
-            packages.push(self.resolve(
-                root,
-                &PackageConfig {
-                    path: relative_path,
-                    resolver: ResolverType::Cpp,
-                    channel: ReleaseChannel::Stable,
-                    assets: vec![],
-                },
-            )?);
+        for member in self.workspace_members(root)? {
+            packages.push(self.resolve(root, &Self::package_config(member))?);
         }
 
         Ok(packages)
@@ -251,15 +435,7 @@ impl Resolver for CppResolver {
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
-        Ok(self
-            .internal_dependencies(root, pkg_config)?
-            .into_iter()
-            .map(|manifest_name| ResolvedDependency {
-                manifest_name,
-                kind: DependencyKind::Runtime,
-                requirement: None,
-            })
-            .collect())
+        self.manifest_dependencies(root, pkg_config)
     }
 
     fn sort_packages(
@@ -358,7 +534,9 @@ mod tests {
     };
 
     use crate::{
+        adapter::{AdapterError, EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
+        error::ResolveError,
         resolver::{Resolver, ResolverType},
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
@@ -431,6 +609,81 @@ mod tests {
     }
 
     #[test]
+    fn adapter_recursively_discovers_and_inspects_literal_subdirectories() {
+        let root = temp_dir("adapter-workspace");
+        write_cmake_project(&root, ".", "root-project", "1.0.0");
+        fs::write(
+            root.join("CMakeLists.txt"),
+            "project(root-project VERSION 1.0.0)\nadd_subdirectory(groups)\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("groups")).unwrap();
+        fs::write(
+            root.join("groups/CMakeLists.txt"),
+            "add_subdirectory(../libraries/core)\nadd_subdirectory(../applications/app)\n",
+        )
+        .unwrap();
+        write_cmake_project(&root, "libraries/core", "core", "1.0.0");
+        write_cmake_project(&root, "applications/app", "app", "1.0.0");
+        fs::write(
+            root.join("applications/app/CMakeLists.txt"),
+            "project(app VERSION 1.0.0)\ntarget_link_libraries(app PRIVATE core external)\n",
+        )
+        .unwrap();
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        let discovered = CppResolver.discover(&project_root).unwrap();
+        assert_eq!(
+            discovered
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>(),
+            ["app", "core", "root-project"]
+        );
+        let app = CppResolver
+            .inspect(&PackageLocation {
+                id: PackageId::new("configured-app"),
+                project_root,
+                path: "applications/app".into(),
+            })
+            .unwrap();
+
+        assert_eq!(app.id, PackageId::new("configured-app"));
+        assert_eq!(app.manifest_name, "app");
+        assert_eq!(
+            app.dependencies
+                .iter()
+                .map(|dependency| dependency.manifest_name.as_str())
+                .collect::<Vec<_>>(),
+            ["core", "external"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn adapter_rejects_a_literal_subdirectory_outside_the_project_root() {
+        let root = temp_dir("adapter-escape");
+        let external = temp_dir("adapter-escape-external");
+        let external_name = external.file_name().unwrap().to_string_lossy();
+        write_cmake_project(&external, ".", "external", "1.0.0");
+        fs::write(
+            root.join("CMakeLists.txt"),
+            format!("project(root VERSION 1.0.0)\nadd_subdirectory(../{external_name})\n"),
+        )
+        .unwrap();
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        assert!(matches!(
+            CppResolver.discover(&project_root),
+            Err(AdapterError::LegacyResolver(
+                ResolveError::InvalidConfig { .. }
+            ))
+        ));
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(external).unwrap();
+    }
+
+    #[test]
     fn plans_cmake_and_optional_vcpkg_edits_without_writing() {
         let root = temp_dir("plan-file-edits");
         write_cmake_project(&root, "library", "demo-library", "1.0.0");
@@ -449,15 +702,18 @@ mod tests {
             dependencies: vec![],
         };
 
-        let edits = CppResolver::plan_file_edits(
-            &root,
-            &package,
-            &VersionMap::from([(
-                PackageId::new("demo-library"),
-                semver::Version::new(1, 0, 1),
-            )]),
-        )
-        .unwrap();
+        let versions = VersionMap::from([(
+            PackageId::new("demo-library"),
+            semver::Version::new(1, 0, 1),
+        )]);
+        let edits = CppResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&package),
+                released_packages: std::slice::from_ref(&package.id),
+                versions: &versions,
+            })
+            .unwrap();
 
         assert_eq!(edits.len(), 2);
         assert!(

@@ -1,11 +1,5 @@
 # Changelog
 
-## v0.4.0-alpha.6
-
-### New Features
-
-- [`419d267`](https://github.com/noctisynth/semifold/commit/419d267f7f15a2ff930f5fc9f8cd256735b8b07a): Plan CMake and vcpkg version edits before applying C++ release changes.
-
 ## v0.4.0-alpha.5
 
 ### Bug Fixes

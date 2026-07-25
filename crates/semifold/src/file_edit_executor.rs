@@ -62,7 +62,7 @@ impl<'root> FileEditExecutor<'root> {
                 }
             };
             if let Err(source) = result {
-                cleanup_temporary_files(&temporary_files[applied.len() + 1..]);
+                cleanup_unapplied_temporary_files(&temporary_files, applied.len());
                 return Err(FileEditApplyError::Replace {
                     path: target.path.clone(),
                     applied,
@@ -161,6 +161,10 @@ fn cleanup_temporary_files(files: &[Utf8PathBuf]) {
     for file in files {
         let _ = fs::remove_file(file);
     }
+}
+
+fn cleanup_unapplied_temporary_files(files: &[Utf8PathBuf], applied: usize) {
+    cleanup_temporary_files(&files[applied..]);
 }
 
 #[derive(Debug)]
@@ -282,7 +286,7 @@ mod tests {
 
     use semifold_core::{EditSource, FileEdit, FileEditExpectation, FileHash, PackageId};
 
-    use super::{FileEditApplyError, FileEditExecutor};
+    use super::{FileEditApplyError, FileEditExecutor, cleanup_unapplied_temporary_files};
 
     static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -385,6 +389,23 @@ mod tests {
                 .to_string_lossy()
                 .contains(".smif-")
         }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn replacement_failure_cleanup_includes_the_current_temporary_file() {
+        let root = temporary_root();
+        let temporary_files =
+            ["applied.tmp", "failed.tmp", "pending.tmp"].map(|name| root.join(name));
+        for file in &temporary_files {
+            fs::write(file, "temporary").unwrap();
+        }
+
+        cleanup_unapplied_temporary_files(&temporary_files, 1);
+
+        assert!(temporary_files[0].exists());
+        assert!(!temporary_files[1].exists());
+        assert!(!temporary_files[2].exists());
         fs::remove_dir_all(root).unwrap();
     }
 

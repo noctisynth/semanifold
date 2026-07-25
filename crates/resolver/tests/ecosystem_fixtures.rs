@@ -9,7 +9,7 @@ use std::{
 
 use insta::assert_snapshot;
 use semifold_core::{
-    Dependency, Ecosystem, PackageId, PackageSnapshot, VersionMap, WorkspaceGraph,
+    Dependency, DependencySource, Ecosystem, PackageId, PackageSnapshot, VersionMap, WorkspaceGraph,
 };
 use semifold_resolver::{
     adapter::{EcosystemAdapter, PackageLocation},
@@ -63,6 +63,7 @@ fn config(path: &str, resolver: ResolverType) -> PackageConfig {
         resolver,
         channel: ReleaseChannel::Stable,
         assets: vec![],
+        depends_on: vec![],
     }
 }
 
@@ -125,6 +126,7 @@ fn adapter_order(
                             package,
                             kind: dependency.kind,
                             requirement: dependency.requirement,
+                            source: DependencySource::Manifest,
                         })
                 })
                 .collect(),

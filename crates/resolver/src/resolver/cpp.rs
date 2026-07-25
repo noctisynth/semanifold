@@ -30,6 +30,7 @@ impl CppResolver {
             resolver: ResolverType::Cpp,
             channel: ReleaseChannel::Stable,
             assets: Vec::new(),
+            depends_on: vec![],
         }
     }
 
@@ -524,6 +525,7 @@ mod tests {
             resolver: ResolverType::Cpp,
             channel: ReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 

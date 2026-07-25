@@ -305,6 +305,7 @@ mod tests {
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 

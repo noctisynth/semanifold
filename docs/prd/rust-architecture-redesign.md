@@ -187,19 +187,30 @@ pub struct Dependency {
     pub package: PackageId,
     pub kind: DependencyKind,
     pub requirement: Option<String>,
+    pub source: DependencySource,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DependencyKind {
+    Unspecified,
     Runtime,
     Development,
     Build,
     Optional,
     Peer,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DependencySource {
+    Manifest,
+    Config,
+}
 ```
 
 `PackageId` 是 Semifold 配置和依赖图中的稳定身份，不应继续在所有层使用无约束 `String`。加载时应验证配置键、manifest 包名和依赖引用的关系。
+
+`DependencySource` 区分生态 manifest 推导的依赖与 `depends-on` 配置补充的依赖。两者都参与同一个
+`WorkspaceGraph`；同一 package 同时通过两种来源指向同一目标时，图边去重，但配置来源的发布传播语义仍必须保留。
 
 ### 6.2 `WorkspaceGraph`
 
@@ -594,6 +605,15 @@ depends-on = ["rust-core"]
 ```
 
 该字段在新实现稳定后作为向后兼容的可选配置引入，不阻塞第一阶段迁移。
+
+`depends-on` 中的值必须引用配置中的稳定 `PackageId`，允许跨生态引用。每条显式边转换为
+`source = Config`、`kind = Unspecified`、无版本约束的内部依赖：
+
+- 与 manifest 内部依赖共同参与拓扑排序、未知目标校验和依赖环检测；
+- 依赖 package 发生任意版本发布时，触发 dependent 的 patch 发布，不受 dependent 所属生态限制；
+- 不将该传播规则扩大到 Node.js、Python 或 C++ manifest 依赖；这些依赖种类的传播策略仍按阶段 4
+  的独立任务定义；
+- 新增 package 或执行 `config sync` 时不自动生成 `depends-on`，已有字段和顺序必须保留。
 
 ## 8. Crate 和模块边界
 
@@ -1369,7 +1389,7 @@ fixtures/rust/
 - `.changes/config.toml` 中的 package key 作为 `PackageId`，manifest 声明的名称保留为 `manifest_name`；
 - resolver 除 `ResolvedPackage` 外，临时暴露 manifest 依赖的名称、`DependencyKind` 与原始版本约束；resolver 不负责将依赖名称解释为 `PackageId`；
 - 应用层先解析所有已配置 package，再按 `(Ecosystem, manifest_name)` 建立到 `PackageId` 的映射；同一生态出现重复 manifest name 时停止转换，避免产生歧义；
-- 只有在同一生态中唯一匹配到已配置 package 的依赖才转换为内部 `Dependency`，未匹配项视为外部依赖，不进入 `WorkspaceGraph`；首个切片不推断跨生态依赖，后续由显式 `depends-on` 合并；
+- 只有在同一生态中唯一匹配到已配置 package 的依赖才转换为 `source = Manifest` 的内部 `Dependency`，未匹配项视为外部依赖，不进入 `WorkspaceGraph`；首个切片不推断跨生态依赖，后续由 `source = Config` 的显式 `depends-on` 合并；
 - package 路径必须能转换为 UTF-8 相对路径；`private` 映射为 `publishable = false`；
 - 转换完成后统一调用 `WorkspaceGraph` 校验并排序，不再调用各 resolver 的 `sort_packages()` 产生新架构顺序。
 

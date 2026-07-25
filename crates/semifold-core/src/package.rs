@@ -2,12 +2,12 @@ use std::fmt;
 
 use camino::Utf8PathBuf;
 use semver::Version;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Dependency;
 
 /// Stable identity used by Semifold configuration and workspace graphs.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
 pub struct PackageId(String);
 

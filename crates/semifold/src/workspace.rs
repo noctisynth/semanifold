@@ -1,7 +1,10 @@
 use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Context as _;
-use semifold_core::{Dependency, Ecosystem, PackageId, PackageSnapshot, WorkspaceGraph};
+use semifold_core::{
+    Dependency, DependencyKind, DependencySource, Ecosystem, PackageId, PackageSnapshot,
+    WorkspaceGraph,
+};
 use semifold_resolver::{
     adapter::{ManifestDependency, PackageLocation},
     config::Config,
@@ -16,6 +19,7 @@ struct ResolvedSnapshot {
     ecosystem: Ecosystem,
     package: ResolvedPackage,
     dependencies: Vec<ResolvedDependency>,
+    explicit_dependencies: Vec<PackageId>,
 }
 
 pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<WorkspaceGraph> {
@@ -47,6 +51,7 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
                     .into_iter()
                     .map(manifest_dependency)
                     .collect(),
+                explicit_dependencies: package_config.depends_on.clone(),
             });
         } else {
             let mut resolver = create_resolver(package_config.resolver);
@@ -57,6 +62,7 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
                 ecosystem: ResolverRegistry::ecosystem(package_config.resolver),
                 package,
                 dependencies,
+                explicit_dependencies: package_config.depends_on.clone(),
             });
         }
     }
@@ -90,7 +96,7 @@ fn workspace_graph_from_resolved(
         .into_iter()
         .map(|resolved| {
             let path = normalize_package_path(root, &resolved.package.path)?;
-            let dependencies = resolved
+            let mut dependencies = resolved
                 .dependencies
                 .into_iter()
                 .filter_map(|dependency| {
@@ -101,9 +107,18 @@ fn workspace_graph_from_resolved(
                             package,
                             kind: dependency.kind,
                             requirement: dependency.requirement,
+                            source: DependencySource::Manifest,
                         })
                 })
-                .collect();
+                .collect::<Vec<_>>();
+            dependencies.extend(resolved.explicit_dependencies.into_iter().map(|package| {
+                Dependency {
+                    package,
+                    kind: DependencyKind::Unspecified,
+                    requirement: None,
+                    source: DependencySource::Config,
+                }
+            }));
             Ok(PackageSnapshot {
                 id: resolved.id,
                 manifest_name: resolved.package.name,
@@ -129,7 +144,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use semifold_core::{DependencyKind, PackageId};
+    use semifold_core::{DependencyKind, DependencySource, PackageId, WorkspaceGraphError};
     use semifold_resolver::{
         config::{BranchesConfig, PackageConfig, ReleaseChannel},
         resolver::ResolverType,
@@ -175,6 +190,7 @@ mod tests {
             resolver,
             channel: ReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 
@@ -302,6 +318,125 @@ mod tests {
                 .dependencies[0]
                 .package,
             PackageId::new("cpp-core")
+        );
+    }
+
+    #[test]
+    fn merges_explicit_cross_ecosystem_dependencies_into_the_workspace_graph() {
+        let root = TemporaryRoot::new();
+        root.write(
+            "rust/core/Cargo.toml",
+            "[package]\nname = \"native-core\"\nversion = \"1.0.0\"\n",
+        );
+        root.write(
+            "node/binding/package.json",
+            r#"{"name":"node-binding","version":"1.0.0"}"#,
+        );
+        let mut binding = package("node/binding", ResolverType::Nodejs);
+        binding.depends_on = vec![PackageId::new("rust-core")];
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("node-binding".to_string(), binding),
+                (
+                    "rust-core".to_string(),
+                    package("rust/core", ResolverType::Rust),
+                ),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+
+        let graph = load_workspace_graph(&root.0, &config).unwrap();
+
+        assert_eq!(
+            graph.topological_order().unwrap(),
+            [PackageId::new("rust-core"), PackageId::new("node-binding")]
+        );
+        let dependency = &graph
+            .package(&PackageId::new("node-binding"))
+            .unwrap()
+            .dependencies[0];
+        assert_eq!(dependency.package, PackageId::new("rust-core"));
+        assert_eq!(dependency.kind, DependencyKind::Unspecified);
+        assert_eq!(dependency.source, DependencySource::Config);
+        assert_eq!(dependency.requirement, None);
+    }
+
+    #[test]
+    fn rejects_unknown_explicit_dependency_targets() {
+        let root = TemporaryRoot::new();
+        root.write(
+            "node/binding/package.json",
+            r#"{"name":"node-binding","version":"1.0.0"}"#,
+        );
+        let mut binding = package("node/binding", ResolverType::Nodejs);
+        binding.depends_on = vec![PackageId::new("missing-core")];
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([("node-binding".to_string(), binding)]),
+            resolver: BTreeMap::new(),
+        };
+
+        let error = load_workspace_graph(&root.0, &config).unwrap_err();
+
+        assert_eq!(
+            error.downcast_ref::<WorkspaceGraphError>(),
+            Some(&WorkspaceGraphError::UnknownDependency {
+                package: PackageId::new("node-binding"),
+                dependency: PackageId::new("missing-core"),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_cycles_formed_by_explicit_cross_ecosystem_dependencies() {
+        let root = TemporaryRoot::new();
+        root.write(
+            "rust/core/Cargo.toml",
+            "[package]\nname = \"native-core\"\nversion = \"1.0.0\"\n",
+        );
+        root.write(
+            "node/binding/package.json",
+            r#"{"name":"node-binding","version":"1.0.0"}"#,
+        );
+        let mut rust = package("rust/core", ResolverType::Rust);
+        rust.depends_on = vec![PackageId::new("node-binding")];
+        let mut node = package("node/binding", ResolverType::Nodejs);
+        node.depends_on = vec![PackageId::new("rust-core")];
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("node-binding".to_string(), node),
+                ("rust-core".to_string(), rust),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+
+        let graph = load_workspace_graph(&root.0, &config).unwrap();
+        let error = graph.topological_order().unwrap_err();
+
+        assert_eq!(
+            error,
+            WorkspaceGraphError::DependencyCycle {
+                cycle: [
+                    PackageId::new("node-binding"),
+                    PackageId::new("rust-core"),
+                    PackageId::new("node-binding"),
+                ]
+                .to_vec(),
+            }
         );
     }
 

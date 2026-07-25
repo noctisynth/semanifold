@@ -45,6 +45,7 @@ impl NodejsResolver {
             resolver: ResolverType::Nodejs,
             channel: ReleaseChannel::Stable,
             assets: Vec::new(),
+            depends_on: vec![],
         }
     }
 
@@ -410,6 +411,7 @@ impl Resolver for NodejsResolver {
                     resolver: ResolverType::Nodejs,
                     channel: ReleaseChannel::Stable,
                     assets: vec![],
+                    depends_on: vec![],
                 },
             )?;
             return Ok(vec![package]);
@@ -423,6 +425,7 @@ impl Resolver for NodejsResolver {
                 resolver: ResolverType::Nodejs,
                 channel: ReleaseChannel::Stable,
                 assets: vec![],
+                depends_on: vec![],
             },
         )?;
         packages.push(root_package);
@@ -456,6 +459,7 @@ impl Resolver for NodejsResolver {
                             resolver: ResolverType::Nodejs,
                             channel: ReleaseChannel::Stable,
                             assets: vec![],
+                            depends_on: vec![],
                         },
                     )?);
                 }
@@ -558,6 +562,7 @@ mod tests {
             resolver: ResolverType::Nodejs,
             channel: ReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 

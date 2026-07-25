@@ -244,8 +244,8 @@
 
 ### 跨生态依赖
 
-- [ ] 在配置中增加可选 `depends-on`
-- [ ] 将 manifest 内部依赖与显式跨生态依赖合并到 `WorkspaceGraph`
+- [x] 在配置中增加可选 `depends-on`
+- [x] 将 manifest 内部依赖与显式跨生态依赖合并到 `WorkspaceGraph`
 - [ ] 定义相同包名跨生态冲突策略
 - [ ] 定义 dev、peer、optional 和 build dependency 的排序与传播策略
 
@@ -253,7 +253,7 @@
 
 - [ ] Adapter 只负责发现、解析和变更规划
 - [x] 所有包顺序由统一 `WorkspaceGraph` 计算
-- [ ] 跨生态依赖参与同一拓扑排序
+- [x] 跨生态依赖参与同一拓扑排序
 
 ## 阶段 5：统一发布引擎
 

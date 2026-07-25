@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use semifold_core::PackageId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{error::ResolveError, resolver};
@@ -95,6 +96,9 @@ pub struct PackageConfig {
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
+    /// Supplemental internal dependency edges keyed by stable package ID.
+    #[serde(default, rename = "depends-on", skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<PackageId>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +111,8 @@ struct PackageConfigInput {
     legacy_version_mode: Option<VersionMode>,
     #[serde(default)]
     assets: Vec<Asset>,
+    #[serde(default, rename = "depends-on")]
+    depends_on: Vec<PackageId>,
 }
 
 impl<'de> Deserialize<'de> for PackageConfig {
@@ -124,6 +130,7 @@ impl<'de> Deserialize<'de> for PackageConfig {
             resolver: input.resolver,
             channel,
             assets: input.assets,
+            depends_on: input.depends_on,
         })
     }
 }
@@ -289,6 +296,8 @@ pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveErr
 
 #[cfg(test)]
 mod tests {
+    use semifold_core::PackageId;
+
     use super::{PackageConfig, ReleaseChannel};
 
     #[test]
@@ -334,5 +343,27 @@ version-mode = { pre-release = { tag = "beta" } }
 
         assert_eq!(named.channel, ReleaseChannel::Named("alpha".to_string()));
         assert_eq!(legacy.channel, ReleaseChannel::Named("beta".to_string()));
+    }
+
+    #[test]
+    fn configured_dependencies_use_stable_package_ids_and_round_trip() {
+        let config: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "packages/node"
+resolver = "nodejs"
+depends-on = ["rust-core", "native-runtime"]
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            config.depends_on,
+            [
+                PackageId::new("rust-core"),
+                PackageId::new("native-runtime")
+            ]
+        );
+        let rendered = toml_edit::ser::to_string(&config).unwrap();
+        assert!(rendered.contains("depends-on = [\"rust-core\", \"native-runtime\"]"));
     }
 }

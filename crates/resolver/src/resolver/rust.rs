@@ -67,6 +67,7 @@ impl RustResolver {
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
             assets: Vec::new(),
+            depends_on: vec![],
         }
     }
 
@@ -586,6 +587,7 @@ impl Resolver for RustResolver {
                     resolver: ResolverType::Rust,
                     channel: ReleaseChannel::Stable,
                     assets: vec![],
+                    depends_on: vec![],
                 },
             )?;
             return Ok(vec![package]);
@@ -628,6 +630,7 @@ impl Resolver for RustResolver {
                         resolver: ResolverType::Rust,
                         channel: ReleaseChannel::Stable,
                         assets: vec![],
+                        depends_on: vec![],
                     },
                 )
             })
@@ -729,6 +732,7 @@ mod tests {
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 

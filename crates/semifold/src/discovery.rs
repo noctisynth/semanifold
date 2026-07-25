@@ -35,6 +35,7 @@ impl PackageDiscovery {
                 resolver: ResolverRegistry::resolver_type(package.ecosystem),
                 channel: ReleaseChannel::Stable,
                 assets: vec![],
+                depends_on: vec![],
             };
             if configs.insert(package.id.to_string(), config).is_some() {
                 return Err(PackageDiscoveryError::DuplicatePackageId {

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, path::Path};
 
 use semifold_core::{
-    BumpLevel, ChangesetId, ChangesetInput, DependencyKind, Ecosystem, PackageId,
+    BumpLevel, ChangesetId, ChangesetInput, DependencyKind, DependencySource, Ecosystem, PackageId,
     PackageReleasePolicy, ReleaseChannel, ReleasePlan, ReleasePlanner, ReleasePolicies,
     WorkspaceGraph,
 };
@@ -125,23 +125,31 @@ fn release_policies(graph: &WorkspaceGraph, config: &Config) -> anyhow::Result<R
         .packages()
         .map(|package| {
             let package_config = &config.packages[package.id.as_str()];
-            let propagating_dependencies = if package.ecosystem == Ecosystem::Rust {
-                package
-                    .dependencies
-                    .iter()
-                    .filter(|dependency| dependency.kind == DependencyKind::Runtime)
-                    .map(|dependency| {
-                        let requirement = dependency
-                            .requirement
-                            .as_deref()
-                            .map(VersionReq::parse)
-                            .transpose()?;
-                        Ok((dependency.package.clone(), requirement))
-                    })
-                    .collect::<anyhow::Result<BTreeMap<_, _>>>()?
-            } else {
-                BTreeMap::new()
-            };
+            let mut propagating_dependencies = BTreeMap::new();
+            for dependency in &package.dependencies {
+                let manifest_runtime = dependency.source == DependencySource::Manifest
+                    && package.ecosystem == Ecosystem::Rust
+                    && dependency.kind == DependencyKind::Runtime;
+                if dependency.source != DependencySource::Config && !manifest_runtime {
+                    continue;
+                }
+                let requirement = if dependency.source == DependencySource::Config {
+                    None
+                } else {
+                    dependency
+                        .requirement
+                        .as_deref()
+                        .map(VersionReq::parse)
+                        .transpose()?
+                };
+                if dependency.source == DependencySource::Config {
+                    propagating_dependencies.insert(dependency.package.clone(), None);
+                } else {
+                    propagating_dependencies
+                        .entry(dependency.package.clone())
+                        .or_insert(requirement);
+                }
+            }
             Ok((
                 package.id.clone(),
                 PackageReleasePolicy {
@@ -209,6 +217,7 @@ mod tests {
             resolver: ResolverType::Rust,
             channel: ResolverReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
         }
     }
 
@@ -218,6 +227,17 @@ mod tests {
             resolver: ResolverType::Python,
             channel: ResolverReleaseChannel::Stable,
             assets: vec![],
+            depends_on: vec![],
+        }
+    }
+
+    fn node_package(path: &str, depends_on: &[&str]) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Nodejs,
+            channel: ResolverReleaseChannel::Stable,
+            assets: vec![],
+            depends_on: depends_on.iter().copied().map(PackageId::new).collect(),
         }
     }
 
@@ -279,6 +299,63 @@ mod tests {
                 .new_content
                 .contains("version = \"2.0.0\"")
         );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn explicit_cross_ecosystem_dependency_propagates_a_patch_release() {
+        let root = temporary_root();
+        fs::create_dir_all(root.join("rust-core")).unwrap();
+        fs::create_dir_all(root.join("node-binding")).unwrap();
+        fs::write(
+            root.join("rust-core/Cargo.toml"),
+            "[package]\nname = \"native-core\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("node-binding/package.json"),
+            r#"{"name":"node-binding","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                (
+                    "node-binding".to_string(),
+                    node_package("node-binding", &["rust-core"]),
+                ),
+                ("rust-core".to_string(), package("rust-core")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("native-core-minor".to_string(), &root);
+        changeset.add_package("rust-core".to_string(), ResolverBumpLevel::Minor, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(
+            plan.order(),
+            [PackageId::new("rust-core"), PackageId::new("node-binding")]
+        );
+        let binding = plan.package(&PackageId::new("node-binding")).unwrap();
+        assert_eq!(binding.bump, BumpLevel::Patch);
+        assert_eq!(binding.next_version, semver::Version::new(1, 0, 1));
+        assert!(matches!(
+            binding.reasons.as_slice(),
+            [ReleaseReason::DependencyPropagation { dependency, .. }]
+                if dependency == &PackageId::new("rust-core")
+        ));
+        let node_edit = plan
+            .file_edits()
+            .iter()
+            .find(|edit| edit.path == "node-binding/package.json")
+            .unwrap();
+        assert!(node_edit.new_content.contains(r#""version": "1.0.1""#));
 
         fs::remove_dir_all(root).unwrap();
     }

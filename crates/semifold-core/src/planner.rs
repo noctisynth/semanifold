@@ -256,7 +256,7 @@ mod tests {
     use semver::{Version, VersionReq};
 
     use super::*;
-    use crate::{Dependency, DependencyKind, Ecosystem, PackageSnapshot};
+    use crate::{Dependency, DependencyKind, DependencySource, Ecosystem, PackageSnapshot};
 
     fn package(id: &str, version: &str, dependencies: &[&str]) -> PackageSnapshot {
         PackageSnapshot {
@@ -272,6 +272,7 @@ mod tests {
                     package: PackageId::new(*dependency),
                     kind: DependencyKind::Runtime,
                     requirement: None,
+                    source: DependencySource::Manifest,
                 })
                 .collect(),
         }

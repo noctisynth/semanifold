@@ -3,12 +3,14 @@ use std::{
     path::Path,
 };
 
-use semifold_core::DependencyKind;
+use semifold_core::{
+    DependencyKind, EditSource, FileEdit, FileEditExpectation, FileHash, PackageSnapshot,
+    VersionMap,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
-    context,
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -66,6 +68,187 @@ struct CargoPackage {
 pub struct PythonResolver;
 
 impl PythonResolver {
+    pub fn plan_file_edits(
+        root: &Path,
+        package: &PackageSnapshot,
+        versions: &VersionMap,
+    ) -> Result<Vec<FileEdit>, ResolveError> {
+        let version = versions
+            .get(&package.id)
+            .ok_or_else(|| ResolveError::InvalidConfig {
+                path: root.join(package.path.as_std_path()),
+                reason: format!("missing planned version for {}", package.id),
+            })?
+            .to_string();
+        let mut edits = Vec::new();
+        let mut configured_version_path = None;
+
+        let pyproject_path = package.path.join("pyproject.toml");
+        let pyproject_absolute = root.join(pyproject_path.as_std_path());
+        if pyproject_absolute.exists() {
+            let original = std::fs::read_to_string(&pyproject_absolute)?;
+            let mut document = original
+                .parse::<toml_edit::DocumentMut>()
+                .map_err(|error| ResolveError::ParseError {
+                    path: pyproject_absolute.clone(),
+                    reason: error.to_string(),
+                })?;
+            if let Some(project) = document
+                .get_mut("project")
+                .and_then(|item| item.as_table_mut())
+            {
+                let version_is_dynamic = project
+                    .get("dynamic")
+                    .and_then(|item| item.as_array())
+                    .is_some_and(|fields| {
+                        fields.iter().any(|field| field.as_str() == Some("version"))
+                    });
+                if !version_is_dynamic {
+                    project.insert("version", toml_edit::value(&version));
+                }
+            }
+            configured_version_path = document
+                .get("tool")
+                .and_then(|item| item.as_table())
+                .and_then(|tool| tool.get("hatch"))
+                .and_then(|item| item.as_table())
+                .and_then(|hatch| hatch.get("version"))
+                .and_then(|item| item.as_table())
+                .and_then(|version| version.get("path"))
+                .and_then(|item| item.as_str())
+                .map(str::to_string);
+            if let Some(poetry) = document
+                .get_mut("tool")
+                .and_then(|item| item.as_table_mut())
+                .and_then(|tool| tool.get_mut("poetry"))
+                .and_then(|item| item.as_table_mut())
+            {
+                poetry.insert("version", toml_edit::value(&version));
+            }
+            let new_content = document.to_string();
+            if new_content != original {
+                edits.push(Self::file_edit(
+                    package,
+                    pyproject_path.as_str(),
+                    original,
+                    new_content,
+                ));
+            }
+        }
+
+        let setup_path = package.path.join("setup.cfg");
+        let setup_absolute = root.join(setup_path.as_std_path());
+        if setup_absolute.exists() {
+            let original = std::fs::read_to_string(&setup_absolute)?;
+            let updated = original
+                .lines()
+                .map(|line| {
+                    let is_version = line
+                        .split_once('=')
+                        .is_some_and(|(key, _)| key.trim() == "version");
+                    if is_version {
+                        format!("version = {version}")
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if updated != original {
+                edits.push(Self::file_edit(
+                    package,
+                    setup_path.as_str(),
+                    original,
+                    updated,
+                ));
+            }
+        }
+
+        let package_name = package.manifest_name.replace('-', "_");
+        let mut version_paths = configured_version_path
+            .map(|path| vec![package.path.join(path)])
+            .unwrap_or_default();
+        version_paths.extend([
+            package.path.join(&package_name).join("__init__.py"),
+            package
+                .path
+                .join("src")
+                .join(&package_name)
+                .join("__init__.py"),
+            package.path.join(&package_name).join("__version__.py"),
+            package
+                .path
+                .join("src")
+                .join(&package_name)
+                .join("__version__.py"),
+            package.path.join("src").join("__init__.py"),
+        ]);
+        version_paths.dedup();
+        for relative in version_paths {
+            let absolute = root.join(relative.as_std_path());
+            if !absolute.exists() {
+                continue;
+            }
+            let original = std::fs::read_to_string(&absolute)?;
+            if let Some(updated) = Self::static_version_content(&original, &version) {
+                edits.push(Self::file_edit(
+                    package,
+                    relative.as_str(),
+                    original,
+                    updated,
+                ));
+                break;
+            }
+        }
+
+        Ok(edits)
+    }
+
+    fn file_edit(
+        package: &PackageSnapshot,
+        path: &str,
+        original: String,
+        new_content: String,
+    ) -> FileEdit {
+        FileEdit {
+            path: path.into(),
+            expected: FileEditExpectation::Existing {
+                hash: FileHash::from_bytes(original.as_bytes()),
+            },
+            new_content,
+            source: EditSource::PackageVersion {
+                package: package.id.clone(),
+            },
+        }
+    }
+
+    fn static_version_content(content: &str, version: &str) -> Option<String> {
+        let mut output = String::new();
+        let mut updated = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            let dynamic = trimmed.contains("version(")
+                || trimmed.contains("get_version()")
+                || trimmed.contains("importlib")
+                || trimmed.contains("pkg_resources");
+            let static_assignment = trimmed
+                .strip_prefix("__version__")
+                .and_then(|rest| rest.find('=').map(|position| rest[position + 1..].trim()))
+                .is_some_and(|value| {
+                    (value.starts_with('"') && value.ends_with('"'))
+                        || (value.starts_with('\'') && value.ends_with('\''))
+                });
+            if !dynamic && static_assignment {
+                output.push_str(&format!("__version__ = \"{version}\"\n"));
+                updated = true;
+            } else {
+                output.push_str(line);
+                output.push('\n');
+            }
+        }
+        updated.then_some(output)
+    }
+
     fn pep_dependency(specification: String) -> ResolvedDependency {
         let boundary = specification
             .char_indices()
@@ -262,81 +445,6 @@ impl PythonResolver {
         })
     }
 
-    fn update_pyproject_version(
-        &self,
-        root: &Path,
-        pkg_path: &Path,
-        version: &str,
-    ) -> Result<(), ResolveError> {
-        let pyproject_path = root.join(pkg_path).join("pyproject.toml");
-        let pyproject_str = std::fs::read_to_string(&pyproject_path)?;
-
-        let mut doc = pyproject_str
-            .parse::<toml_edit::DocumentMut>()
-            .map_err(|e| ResolveError::ParseError {
-                path: pyproject_path.clone(),
-                reason: e.to_string(),
-            })?;
-
-        if let Some(project) = doc.get_mut("project")
-            && let Some(project_table) = project.as_table_mut()
-        {
-            project_table.insert("version", toml_edit::value(version));
-        }
-
-        // tool.poetry.version
-        if let Some(tool) = doc.get_mut("tool")
-            && let Some(tool_table) = tool.as_table_mut()
-            && let Some(poetry) = tool_table.get_mut("poetry")
-            && let Some(poetry_table) = poetry.as_table_mut()
-        {
-            poetry_table.insert("version", toml_edit::value(version));
-        }
-
-        std::fs::write(&pyproject_path, doc.to_string())?;
-
-        // 如果存在 Cargo.toml（maturin/PyO3 项目），也更新它
-        self.update_cargo_version(root, pkg_path, version)?;
-
-        Ok(())
-    }
-
-    /// 更新 Cargo.toml 中的版本号（用于 maturin/PyO3 项目）
-    fn update_cargo_version(
-        &self,
-        root: &Path,
-        pkg_path: &Path,
-        version: &str,
-    ) -> Result<(), ResolveError> {
-        let cargo_path = root.join(pkg_path).join("Cargo.toml");
-
-        // 如果没有 Cargo.toml，不是错误，直接返回
-        if !cargo_path.exists() {
-            return Ok(());
-        }
-
-        log::debug!("Found Cargo.toml, updating version for maturin/PyO3 project");
-
-        let cargo_str = std::fs::read_to_string(&cargo_path)?;
-        let mut doc =
-            cargo_str
-                .parse::<toml_edit::DocumentMut>()
-                .map_err(|e| ResolveError::ParseError {
-                    path: cargo_path.clone(),
-                    reason: e.to_string(),
-                })?;
-
-        if let Some(package) = doc.get_mut("package")
-            && let Some(package_table) = package.as_table_mut()
-        {
-            package_table.insert("version", toml_edit::value(version));
-            std::fs::write(&cargo_path, doc.to_string())?;
-            log::info!("Updated version in Cargo.toml to {}", version);
-        }
-
-        Ok(())
-    }
-
     /// 从源文件中提取动态版本号
     /// 当 pyproject.toml 中声明 `dynamic = ["version"]` 时使用
     ///
@@ -475,103 +583,6 @@ impl PythonResolver {
         None
     }
 
-    /// 更新 `__init__.py` 中的 `__version__`
-    /// 仅当 `__version__` 是硬编码的版本号字符串时才更新
-    fn update_init_version(
-        &self,
-        root: &Path,
-        pkg_path: &Path,
-        package_name: &str,
-        version: &str,
-    ) -> Result<(), ResolveError> {
-        let init_paths = vec![
-            root.join(pkg_path).join(package_name).join("__init__.py"),
-            root.join(pkg_path)
-                .join("src")
-                .join(package_name)
-                .join("__init__.py"),
-            root.join(pkg_path).join("src").join("__init__.py"),
-            // root.join(pkg_path).join("__init__.py"), // 待定
-        ];
-
-        for init_path in init_paths {
-            if !init_path.exists() {
-                continue;
-            }
-
-            let content = std::fs::read_to_string(&init_path)?;
-            let mut new_content = String::new();
-            let mut updated = false;
-
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if trimmed.starts_with("__version__") {
-                    // 检查是否是动态版本获取
-                    // 包含函数调用的都认为是动态获取，比如:
-                    // - `__version__ = version("package")`
-                    // - `__version__ = importlib_metadata.version("package")`
-                    // - `__version__ = get_version()`
-                    if trimmed.contains("version(")
-                        || trimmed.contains("get_version()")
-                        || trimmed.contains("importlib")
-                        || trimmed.contains("pkg_resources")
-                    {
-                        log::debug!(
-                            "Skipping __version__ update in {} - detected dynamic version retrieval: {}",
-                            init_path.display(),
-                            trimmed
-                        );
-                        new_content.push_str(line);
-                        new_content.push('\n');
-                        continue;
-                    }
-
-                    // 检查是否是静态版本号字符串
-                    if let Some(pos) = trimmed.find('=') {
-                        let value_part = trimmed[pos + 1..].trim();
-                        if (value_part.starts_with('"') && value_part.ends_with('"'))
-                            || (value_part.starts_with('\'') && value_part.ends_with('\''))
-                        {
-                            new_content.push_str(&format!("__version__ = \"{}\"\n", version));
-                            updated = true;
-                            log::debug!(
-                                "Updated __version__ in {} from {} to {}",
-                                init_path.display(),
-                                value_part,
-                                version
-                            );
-                            continue;
-                        }
-                    }
-
-                    log::debug!(
-                        "Skipping __version__ update in {} - unrecognized format: {}",
-                        init_path.display(),
-                        trimmed
-                    );
-                    new_content.push_str(line);
-                    new_content.push('\n');
-                } else {
-                    new_content.push_str(line);
-                    new_content.push('\n');
-                }
-            }
-
-            if updated {
-                std::fs::write(&init_path, new_content)?;
-                log::info!("Updated __version__ in {}", init_path.display());
-                return Ok(());
-            } else {
-                log::debug!(
-                    "No static __version__ found to update in {}",
-                    init_path.display()
-                );
-            }
-        }
-
-        Ok(())
-    }
-
     fn parse_dependencies(
         &self,
         root: &Path,
@@ -658,61 +669,6 @@ impl Resolver for PythonResolver {
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
         self.manifest_dependencies(root, &pkg_config.path)
-    }
-
-    fn bump(
-        &mut self,
-        ctx: &context::Context,
-        root: &Path,
-        package: &ResolvedPackage,
-        version: &semver::Version,
-    ) -> Result<(), ResolveError> {
-        let bumped_version = version.to_string();
-
-        if ctx.dry_run {
-            log::warn!(
-                "Skip bump for {} to version {} due to dry run",
-                package.name,
-                bumped_version
-            );
-            return Ok(());
-        }
-
-        // 更新 pyproject.toml
-        let pyproject_path = root.join(&package.path).join("pyproject.toml");
-        if pyproject_path.exists() {
-            self.update_pyproject_version(root, &package.path, &bumped_version)?;
-            log::info!("Updated pyproject.toml for {}", package.name);
-        }
-
-        // 更新 setup.cfg（如果存在）
-        let setup_cfg_path = root.join(&package.path).join("setup.cfg");
-        if setup_cfg_path.exists() {
-            let content = std::fs::read_to_string(&setup_cfg_path)?;
-            let new_content = content
-                .lines()
-                .map(|line| {
-                    if line.trim().starts_with("version") {
-                        format!("version = {}", bumped_version)
-                    } else {
-                        line.to_string()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            std::fs::write(&setup_cfg_path, new_content)?;
-            log::info!("Updated setup.cfg for {}", package.name);
-        }
-
-        // 尝试更新 __init__.py 中的 __version__
-        let package_dir_name = package.name.replace('-', "_");
-        if let Err(e) =
-            self.update_init_version(root, &package.path, &package_dir_name, &bumped_version)
-        {
-            log::debug!("Could not update __init__.py: {}", e);
-        }
-
-        Ok(())
     }
 
     fn sort_packages(
@@ -813,9 +769,9 @@ mod tests {
 
     use crate::{
         config::{PackageConfig, ReleaseChannel},
-        context::Context,
-        resolver::{ResolvedPackage, Resolver, ResolverType},
+        resolver::{Resolver, ResolverType},
     };
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
     use super::PythonResolver;
 
@@ -992,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn bumps_pyproject_and_static_init_version_without_removing_other_fields() {
+    fn plans_pyproject_and_static_init_version_without_writing() {
         let root = temp_dir("bump-pyproject");
         write_pyproject(
             &root,
@@ -1002,61 +958,167 @@ mod tests {
         let source_dir = root.join("packages/example/src/example");
         fs::create_dir_all(&source_dir).unwrap();
         fs::write(source_dir.join("__init__.py"), "__version__ = '1.0.0'\n").unwrap();
-        let package = ResolvedPackage {
-            name: "example".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("packages/example"),
-            private: false,
+        let package = PackageSnapshot {
+            id: PackageId::new("example"),
+            manifest_name: "example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Python,
+            path: "packages/example".into(),
+            publishable: true,
+            dependencies: vec![],
         };
 
-        PythonResolver
-            .bump(
-                &Context::default(),
-                &root,
-                &package,
-                &semver::Version::parse("1.1.0").unwrap(),
-            )
-            .unwrap();
+        let edits = PythonResolver::plan_file_edits(
+            &root,
+            &package,
+            &VersionMap::from([(PackageId::new("example"), semver::Version::new(1, 1, 0))]),
+        )
+        .unwrap();
 
-        let pyproject = fs::read_to_string(root.join("packages/example/pyproject.toml")).unwrap();
+        assert_eq!(edits.len(), 2);
+        let pyproject = &edits
+            .iter()
+            .find(|edit| edit.path == "packages/example/pyproject.toml")
+            .unwrap()
+            .new_content;
         assert!(pyproject.contains("version = \"1.1.0\""));
         assert!(pyproject.contains("dependencies = [\"requests>=2\"]"));
         assert!(pyproject.contains("[tool.custom]"));
         assert!(pyproject.contains("preserved = true"));
         assert_eq!(
-            fs::read_to_string(source_dir.join("__init__.py")).unwrap(),
+            edits
+                .iter()
+                .find(|edit| edit.path == "packages/example/src/example/__init__.py")
+                .unwrap()
+                .new_content,
             "__version__ = \"1.1.0\"\n"
+        );
+        assert!(
+            fs::read_to_string(root.join("packages/example/pyproject.toml"))
+                .unwrap()
+                .contains("version = \"1.0.0\"")
         );
         fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
-    fn bumps_setup_cfg_version() {
+    fn plans_setup_cfg_version() {
         let root = temp_dir("bump-setup-cfg");
         fs::write(
             root.join("setup.cfg"),
-            "[metadata]\nname = cfg-example\nversion = 1.0.0\n\n[options]\npackages = find:\n",
+            "[metadata]\nname = cfg-example\nversion = 1.0.0\nversion_file = VERSION\n\n[options]\npackages = find:\n",
         )
         .unwrap();
-        let package = ResolvedPackage {
-            name: "cfg-example".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("."),
-            private: false,
+        let package = PackageSnapshot {
+            id: PackageId::new("cfg-example"),
+            manifest_name: "cfg-example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Python,
+            path: ".".into(),
+            publishable: true,
+            dependencies: vec![],
         };
 
-        PythonResolver
-            .bump(
-                &Context::default(),
-                &root,
-                &package,
-                &semver::Version::parse("1.0.1").unwrap(),
-            )
-            .unwrap();
+        let edits = PythonResolver::plan_file_edits(
+            &root,
+            &package,
+            &VersionMap::from([(PackageId::new("cfg-example"), semver::Version::new(1, 0, 1))]),
+        )
+        .unwrap();
 
-        let setup_cfg = fs::read_to_string(root.join("setup.cfg")).unwrap();
+        assert_eq!(edits.len(), 1);
+        let setup_cfg = &edits[0].new_content;
         assert!(setup_cfg.contains("name = cfg-example"));
         assert!(setup_cfg.contains("version = 1.0.1"));
+        assert!(setup_cfg.contains("version_file = VERSION"));
+        assert!(
+            fs::read_to_string(root.join("setup.cfg"))
+                .unwrap()
+                .contains("version = 1.0.0")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_the_configured_hatch_version_source() {
+        let root = temp_dir("hatch-version-source");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"hatch-example\"\ndynamic = [\"version\"]\n\n[tool.hatch.version]\npath = \"src/hatch_example/version.py\"\n",
+        );
+        let source = root.join("src/hatch_example/version.py");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(&source, "__version__ = \"1.0.0\"\n").unwrap();
+        let package = PackageSnapshot {
+            id: PackageId::new("hatch-example"),
+            manifest_name: "hatch-example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Python,
+            path: ".".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+
+        let edits = PythonResolver::plan_file_edits(
+            &root,
+            &package,
+            &VersionMap::from([(
+                PackageId::new("hatch-example"),
+                semver::Version::new(1, 0, 1),
+            )]),
+        )
+        .unwrap();
+
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].path, "./src/hatch_example/version.py");
+        assert_eq!(edits[0].new_content, "__version__ = \"1.0.1\"\n");
+        assert_eq!(
+            fs::read_to_string(source).unwrap(),
+            "__version__ = \"1.0.0\"\n"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn dynamic_python_version_never_plans_a_cargo_edit() {
+        let root = temp_dir("dynamic-cargo-version");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"native-example\"\ndynamic = [\"version\"]\n",
+        );
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"native-example\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let package = PackageSnapshot {
+            id: PackageId::new("native-example"),
+            manifest_name: "native-example".to_string(),
+            version: semver::Version::new(1, 0, 0),
+            ecosystem: Ecosystem::Python,
+            path: ".".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+
+        let edits = PythonResolver::plan_file_edits(
+            &root,
+            &package,
+            &VersionMap::from([(
+                PackageId::new("native-example"),
+                semver::Version::new(1, 0, 1),
+            )]),
+        )
+        .unwrap();
+
+        assert!(edits.is_empty());
+        assert!(
+            fs::read_to_string(root.join("Cargo.toml"))
+                .unwrap()
+                .contains("version = \"1.0.0\"")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

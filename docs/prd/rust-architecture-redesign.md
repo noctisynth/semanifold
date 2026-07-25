@@ -484,6 +484,13 @@ Adapter 可以：
 - 提取包名、版本、发布属性和内部依赖；
 - 根据完整 `VersionMap` 生成新文件内容。
 
+每个生态 adapter 只拥有本生态的原生 manifest：Rust 拥有 `Cargo.toml`，Python 拥有
+`pyproject.toml`、`setup.cfg` 和 Python 源码版本文件，Node 拥有 `package.json`。
+Python 或 Node binding 可以读取 Rust manifest 作为动态版本来源或构建输入，但不得写入
+`Cargo.toml`。跨生态 package 默认保持独立版本序列；Rust 产物变化是否触发 binding
+重新发布由显式依赖传播决定，不能通过复制 Rust 版本隐式实现。需要同版本发布时使用
+`ReleaseUnit::SharedVersion`；动态派生版本关系后续以显式 `version-source` 模型表达。
+
 Rust manifest 与 Semifold TOML 配置必须使用保格式编辑器，保留无关的文本布局。`package.json` 则允许在完成 `serde_json::Value` 语义校验后使用启用 `preserve_order` 的序列化器规范化输出：对象键顺序必须保持，输出使用标准缩进并始终以一个换行结束。不得为 `package.json` 版本修改维护自定义字节级 JSON 解析或扫描器；JSON 结构、转义和边缘语法应完全由 `serde_json` 处理。
 
 Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。

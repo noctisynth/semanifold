@@ -172,7 +172,7 @@
 ### 文件修改模型
 
 - [x] 定义 `FileEdit`、`FileHash` 和 `EditSource`
-- [ ] 在计划阶段生成所有 manifest 和 changelog 修改
+- [x] 在计划阶段生成所有 manifest 和 changelog 修改
 - [x] 检查多个 edit 是否修改同一文件
 - [x] 使用 expected hash 检测规划后的并发修改
 - [x] 实现临时文件写入和原子替换
@@ -187,6 +187,13 @@
 - [x] 正确更新 dependencies、devDependencies、peerDependencies 和 optionalDependencies
 - [x] 移除 Rust/Node.js 对 `Context.version_bumps` 的依赖
 - [ ] Resolver 不再直接写文件或处理 dry-run
+
+### Python 与 C++
+
+- [x] Python 只规划 `pyproject.toml`、`setup.cfg` 和 Python 源码版本文件，不写入 `Cargo.toml`
+- [x] Python 动态版本可继续读取 `Cargo.toml`，但跨生态派生关系留待显式 `version-source`
+- [x] C++ 将 `CMakeLists.txt` 与可选 `vcpkg.json` 表示为 `FileEdit`
+- [x] Python/C++ 不再通过 `Resolver::bump()` 直接写入版本文件
 
 ### Changelog
 

@@ -11,7 +11,6 @@ use semifold_core::{
 
 use crate::{
     config::{PackageConfig, ReleaseChannel, ResolverConfig},
-    context,
     error::ResolveError,
     resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
     utils,
@@ -180,77 +179,6 @@ impl CppResolver {
 
         Ok(name)
     }
-
-    /// Update version in CMakeLists.txt
-    fn update_cmake_version(
-        &self,
-        package_path: &Path,
-        new_version: &str,
-    ) -> Result<(), ResolveError> {
-        let cmake_path = package_path.join("CMakeLists.txt");
-        let content = std::fs::read_to_string(&cmake_path)?;
-
-        // Replace version in project() declaration
-        let re = Regex::new(
-            r"(?i)(project\s*\([^)]*VERSION\s+)([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
-        )
-        .map_err(|e| ResolveError::ParseError {
-            path: cmake_path.clone(),
-            reason: format!("Invalid regex: {}", e),
-        })?;
-
-        let updated_content = re.replace(&content, |caps: &regex::Captures| {
-            format!("{}{}", &caps[1], new_version)
-        });
-
-        std::fs::write(&cmake_path, updated_content.as_ref())?;
-        log::info!("Updated {:?} to version {}", cmake_path, new_version);
-        Ok(())
-    }
-
-    /// Update version in vcpkg.json if it exists (optional)
-    fn update_vcpkg_version(
-        &self,
-        package_path: &Path,
-        new_version: &str,
-    ) -> Result<(), ResolveError> {
-        let vcpkg_path = package_path.join("vcpkg.json");
-
-        if !vcpkg_path.exists() {
-            log::debug!("Skipping optional file {:?} (not found)", vcpkg_path);
-            return Ok(());
-        }
-
-        let content = std::fs::read_to_string(&vcpkg_path)?;
-        let vcpkg_json: serde_json::Value =
-            serde_json::from_str(&content).map_err(|e| ResolveError::ParseError {
-                path: vcpkg_path.clone(),
-                reason: e.to_string(),
-            })?;
-
-        if vcpkg_json
-            .as_object()
-            .and_then(|object| object.get("version"))
-            .filter(|version| version.is_string())
-            .is_none()
-        {
-            return Err(ResolveError::ParseError {
-                path: vcpkg_path.clone(),
-                reason: "vcpkg.json root must be an object".to_string(),
-            });
-        }
-        let updated_content =
-            utils::replace_root_json_string_field(&content, "version", new_version).ok_or(
-                ResolveError::ParseError {
-                    path: vcpkg_path.clone(),
-                    reason: "vcpkg.json version field could not be replaced".to_string(),
-                },
-            )?;
-
-        std::fs::write(&vcpkg_path, updated_content)?;
-        log::info!("Updated {:?} to version {}", vcpkg_path, new_version);
-        Ok(())
-    }
 }
 
 impl Resolver for CppResolver {
@@ -332,34 +260,6 @@ impl Resolver for CppResolver {
                 requirement: None,
             })
             .collect())
-    }
-
-    fn bump(
-        &mut self,
-        ctx: &context::Context,
-        root: &Path,
-        package: &ResolvedPackage,
-        version: &semver::Version,
-    ) -> Result<(), ResolveError> {
-        let bumped_version = version.to_string();
-        let package_path = root.join(&package.path);
-
-        if ctx.dry_run {
-            log::warn!(
-                "Skip bump for {} to version {} due to dry run",
-                package.name,
-                bumped_version
-            );
-            return Ok(());
-        }
-
-        // Update CMakeLists.txt (required)
-        self.update_cmake_version(&package_path, &bumped_version)?;
-
-        // Update vcpkg.json if it exists (optional)
-        self.update_vcpkg_version(&package_path, &bumped_version)?;
-
-        Ok(())
     }
 
     fn sort_packages(
@@ -459,8 +359,7 @@ mod tests {
 
     use crate::{
         config::{PackageConfig, ReleaseChannel},
-        context::Context,
-        resolver::{ResolvedPackage, Resolver, ResolverType},
+        resolver::{Resolver, ResolverType},
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -532,49 +431,6 @@ mod tests {
     }
 
     #[test]
-    fn bumps_cmake_and_vcpkg_versions_without_removing_vcpkg_fields() {
-        let root = temp_dir("bump-with-vcpkg");
-        write_cmake_project(&root, "library", "demo-library", "1.0.0");
-        fs::write(
-            root.join("library/vcpkg.json"),
-            r#"{
-  "name": "demo-library",
-  "version": "1.0.0",
-  "dependencies": ["fmt"],
-  "custom": { "preserved": true }
-}
-"#,
-        )
-        .unwrap();
-        let package = ResolvedPackage {
-            name: "demo-library".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("library"),
-            private: false,
-        };
-
-        CppResolver
-            .bump(
-                &Context::default(),
-                &root,
-                &package,
-                &semver::Version::parse("1.1.0").unwrap(),
-            )
-            .unwrap();
-
-        let cmake = fs::read_to_string(root.join("library/CMakeLists.txt")).unwrap();
-        assert!(cmake.contains("project(demo-library VERSION 1.1.0 LANGUAGES CXX)"));
-        let vcpkg = serde_json::from_str::<serde_json::Value>(
-            &fs::read_to_string(root.join("library/vcpkg.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(vcpkg["version"], "1.1.0");
-        assert_eq!(vcpkg["dependencies"], serde_json::json!(["fmt"]));
-        assert_eq!(vcpkg["custom"]["preserved"], true);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
     fn plans_cmake_and_optional_vcpkg_edits_without_writing() {
         let root = temp_dir("plan-file-edits");
         write_cmake_project(&root, "library", "demo-library", "1.0.0");
@@ -616,32 +472,6 @@ mod tests {
                 .unwrap()
                 .contains("VERSION 1.0.0")
         );
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn bumps_a_cmake_project_without_an_optional_vcpkg_manifest() {
-        let root = temp_dir("bump-without-vcpkg");
-        write_cmake_project(&root, ".", "standalone", "1.0.0");
-        let package = ResolvedPackage {
-            name: "standalone".to_string(),
-            version: semver::Version::parse("1.0.0").unwrap(),
-            path: PathBuf::from("."),
-            private: false,
-        };
-
-        CppResolver
-            .bump(
-                &Context::default(),
-                &root,
-                &package,
-                &semver::Version::parse("1.0.1").unwrap(),
-            )
-            .unwrap();
-
-        let cmake = fs::read_to_string(root.join("CMakeLists.txt")).unwrap();
-        assert!(cmake.contains("VERSION 1.0.1"));
-        assert!(!root.join("vcpkg.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

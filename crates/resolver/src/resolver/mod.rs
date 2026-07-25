@@ -68,19 +68,6 @@ pub trait Resolver {
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError>;
-    /// Bump version
-    fn bump(
-        &mut self,
-        _ctx: &Context,
-        _root: &Path,
-        _package: &ResolvedPackage,
-        _version: &semver::Version,
-    ) -> Result<(), ResolveError> {
-        Err(ResolveError::InvalidConfig {
-            path: PathBuf::new(),
-            reason: "legacy direct version writes are not supported by this resolver".to_string(),
-        })
-    }
     /// Sort packages by their dependencies
     fn sort_packages(
         &mut self,

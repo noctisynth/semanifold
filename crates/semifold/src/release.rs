@@ -8,7 +8,9 @@ use semifold_core::{
 use semifold_resolver::{
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{Config, ReleaseChannel as ResolverReleaseChannel},
-    resolver::{cpp::CppResolver, nodejs::NodejsResolver, rust::RustResolver},
+    resolver::{
+        cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver, rust::RustResolver,
+    },
 };
 use semver::VersionReq;
 
@@ -37,7 +39,9 @@ pub(crate) fn plan_release(
                 Ecosystem::Node => NodejsResolver::plan_file_edit(root, package, plan.versions())
                     .map(|edit| vec![edit]),
                 Ecosystem::Cpp => CppResolver::plan_file_edits(root, package, plan.versions()),
-                Ecosystem::Python => Ok(Vec::new()),
+                Ecosystem::Python => {
+                    PythonResolver::plan_file_edits(root, package, plan.versions())
+                }
             }
         })
         .collect::<Result<Vec<_>, _>>()?
@@ -155,6 +159,15 @@ mod tests {
         }
     }
 
+    fn python_package(path: &str) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Python,
+            channel: ResolverReleaseChannel::Stable,
+            assets: vec![],
+        }
+    }
+
     #[test]
     fn bridges_resolver_inputs_into_the_core_release_plan() {
         let root = temporary_root();
@@ -214,6 +227,48 @@ mod tests {
                 .contains("version = \"2.0.0\"")
         );
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn dynamic_python_version_can_plan_a_release_without_writing_cargo() {
+        let root = temporary_root();
+        fs::write(
+            root.join("pyproject.toml"),
+            "[project]\nname = \"native-example\"\ndynamic = [\"version\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"native-example\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([("native-example".to_string(), python_package("."))]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("python-patch".to_string(), &root);
+        changeset.add_package("native-example".to_string(), ResolverBumpLevel::Patch, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(
+            plan.package(&PackageId::new("native-example"))
+                .unwrap()
+                .next_version,
+            semver::Version::new(1, 0, 1)
+        );
+        assert!(plan.file_edits().is_empty());
+        assert!(
+            fs::read_to_string(root.join("Cargo.toml"))
+                .unwrap()
+                .contains("version = \"1.0.0\"")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

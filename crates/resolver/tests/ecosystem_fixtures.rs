@@ -10,7 +10,6 @@ use insta::assert_snapshot;
 use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 use semifold_resolver::{
     config::{PackageConfig, ReleaseChannel},
-    context::Context,
     resolver::{
         ResolvedPackage, Resolver, ResolverType, cpp::CppResolver, nodejs::NodejsResolver,
         python::PythonResolver, rust::RustResolver,
@@ -40,15 +39,6 @@ fn copy_fixture(source: &str, destination: &Path) {
     let source = fixture(source);
     fs::create_dir_all(destination.parent().unwrap()).unwrap();
     fs::copy(source, destination).unwrap();
-}
-
-fn package(path: &str, name: &str) -> ResolvedPackage {
-    ResolvedPackage {
-        name: name.to_string(),
-        version: semver::Version::parse("1.0.0").unwrap(),
-        path: PathBuf::from(path),
-        private: false,
-    }
 }
 
 fn snapshot(path: &str, name: &str, ecosystem: Ecosystem) -> PackageSnapshot {
@@ -255,14 +245,19 @@ fn python_manifest_rewrite_matches_snapshots() {
     copy_fixture("python/app.before.toml", &manifest);
     copy_fixture("python/init.before.py", &init);
 
-    PythonResolver
-        .bump(
-            &Context::default(),
-            &root,
-            &package("packages/app", "app"),
-            &semver::Version::parse("1.0.1").unwrap(),
-        )
-        .unwrap();
+    let package = snapshot("packages/app", "app", Ecosystem::Python);
+    for edit in PythonResolver::plan_file_edits(
+        &root,
+        &package,
+        &VersionMap::from([(
+            PackageId::new("app"),
+            semver::Version::parse("1.0.1").unwrap(),
+        )]),
+    )
+    .unwrap()
+    {
+        fs::write(root.join(edit.path.as_std_path()), edit.new_content).unwrap();
+    }
 
     assert_snapshot!(
         "python_manifest_rewrite",
@@ -283,14 +278,19 @@ fn cpp_manifest_rewrite_matches_snapshots() {
     copy_fixture("cpp/CMakeLists.before.txt", &cmake);
     copy_fixture("cpp/vcpkg.before.json", &vcpkg);
 
-    CppResolver
-        .bump(
-            &Context::default(),
-            &root,
-            &package(".", "example"),
-            &semver::Version::parse("1.0.1").unwrap(),
-        )
-        .unwrap();
+    let package = snapshot(".", "example", Ecosystem::Cpp);
+    for edit in CppResolver::plan_file_edits(
+        &root,
+        &package,
+        &VersionMap::from([(
+            PackageId::new("example"),
+            semver::Version::parse("1.0.1").unwrap(),
+        )]),
+    )
+    .unwrap()
+    {
+        fs::write(root.join(edit.path.as_std_path()), edit.new_content).unwrap();
+    }
 
     assert_snapshot!(
         "cpp_cmake_manifest_rewrite",

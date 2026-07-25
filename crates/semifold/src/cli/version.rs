@@ -5,10 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use colored::Colorize;
 use rust_i18n::t;
-use semifold_changelog::{
-    generate_changelog,
-    utils::{insert_changelog, render_changelog},
-};
+use semifold_changelog::{generate_changelog, utils::render_changelog};
 use semifold_core::{
     ChangesetId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId, ReleaseReason,
 };
@@ -156,7 +153,7 @@ pub(crate) async fn version(
         return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
     let release_plan = plan_release(root, config, changesets)?;
-    let (release_plan, mut changelogs_map) =
+    let (release_plan, changelogs_map) =
         plan_changelog_edits(ctx, repo, root, config, changesets, release_plan).await?;
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
     if ctx.dry_run {
@@ -164,73 +161,7 @@ pub(crate) async fn version(
         return Ok(ApplyReport::default());
     }
 
-    let version_map = release_plan
-        .versions()
-        .iter()
-        .map(|(package, version)| (package.as_str().to_string(), version.clone()))
-        .collect::<HashMap<_, _>>();
     let file_edits = FileEditExecutor::new(edit_root).apply(release_plan.file_edits())?;
-
-    for package_id in release_plan.order() {
-        let package_name = package_id.as_str();
-        let package_config = config
-            .packages
-            .get(package_name)
-            .expect("release plan packages are configured before versioning");
-        let package_release = release_plan
-            .package(package_id)
-            .expect("release plan order only contains planned releases");
-        let bumped_version = package_release.next_version.clone();
-        let has_planned_edit = release_plan.file_edits().iter().any(|edit| {
-            matches!(
-                &edit.source,
-                EditSource::PackageVersion { package } if package == package_id
-            )
-        });
-        if !has_planned_edit {
-            log::debug!("Processing package: {}", package_name);
-            let mut resolver = ctx.create_resolver(package_config.resolver);
-            let resolved_package = resolver.resolve(root, package_config)?;
-            resolver.bump(ctx, root, &resolved_package, &bumped_version)?;
-
-            let dependency_updates = package_release
-                .reasons
-                .iter()
-                .filter_map(|reason| match reason {
-                    ReleaseReason::DependencyPropagation { dependency, .. } => version_map
-                        .get(dependency.as_str())
-                        .map(|version| (dependency.as_str().to_string(), version.to_string())),
-                    ReleaseReason::Changeset { .. } => None,
-                })
-                .collect::<Vec<_>>();
-            let changelog = generate_changelog(
-                ctx,
-                repo,
-                changesets,
-                package_name,
-                &bumped_version.to_string(),
-                &dependency_updates,
-                true,
-            )
-            .await?;
-            if changelog.remote_metadata_failed {
-                log::warn!(
-                    "{}",
-                    t!(
-                        "cli.version.changelog_metadata_degraded",
-                        package = package_name
-                    )
-                );
-            }
-            let changelog = changelog.content;
-            changelogs_map.insert(package_name.to_string(), changelog.clone());
-            insert_changelog(
-                root.join(&package_config.path).join("CHANGELOG.md"),
-                &changelog,
-            )
-            .await?;
-        }
-    }
 
     if let Err(post_version) = post_version(ctx) {
         return Err(VersionApplyError {
@@ -269,15 +200,6 @@ async fn plan_changelog_edits(
     let mut changelogs = HashMap::new();
 
     for package_id in release_plan.order() {
-        let has_planned_manifest_edit = release_plan.file_edits().iter().any(|edit| {
-            matches!(
-                &edit.source,
-                EditSource::PackageVersion { package } if package == package_id
-            )
-        });
-        if !has_planned_manifest_edit {
-            continue;
-        }
         let package_name = package_id.as_str();
         let package_config = config
             .packages

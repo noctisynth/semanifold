@@ -1,6 +1,6 @@
 ---
 source: crates/resolver/tests/ecosystem_fixtures.rs
-expression: "render_packages(NodejsResolver.resolve_all(&root.join(\"npm\")).unwrap())"
+expression: "render_packages(discover(&NodejsResolver, &root.join(\"npm\")))"
 ---
 name = core
 version = 1.0.0

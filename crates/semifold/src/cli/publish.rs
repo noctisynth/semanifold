@@ -8,16 +8,28 @@ use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
 };
 use rust_i18n::t;
+use serde::Serialize;
 
 use semifold_changelog::read_latest_changelog;
 use semifold_resolver::{
+    adapter::PackageLocation,
     config::{Config, PackageConfig, ResolverConfig},
     context::Context,
-    resolver::ResolvedPackage,
     utils,
 };
 
-use crate::workspace::load_workspace_graph;
+use crate::{
+    discovery::ResolverRegistry, package_path::normalize_package_path,
+    workspace::load_workspace_graph,
+};
+
+#[derive(Debug, Serialize)]
+struct PublishPackage {
+    name: String,
+    version: semver::Version,
+    path: std::path::PathBuf,
+    private: bool,
+}
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -98,9 +110,9 @@ pub(crate) async fn create_github_release(
     }
 }
 
-pub(crate) async fn pre_check(
+async fn pre_check(
     resolver_config: &ResolverConfig,
-    resolved_package: &ResolvedPackage,
+    resolved_package: &PublishPackage,
 ) -> anyhow::Result<bool> {
     let url = minijinja::render!(
         &resolver_config.pre_check.url,
@@ -140,7 +152,7 @@ fn command_display(command: &semifold_resolver::config::CommandConfig) -> String
 }
 
 fn run_publish_commands(
-    package: &ResolvedPackage,
+    package: &PublishPackage,
     resolver_config: &ResolverConfig,
     dry_run: bool,
 ) -> Result<(), semifold_resolver::error::ResolveError> {
@@ -230,6 +242,9 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
     };
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
+    let project_root = camino::Utf8PathBuf::from_path_buf(root.clone())
+        .map_err(|_| anyhow::anyhow!(t!("cli.publish.non_utf8_project_root")))?;
+    let registry = ResolverRegistry;
     let publish_order = package_publish_order(&root, config)?;
     log::debug!("Package publish order: {:?}", publish_order);
 
@@ -247,8 +262,19 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
             ))?;
         log::debug!("Resolver config: {:?}", resolver_config);
 
-        let mut resolver = ctx.create_resolver(package.resolver);
-        let resolved_package = resolver.resolve(&root, package)?;
+        let inspection = registry
+            .create_adapter(package.resolver)
+            .inspect(&PackageLocation {
+                id: semifold_core::PackageId::new(package_name),
+                project_root: project_root.clone(),
+                path: normalize_package_path(&root, &package.path)?,
+            })?;
+        let resolved_package = PublishPackage {
+            name: inspection.manifest_name,
+            version: inspection.version,
+            path: inspection.path.into_std_path_buf(),
+            private: !inspection.publishable,
+        };
         log::debug!("Resolved package: {}", resolved_package.name);
 
         if pre_check(resolver_config, &resolved_package).await? {
@@ -361,10 +387,10 @@ mod tests {
             BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
             ResolverConfig, StdioType,
         },
-        resolver::{ResolvedPackage, ResolverType},
+        resolver::ResolverType,
     };
 
-    use super::{Config, package_publish_order, run_publish_commands};
+    use super::{Config, PublishPackage, package_publish_order, run_publish_commands};
 
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
@@ -468,7 +494,7 @@ mod tests {
     #[test]
     fn unified_publish_commands_preserve_phase_order_and_dry_run_rules() {
         let root = temporary_root();
-        let package = ResolvedPackage {
+        let package = PublishPackage {
             name: "example".to_string(),
             version: semver::Version::new(1, 0, 0),
             path: root.clone(),
@@ -497,7 +523,7 @@ mod tests {
     #[test]
     fn unified_publish_commands_stop_before_publish_after_prepublish_failure() {
         let root = temporary_root();
-        let package = ResolvedPackage {
+        let package = PublishPackage {
             name: "example".to_string(),
             version: semver::Version::new(1, 0, 0),
             path: root.clone(),

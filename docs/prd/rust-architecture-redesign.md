@@ -1440,6 +1440,16 @@ fixtures/rust/
 
 该转换是迁移桥接层，不作为最终 `EcosystemAdapter` 接口；切换 `status` 后再逐步删除 resolver 内的旧排序职责。
 
+阶段 4 收敛完成后，`EcosystemAdapter` 是生态能力唯一的多态接口；旧 `Resolver` trait、
+`ResolvedPackage`、`ResolvedDependency`、`create_resolver()` 以及
+`Context::create_resolver()` 全部删除。discovery、workspace 加载、publish inspect 和 ecosystem
+fixtures 直接消费 `PackageInspection` 与 `ManifestDependency`，不再把 adapter 输出转换回旧模型。
+`ResolverType` 仅保留为配置文件中的生态选择器，由 application registry 映射到 adapter。
+
+发布 pre-check 模板继续兼容现有 `package.name`、`package.version`、`package.path` 与
+`package.private` 字段，但该视图由 application 从 `PackageInspection` 构造，不要求 ecosystem
+adapter 暴露旧 `ResolvedPackage`。
+
 ### 阶段 2：引入 `config sync`
 
 目标：将首次初始化与后续工作区同步分离，并验证生态发现接口和 TOML 增量编辑边界。
@@ -1473,8 +1483,10 @@ fixtures/rust/
 - 迁移 Python 和 C++；
 - 删除 `Resolver::sort_packages()`；
 - 删除 `Resolver::publish()`；
+- 删除旧 `Resolver` trait、桥接数据类型和 factory；
 - 删除 adapter 对 `Context` 和 dry-run 的依赖；
-- 将现有 `semifold-resolver` 收敛为 `semifold-ecosystems`。
+- 先将现有 `semifold-resolver` 的生态能力收敛到唯一 `EcosystemAdapter` 接口；crate
+  重命名为 `semifold-ecosystems` 是独立的 package 元数据迁移，不阻塞接口收敛完成。
 
 完成条件：所有 adapter 仅执行发现、解析和变更规划。
 

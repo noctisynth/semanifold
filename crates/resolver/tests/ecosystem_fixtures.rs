@@ -12,11 +12,9 @@ use semifold_core::{
     Dependency, DependencySource, Ecosystem, PackageId, PackageSnapshot, VersionMap, WorkspaceGraph,
 };
 use semifold_resolver::{
-    adapter::{EcosystemAdapter, PackageLocation},
-    config::{PackageConfig, ReleaseChannel},
+    adapter::{EcosystemAdapter, PackageInspection, PackageLocation},
     resolver::{
-        ResolvedPackage, Resolver, ResolverType, cpp::CppResolver, nodejs::NodejsResolver,
-        python::PythonResolver, rust::RustResolver,
+        cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver, rust::RustResolver,
     },
 };
 
@@ -57,31 +55,34 @@ fn snapshot(path: &str, name: &str, ecosystem: Ecosystem) -> PackageSnapshot {
     }
 }
 
-fn config(path: &str, resolver: ResolverType) -> PackageConfig {
-    PackageConfig {
-        path: path.into(),
-        resolver,
-        channel: ReleaseChannel::Stable,
-        assets: vec![],
-        depends_on: vec![],
-    }
-}
-
-fn render_packages(mut packages: Vec<ResolvedPackage>) -> String {
-    packages.sort_by(|left, right| left.name.cmp(&right.name));
+fn render_packages(mut packages: Vec<PackageInspection>) -> String {
+    packages.sort_by(|left, right| left.manifest_name.cmp(&right.manifest_name));
     packages
         .into_iter()
         .map(|package| {
             format!(
                 "name = {}\nversion = {}\npath = {}\nprivate = {}",
-                package.name,
-                package.version,
-                package.path.display(),
-                package.private
+                package.manifest_name, package.version, package.path, !package.publishable
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+fn discover(adapter: &dyn EcosystemAdapter, root: &Path) -> Vec<PackageInspection> {
+    adapter
+        .discover(camino::Utf8Path::from_path(root).unwrap())
+        .unwrap()
+}
+
+fn inspect(adapter: &dyn EcosystemAdapter, root: &Path, id: &str, path: &str) -> PackageInspection {
+    adapter
+        .inspect(&PackageLocation {
+            id: PackageId::new(id),
+            project_root: camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).unwrap(),
+            path: path.into(),
+        })
+        .unwrap()
 }
 
 fn adapter_order(
@@ -148,7 +149,7 @@ fn rust_manifest_parsing_matches_snapshot() {
 
     assert_snapshot!(
         "rust_manifest_parsing",
-        render_packages(RustResolver.resolve_all(&root).unwrap())
+        render_packages(discover(&RustResolver, &root))
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -161,11 +162,7 @@ fn node_manifest_parsing_matches_snapshot() {
 
     assert_snapshot!(
         "node_manifest_parsing",
-        render_packages(vec![
-            NodejsResolver
-                .resolve(&root, &config(".", ResolverType::Nodejs))
-                .unwrap()
-        ])
+        render_packages(vec![inspect(&NodejsResolver, &root, "app", ".")])
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -178,11 +175,7 @@ fn python_manifest_parsing_matches_snapshot() {
 
     assert_snapshot!(
         "python_manifest_parsing",
-        render_packages(vec![
-            PythonResolver
-                .resolve(&root, &config(".", ResolverType::Python))
-                .unwrap()
-        ])
+        render_packages(vec![inspect(&PythonResolver, &root, "app", ".")])
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -195,11 +188,7 @@ fn cpp_manifest_parsing_matches_snapshot() {
 
     assert_snapshot!(
         "cpp_manifest_parsing",
-        render_packages(vec![
-            CppResolver
-                .resolve(&root, &config(".", ResolverType::Cpp))
-                .unwrap()
-        ])
+        render_packages(vec![inspect(&CppResolver, &root, "example", ".")])
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -219,7 +208,7 @@ fn cpp_workspace_fixture_discovers_members_and_orders_dependencies() {
 
     assert_snapshot!(
         "cpp_workspace_manifest_parsing",
-        render_packages(CppResolver.resolve_all(&root).unwrap())
+        render_packages(discover(&CppResolver, &root))
     );
 
     assert_eq!(
@@ -363,19 +352,21 @@ fn rust_workspace_dependency_fixture_is_discovered_and_retained() {
     copy_fixture("rust/core.Cargo.toml", &root.join("crates/core/Cargo.toml"));
     copy_fixture("rust/app.Cargo.toml", &root.join("crates/app/Cargo.toml"));
 
-    let mut packages = RustResolver.resolve_all(&root).unwrap();
-    packages.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut packages = discover(&RustResolver, &root);
+    packages.sort_by(|left, right| left.manifest_name.cmp(&right.manifest_name));
     assert_eq!(
         packages
             .iter()
-            .map(|package| &package.name)
+            .map(|package| &package.manifest_name)
             .collect::<Vec<_>>(),
         vec!["app", "core"]
     );
 
-    let dependencies =
-        RustResolver::internal_dependencies(&root, &config("crates/app", ResolverType::Rust))
-            .unwrap();
+    let dependencies = inspect(&RustResolver, &root, "app", "crates/app")
+        .dependencies
+        .into_iter()
+        .map(|dependency| dependency.manifest_name)
+        .collect::<Vec<_>>();
     assert_eq!(dependencies, vec!["core"]);
     fs::remove_dir_all(root).unwrap();
 }
@@ -389,12 +380,8 @@ fn rust_single_and_private_package_fixtures_match_snapshot() {
     assert_snapshot!(
         "rust_single_and_private_packages",
         render_packages(vec![
-            RustResolver
-                .resolve(&root, &config("single", ResolverType::Rust))
-                .unwrap(),
-            RustResolver
-                .resolve(&root, &config("private", ResolverType::Rust))
-                .unwrap(),
+            inspect(&RustResolver, &root, "single", "single"),
+            inspect(&RustResolver, &root, "private", "private"),
         ])
     );
     fs::remove_dir_all(root).unwrap();
@@ -431,11 +418,11 @@ fn node_npm_and_pnpm_workspace_fixtures_match_snapshot() {
 
     assert_snapshot!(
         "node_npm_workspace_parsing",
-        render_packages(NodejsResolver.resolve_all(&root.join("npm")).unwrap())
+        render_packages(discover(&NodejsResolver, &root.join("npm")))
     );
     assert_snapshot!(
         "node_pnpm_workspace_parsing",
-        render_packages(NodejsResolver.resolve_all(&root.join("pnpm")).unwrap())
+        render_packages(discover(&NodejsResolver, &root.join("pnpm")))
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -487,7 +474,7 @@ fn python_metadata_and_monorepo_fixtures_match_snapshot() {
 
     assert_snapshot!(
         "python_monorepo_manifest_parsing",
-        render_packages(PythonResolver.resolve_all(&root).unwrap())
+        render_packages(discover(&PythonResolver, &root))
     );
     fs::remove_dir_all(root).unwrap();
 }

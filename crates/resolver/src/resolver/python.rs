@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     adapter::{
         AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
-        PackageLocation,
+        PackageLocation, ParsedPackage,
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
+    resolver::ResolverType,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -80,8 +80,8 @@ impl PythonResolver {
 
     fn package_inspection(
         id: PackageId,
-        package: ResolvedPackage,
-        dependencies: Vec<ResolvedDependency>,
+        package: ParsedPackage,
+        dependencies: Vec<ManifestDependency>,
     ) -> Result<PackageInspection, AdapterError> {
         let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
             AdapterError::InvalidInput {
@@ -95,14 +95,7 @@ impl PythonResolver {
             ecosystem: Ecosystem::Python,
             path,
             publishable: !package.private,
-            dependencies: dependencies
-                .into_iter()
-                .map(|dependency| ManifestDependency {
-                    manifest_name: dependency.manifest_name,
-                    kind: dependency.kind,
-                    requirement: dependency.requirement,
-                })
-                .collect(),
+            dependencies,
         })
     }
 
@@ -287,7 +280,7 @@ impl PythonResolver {
         updated.then_some(output)
     }
 
-    fn pep_dependency(specification: String) -> ResolvedDependency {
+    fn pep_dependency(specification: String) -> ManifestDependency {
         let boundary = specification
             .char_indices()
             .find_map(|(index, character)| {
@@ -299,7 +292,7 @@ impl PythonResolver {
         let manifest_name = specification[..boundary].trim().to_string();
         let requirement = specification[boundary..].trim();
         let requirement = (!requirement.is_empty()).then(|| requirement.to_string());
-        ResolvedDependency {
+        ManifestDependency {
             manifest_name,
             kind: DependencyKind::Runtime,
             requirement,
@@ -310,7 +303,7 @@ impl PythonResolver {
         &self,
         root: &Path,
         pkg_path: &Path,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+    ) -> Result<Vec<ManifestDependency>, ResolveError> {
         let pyproject_path = root.join(pkg_path).join("pyproject.toml");
         if !pyproject_path.exists() {
             return Ok(vec![]);
@@ -340,7 +333,7 @@ impl PythonResolver {
                     .unwrap_or_default()
                     .into_iter()
                     .filter(|(name, _)| name != "python")
-                    .map(|(manifest_name, requirement)| ResolvedDependency {
+                    .map(|(manifest_name, requirement)| ManifestDependency {
                         manifest_name,
                         kind: DependencyKind::Runtime,
                         requirement: requirement
@@ -357,7 +350,7 @@ impl PythonResolver {
         &self,
         root: &Path,
         pkg_path: &Path,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         let pyproject_path = root.join(pkg_path).join("pyproject.toml");
         if !pyproject_path.exists() {
             return Err(ResolveError::FileOrDirNotFound {
@@ -420,7 +413,7 @@ impl PythonResolver {
             });
         };
 
-        Ok(ResolvedPackage {
+        Ok(ParsedPackage {
             name,
             version: semver::Version::parse(&version)?,
             path: pkg_path.to_path_buf(),
@@ -433,7 +426,7 @@ impl PythonResolver {
         &self,
         root: &Path,
         pkg_path: &Path,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         let setup_cfg_path = root.join(pkg_path).join("setup.cfg");
         if !setup_cfg_path.exists() {
             return Err(ResolveError::FileOrDirNotFound {
@@ -475,7 +468,7 @@ impl PythonResolver {
         })?;
         let version = version.unwrap_or_else(|| "0.0.0".to_string());
 
-        Ok(ResolvedPackage {
+        Ok(ParsedPackage {
             name,
             version: semver::Version::parse(&version)?,
             path: pkg_path.to_path_buf(),
@@ -483,11 +476,7 @@ impl PythonResolver {
         })
     }
 
-    fn resolve_package(
-        &self,
-        root: &Path,
-        pkg_path: &Path,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    fn resolve_package(&self, root: &Path, pkg_path: &Path) -> Result<ParsedPackage, ResolveError> {
         let setup_cfg_exists = root.join(pkg_path).join("setup.cfg").exists();
         if root.join(pkg_path).join("pyproject.toml").exists() {
             match self.resolve_pyproject(root, pkg_path) {
@@ -649,8 +638,7 @@ impl EcosystemAdapter for PythonResolver {
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
-        let mut resolver = Self;
-        let packages = resolver.resolve_all(root.as_std_path())?;
+        let packages = self.discover_packages(root.as_std_path())?;
         let mut inspections = packages
             .into_iter()
             .map(|package| {
@@ -734,21 +722,21 @@ impl EcosystemAdapter for PythonResolver {
     }
 }
 
-impl Resolver for PythonResolver {
-    fn resolve(
-        &mut self,
+impl PythonResolver {
+    fn parse_package(
+        &self,
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         self.resolve_package(root, &pkg_config.path)
     }
 
-    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
+    fn discover_packages(&self, root: &Path) -> Result<Vec<ParsedPackage>, ResolveError> {
         let mut packages = Vec::new();
 
         // 检查是否是单包项目
         if root.join("pyproject.toml").exists() || root.join("setup.cfg").exists() {
-            packages.push(self.resolve(root, &Self::package_config("."))?);
+            packages.push(self.parse_package(root, &Self::package_config("."))?);
         }
 
         // 检查常见的 monorepo 结构
@@ -767,20 +755,12 @@ impl Resolver for PythonResolver {
             for path in paths {
                 if path.join("pyproject.toml").exists() || path.join("setup.cfg").exists() {
                     let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
-                    packages.push(self.resolve(root, &Self::package_config(rel_path))?);
+                    packages.push(self.parse_package(root, &Self::package_config(rel_path))?);
                 }
             }
         }
 
         Ok(packages)
-    }
-
-    fn dependencies(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
-        self.manifest_dependencies(root, &pkg_config.path)
     }
 }
 
@@ -796,7 +776,7 @@ mod tests {
         adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
         error::ResolveError,
-        resolver::{Resolver, ResolverType},
+        resolver::ResolverType,
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -840,7 +820,9 @@ mod tests {
             "[project]\nname = \"example\"\nversion = \"1.2.3\"\n",
         );
 
-        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = PythonResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "example");
         assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
@@ -858,7 +840,9 @@ mod tests {
             "[tool.poetry]\nname = \"poetry-example\"\nversion = \"2.3.4\"\n",
         );
 
-        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = PythonResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "poetry-example");
         assert_eq!(package.version, semver::Version::parse("2.3.4").unwrap());
@@ -881,7 +865,9 @@ mod tests {
         )
         .unwrap();
 
-        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = PythonResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "hatch-example");
         assert_eq!(package.version, semver::Version::parse("3.4.5").unwrap());
@@ -902,7 +888,9 @@ mod tests {
         )
         .unwrap();
 
-        let package = PythonResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = PythonResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "cfg-example");
         assert_eq!(package.version, semver::Version::parse("4.5.6").unwrap());
@@ -935,7 +923,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut packages = PythonResolver.resolve_all(&root).unwrap();
+        let mut packages = PythonResolver.discover_packages(&root).unwrap();
         packages.sort_by(|left, right| left.name.cmp(&right.name));
 
         assert_eq!(packages.len(), 4);
@@ -1010,7 +998,7 @@ mod tests {
                 project_root,
                 path: ".".into(),
             }),
-            Err(crate::adapter::AdapterError::LegacyResolver(
+            Err(crate::adapter::AdapterError::Manifest(
                 ResolveError::ParseError { .. }
             ))
         ));

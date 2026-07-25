@@ -1,6 +1,6 @@
 ---
 source: crates/resolver/tests/ecosystem_fixtures.rs
-expression: render_packages(PythonResolver.resolve_all(&root).unwrap())
+expression: "render_packages(discover(&PythonResolver, &root))"
 ---
 name = cfg
 version = 4.5.6

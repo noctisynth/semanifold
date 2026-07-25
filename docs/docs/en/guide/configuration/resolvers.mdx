@@ -159,13 +159,13 @@ command = "./gradlew"
 args = ["publish"]
 ```
 
-### Implementing a Custom Resolver
+### Implementing a Custom Ecosystem Adapter
 
-To implement a full custom resolver, you would need to:
+To add a new ecosystem integration, you would need to:
 
-1. Create a new resolver module in the semifold-resolver crate
-2. Implement the `Resolver` trait
-3. Register the resolver in `Context::create_resolver()`
+1. Create a new ecosystem module in the `semifold-resolver` crate
+2. Implement the `EcosystemAdapter` trait
+3. Register the adapter in the application-layer `ResolverRegistry`
 
 ---
 

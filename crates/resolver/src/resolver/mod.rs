@@ -1,32 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    changeset::Changeset, config::PackageConfig, context::Context, error::ResolveError, utils,
-};
+use crate::{changeset::Changeset, context::Context, error::ResolveError, utils};
 use core::fmt;
-use std::path::{Path, PathBuf};
-
-use semifold_core::DependencyKind;
+use std::path::PathBuf;
 
 pub mod cpp;
 pub mod nodejs;
 pub mod python;
 pub mod rust;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ResolvedPackage {
-    pub name: String,
-    pub version: semver::Version,
-    pub path: PathBuf,
-    pub private: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ResolvedDependency {
-    pub manifest_name: String,
-    pub kind: DependencyKind,
-    pub requirement: Option<String>,
-}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
@@ -46,32 +27,6 @@ impl fmt::Display for ResolverType {
             ResolverType::Python => write!(f, "Python"),
             ResolverType::Cpp => write!(f, "Cpp"),
         }
-    }
-}
-
-pub trait Resolver {
-    /// Resolve a package
-    fn resolve(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<ResolvedPackage, ResolveError>;
-    /// Resolve all packages
-    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError>;
-    /// Inspect manifest dependencies without deciding whether they are internal.
-    fn dependencies(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError>;
-}
-
-pub fn create_resolver(resolver_type: ResolverType) -> Box<dyn Resolver> {
-    match resolver_type {
-        ResolverType::Rust => Box::new(rust::RustResolver),
-        ResolverType::Nodejs => Box::new(nodejs::NodejsResolver),
-        ResolverType::Python => Box::new(python::PythonResolver),
-        ResolverType::Cpp => Box::new(cpp::CppResolver),
     }
 }
 

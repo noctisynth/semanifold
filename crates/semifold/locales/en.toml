@@ -91,6 +91,7 @@ edit_non_utf8_path = "Versioning requires UTF-8 package paths"
 allow_dirty = "Allow versioning packages with dirty Git working tree"
 
 [cli.publish]
+non_utf8_project_root = "Publishing requires a UTF-8 project root"
 skip_private = "Skip publishing %{package} %{version} as it is private"
 pre_check = "Pre-check passed for %{package} %{version}, skipping publish"
 run_prepublish_commands = "Running prepublish commands for %{package}"

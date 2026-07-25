@@ -10,11 +10,11 @@ use serde::Deserialize;
 use crate::{
     adapter::{
         AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
-        PackageLocation,
+        PackageLocation, ParsedPackage,
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
+    resolver::ResolverType,
 };
 
 #[derive(Deserialize)]
@@ -50,8 +50,8 @@ impl NodejsResolver {
 
     fn package_inspection(
         id: PackageId,
-        package: ResolvedPackage,
-        dependencies: Vec<ResolvedDependency>,
+        package: ParsedPackage,
+        dependencies: Vec<ManifestDependency>,
     ) -> Result<PackageInspection, AdapterError> {
         let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
             AdapterError::InvalidInput {
@@ -68,14 +68,7 @@ impl NodejsResolver {
             ecosystem: Ecosystem::Node,
             path,
             publishable: !package.private,
-            dependencies: dependencies
-                .into_iter()
-                .map(|dependency| ManifestDependency {
-                    manifest_name: dependency.manifest_name,
-                    kind: dependency.kind,
-                    requirement: dependency.requirement,
-                })
-                .collect(),
+            dependencies,
         })
     }
 
@@ -168,12 +161,12 @@ impl NodejsResolver {
     }
 
     fn collect_dependencies(
-        target: &mut Vec<ResolvedDependency>,
+        target: &mut Vec<ManifestDependency>,
         dependencies: Option<BTreeMap<String, String>>,
         kind: DependencyKind,
     ) {
         target.extend(dependencies.unwrap_or_default().into_iter().map(
-            |(manifest_name, requirement)| ResolvedDependency {
+            |(manifest_name, requirement)| ManifestDependency {
                 manifest_name,
                 kind,
                 requirement: Some(requirement),
@@ -184,7 +177,7 @@ impl NodejsResolver {
     fn manifest_dependencies(
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+    ) -> Result<Vec<ManifestDependency>, ResolveError> {
         let package_json_path = root.join(&pkg_config.path).join("package.json");
         let package_json: PackageJson =
             serde_json::from_str(&std::fs::read_to_string(&package_json_path)?).map_err(|e| {
@@ -237,8 +230,7 @@ impl EcosystemAdapter for NodejsResolver {
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
-        let mut resolver = Self;
-        let packages = resolver.resolve_all(root.as_std_path())?;
+        let packages = self.discover_packages(root.as_std_path())?;
         let mut inspections = packages
             .into_iter()
             .map(|package| {
@@ -276,8 +268,7 @@ impl EcosystemAdapter for NodejsResolver {
             });
         }
         let config = Self::package_config(location.path.as_std_path());
-        let mut resolver = Self;
-        let package = resolver.resolve(location.project_root.as_std_path(), &config)?;
+        let package = self.parse_package(location.project_root.as_std_path(), &config)?;
         let dependencies =
             Self::manifest_dependencies(location.project_root.as_std_path(), &config)?;
         Self::package_inspection(location.id.clone(), package, dependencies)
@@ -333,12 +324,12 @@ impl EcosystemAdapter for NodejsResolver {
     }
 }
 
-impl Resolver for NodejsResolver {
-    fn resolve(
-        &mut self,
+impl NodejsResolver {
+    fn parse_package(
+        &self,
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         let package_json_path = root.join(&pkg_config.path).join("package.json");
         if !package_json_path.exists() {
             return Err(ResolveError::FileOrDirNotFound {
@@ -352,7 +343,7 @@ impl Resolver for NodejsResolver {
                 reason: e.to_string(),
             })?;
 
-        let package = ResolvedPackage {
+        let package = ParsedPackage {
             name: package_json.name,
             version: semver::Version::parse(&package_json.version)?,
             path: pkg_config.path.clone(),
@@ -361,7 +352,7 @@ impl Resolver for NodejsResolver {
         Ok(package)
     }
 
-    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
+    fn discover_packages(&self, root: &Path) -> Result<Vec<ParsedPackage>, ResolveError> {
         let package_json_path = root.join("package.json");
         if !package_json_path.exists() {
             log::warn!(
@@ -403,7 +394,7 @@ impl Resolver for NodejsResolver {
                 log::warn!("Failed to resolve package in {}", root.display());
                 return Ok(vec![]);
             }
-            let package = self.resolve(
+            let package = self.parse_package(
                 root,
                 &PackageConfig {
                     path: ".".into(),
@@ -417,7 +408,7 @@ impl Resolver for NodejsResolver {
         };
         let mut packages = Vec::new();
 
-        let root_package = self.resolve(
+        let root_package = self.parse_package(
             root,
             &PackageConfig {
                 path: ".".into(),
@@ -451,7 +442,7 @@ impl Resolver for NodejsResolver {
 
                 if path.join("package.json").exists() {
                     let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path.clone());
-                    packages.push(self.resolve(
+                    packages.push(self.parse_package(
                         root,
                         &PackageConfig {
                             path: rel_path,
@@ -467,14 +458,6 @@ impl Resolver for NodejsResolver {
 
         Ok(packages)
     }
-
-    fn dependencies(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
-        Self::manifest_dependencies(root, pkg_config)
-    }
 }
 
 #[cfg(test)]
@@ -488,7 +471,7 @@ mod tests {
     use crate::{
         adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
-        resolver::{Resolver, ResolverType},
+        resolver::ResolverType,
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -541,7 +524,9 @@ mod tests {
         let root = temp_dir("single-package");
         write_package(&root, ".", "single", "1.2.3", false, "");
 
-        let package = NodejsResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = NodejsResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "single");
         assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
@@ -558,7 +543,9 @@ mod tests {
         )
         .unwrap();
 
-        let package = NodejsResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = NodejsResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "template");
         assert_eq!(package.version, semver::Version::new(0, 0, 0));
@@ -584,7 +571,7 @@ mod tests {
         write_package(&root, "packages/core", "core", "1.0.0", false, "");
         write_package(&root, "packages/internal", "internal", "1.0.0", true, "");
 
-        let mut packages = NodejsResolver.resolve_all(&root).unwrap();
+        let mut packages = NodejsResolver.discover_packages(&root).unwrap();
         packages.sort_by(|left, right| left.name.cmp(&right.name));
 
         assert_eq!(packages.len(), 3);

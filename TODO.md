@@ -240,7 +240,7 @@
 - [x] 删除 `Resolver::publish()`（发布命令由 application 层统一执行）
 - [x] 删除 adapter 对 `Context` 的依赖
 - [x] 删除 adapter 内的 dry-run 分支
-- [ ] 将 `semifold-resolver` 收敛或重命名为 `semifold-ecosystems`
+- [x] 将 `semifold-resolver` 的生态能力收敛到唯一 `EcosystemAdapter` 接口（crate 重命名单独处理）
 
 ### 跨生态依赖
 
@@ -336,7 +336,7 @@
 - [ ] MCP 不再为每次调用重新构建全局 `Context`
 - [ ] MCP 不再使用 `set_current_dir()` 修改进程全局状态
 - [ ] 移除旧 `Context.version_bumps`
-- [ ] 移除旧 `Context::create_resolver()`
+- [x] 移除旧 `Context::create_resolver()`
 - [ ] 删除旧 `Context`
 
 ### 错误边界

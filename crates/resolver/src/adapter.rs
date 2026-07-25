@@ -1,6 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use semifold_core::{DependencyKind, Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap};
 use semver::Version;
+use std::path::PathBuf;
 
 use crate::error::ResolveError;
 
@@ -18,6 +19,15 @@ pub struct ManifestDependency {
     pub manifest_name: String,
     pub kind: DependencyKind,
     pub requirement: Option<String>,
+}
+
+/// Manifest data used internally while an adapter discovers or inspects a package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ParsedPackage {
+    pub name: String,
+    pub version: Version,
+    pub path: PathBuf,
+    pub private: bool,
 }
 
 /// Immutable package data parsed by an adapter before workspace dependency binding.
@@ -56,7 +66,7 @@ pub trait EcosystemAdapter: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum AdapterError {
     #[error(transparent)]
-    LegacyResolver(#[from] ResolveError),
+    Manifest(#[from] ResolveError),
     #[error("invalid adapter input: {reason}")]
     InvalidInput { reason: String },
 }

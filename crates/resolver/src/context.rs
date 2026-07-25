@@ -93,13 +93,6 @@ impl Context {
             .is_some_and(|c| c.packages.contains_key(package))
     }
 
-    pub fn create_resolver(
-        &self,
-        resolver_type: resolver::ResolverType,
-    ) -> Box<dyn resolver::Resolver> {
-        resolver::create_resolver(resolver_type)
-    }
-
     pub fn get_resolver_config(
         &self,
         resolver_type: resolver::ResolverType,

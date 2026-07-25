@@ -2,23 +2,18 @@ use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Context as _;
 use semifold_core::{
-    Dependency, DependencyKind, DependencySource, Ecosystem, PackageId, PackageSnapshot,
-    WorkspaceGraph,
+    Dependency, DependencyKind, DependencySource, PackageId, PackageSnapshot, WorkspaceGraph,
 };
 use semifold_resolver::{
-    adapter::{ManifestDependency, PackageLocation},
+    adapter::{PackageInspection, PackageLocation},
     config::Config,
-    resolver::{ResolvedDependency, ResolvedPackage, create_resolver},
 };
 
 use crate::{discovery::ResolverRegistry, package_path::normalize_package_path};
 
 #[derive(Debug)]
-struct ResolvedSnapshot {
-    id: PackageId,
-    ecosystem: Ecosystem,
-    package: ResolvedPackage,
-    dependencies: Vec<ResolvedDependency>,
+struct ConfiguredInspection {
+    package: PackageInspection,
     explicit_dependencies: Vec<PackageId>,
 }
 
@@ -26,82 +21,58 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
     let mut resolved = Vec::with_capacity(config.packages.len());
     let registry = ResolverRegistry;
     for (id, package_config) in &config.packages {
-        if let Some(adapter) = registry.create_adapter(package_config.resolver) {
-            let project_root =
-                camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).map_err(|path| {
-                    anyhow::anyhow!("project root is not valid UTF-8: {}", path.display())
-                })?;
-            let path = normalize_package_path(root, &package_config.path)?;
-            let inspection = adapter.inspect(&PackageLocation {
-                id: PackageId::new(id),
-                project_root,
-                path,
+        let project_root =
+            camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).map_err(|path| {
+                anyhow::anyhow!("project root is not valid UTF-8: {}", path.display())
             })?;
-            resolved.push(ResolvedSnapshot {
-                id: inspection.id,
-                ecosystem: inspection.ecosystem,
-                package: ResolvedPackage {
-                    name: inspection.manifest_name,
-                    version: inspection.version,
-                    path: inspection.path.into_std_path_buf(),
-                    private: !inspection.publishable,
-                },
-                dependencies: inspection
-                    .dependencies
-                    .into_iter()
-                    .map(manifest_dependency)
-                    .collect(),
-                explicit_dependencies: package_config.depends_on.clone(),
-            });
-        } else {
-            let mut resolver = create_resolver(package_config.resolver);
-            let package = resolver.resolve(root, package_config)?;
-            let dependencies = resolver.dependencies(root, package_config)?;
-            resolved.push(ResolvedSnapshot {
-                id: PackageId::new(id),
-                ecosystem: ResolverRegistry::ecosystem(package_config.resolver),
-                package,
-                dependencies,
-                explicit_dependencies: package_config.depends_on.clone(),
-            });
-        }
+        let path = normalize_package_path(root, &package_config.path)?;
+        let inspection =
+            registry
+                .create_adapter(package_config.resolver)
+                .inspect(&PackageLocation {
+                    id: PackageId::new(id),
+                    project_root,
+                    path,
+                })?;
+        resolved.push(ConfiguredInspection {
+            package: inspection,
+            explicit_dependencies: package_config.depends_on.clone(),
+        });
     }
-    workspace_graph_from_resolved(root, resolved)
+    workspace_graph_from_inspections(root, resolved)
 }
 
-fn manifest_dependency(dependency: ManifestDependency) -> ResolvedDependency {
-    ResolvedDependency {
-        manifest_name: dependency.manifest_name,
-        kind: dependency.kind,
-        requirement: dependency.requirement,
-    }
-}
-
-fn workspace_graph_from_resolved(
+fn workspace_graph_from_inspections(
     root: &Path,
-    resolved: Vec<ResolvedSnapshot>,
+    resolved: Vec<ConfiguredInspection>,
 ) -> anyhow::Result<WorkspaceGraph> {
     let mut package_ids = BTreeMap::new();
     for package in &resolved {
-        let key = (package.ecosystem, package.package.name.clone());
+        let key = (
+            package.package.ecosystem,
+            package.package.manifest_name.clone(),
+        );
         anyhow::ensure!(
-            package_ids.insert(key, package.id.clone()).is_none(),
+            package_ids
+                .insert(key, package.package.id.clone())
+                .is_none(),
             "duplicate manifest package name {} in {:?}",
-            package.package.name,
-            package.ecosystem
+            package.package.manifest_name,
+            package.package.ecosystem
         );
     }
 
     let snapshots = resolved
         .into_iter()
         .map(|resolved| {
-            let path = normalize_package_path(root, &resolved.package.path)?;
+            let path = normalize_package_path(root, resolved.package.path.as_std_path())?;
             let mut dependencies = resolved
+                .package
                 .dependencies
                 .into_iter()
                 .filter_map(|dependency| {
                     package_ids
-                        .get(&(resolved.ecosystem, dependency.manifest_name))
+                        .get(&(resolved.package.ecosystem, dependency.manifest_name))
                         .cloned()
                         .map(|package| Dependency {
                             package,
@@ -120,12 +91,12 @@ fn workspace_graph_from_resolved(
                 }
             }));
             Ok(PackageSnapshot {
-                id: resolved.id,
-                manifest_name: resolved.package.name,
+                id: resolved.package.id,
+                manifest_name: resolved.package.manifest_name,
                 version: resolved.package.version,
-                ecosystem: resolved.ecosystem,
+                ecosystem: resolved.package.ecosystem,
                 path,
-                publishable: !resolved.package.private,
+                publishable: resolved.package.publishable,
                 dependencies,
             })
         })

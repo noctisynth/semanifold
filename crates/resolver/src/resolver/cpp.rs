@@ -12,11 +12,11 @@ use semifold_core::{
 use crate::{
     adapter::{
         AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
-        PackageLocation,
+        PackageLocation, ParsedPackage,
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
+    resolver::ResolverType,
     utils,
 };
 
@@ -36,8 +36,8 @@ impl CppResolver {
 
     fn package_inspection(
         id: PackageId,
-        package: ResolvedPackage,
-        dependencies: Vec<ResolvedDependency>,
+        package: ParsedPackage,
+        dependencies: Vec<ManifestDependency>,
     ) -> Result<PackageInspection, AdapterError> {
         let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
             AdapterError::InvalidInput {
@@ -51,14 +51,7 @@ impl CppResolver {
             ecosystem: Ecosystem::Cpp,
             path,
             publishable: !package.private,
-            dependencies: dependencies
-                .into_iter()
-                .map(|dependency| ManifestDependency {
-                    manifest_name: dependency.manifest_name,
-                    kind: dependency.kind,
-                    requirement: dependency.requirement,
-                })
-                .collect(),
+            dependencies,
         })
     }
 
@@ -229,11 +222,11 @@ impl CppResolver {
         &self,
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+    ) -> Result<Vec<ManifestDependency>, ResolveError> {
         Ok(self
             .internal_dependencies(root, pkg_config)?
             .into_iter()
-            .map(|manifest_name| ResolvedDependency {
+            .map(|manifest_name| ManifestDependency {
                 manifest_name,
                 kind: DependencyKind::Runtime,
                 requirement: None,
@@ -301,8 +294,7 @@ impl EcosystemAdapter for CppResolver {
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
-        let mut resolver = Self;
-        let packages = resolver.resolve_all(root.as_std_path())?;
+        let packages = self.discover_packages(root.as_std_path())?;
         let mut inspections = packages
             .into_iter()
             .map(|package| {
@@ -340,8 +332,7 @@ impl EcosystemAdapter for CppResolver {
             });
         }
         let config = Self::package_config(location.path.as_std_path());
-        let mut resolver = Self;
-        let package = resolver.resolve(location.project_root.as_std_path(), &config)?;
+        let package = self.parse_package(location.project_root.as_std_path(), &config)?;
         let dependencies =
             self.manifest_dependencies(location.project_root.as_std_path(), &config)?;
         Self::package_inspection(location.id.clone(), package, dependencies)
@@ -383,12 +374,12 @@ impl EcosystemAdapter for CppResolver {
     }
 }
 
-impl Resolver for CppResolver {
-    fn resolve(
-        &mut self,
+impl CppResolver {
+    fn parse_package(
+        &self,
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         let package_path = root.join(&pkg_config.path);
         let cmake_path = package_path.join("CMakeLists.txt");
 
@@ -403,7 +394,7 @@ impl Resolver for CppResolver {
         let name = self.extract_name_from_content(&content, &cmake_path)?;
         let version = self.extract_version_from_content(&content, &cmake_path)?;
 
-        Ok(ResolvedPackage {
+        Ok(ParsedPackage {
             name,
             version: semver::Version::parse(&version)?,
             path: pkg_config.path.clone(),
@@ -411,7 +402,7 @@ impl Resolver for CppResolver {
         })
     }
 
-    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
+    fn discover_packages(&self, root: &Path) -> Result<Vec<ParsedPackage>, ResolveError> {
         let cmake_path = root.join("CMakeLists.txt");
         if !cmake_path.exists() {
             log::warn!(
@@ -421,22 +412,14 @@ impl Resolver for CppResolver {
             return Ok(vec![]);
         }
 
-        let root_package = self.resolve(root, &Self::package_config("."))?;
+        let root_package = self.parse_package(root, &Self::package_config("."))?;
 
         let mut packages = vec![root_package];
         for member in self.workspace_members(root)? {
-            packages.push(self.resolve(root, &Self::package_config(member))?);
+            packages.push(self.parse_package(root, &Self::package_config(member))?);
         }
 
         Ok(packages)
-    }
-
-    fn dependencies(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
-        self.manifest_dependencies(root, pkg_config)
     }
 }
 
@@ -452,7 +435,7 @@ mod tests {
         adapter::{AdapterError, EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
         error::ResolveError,
-        resolver::{Resolver, ResolverType},
+        resolver::ResolverType,
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
@@ -498,7 +481,9 @@ mod tests {
         let root = temp_dir("single-package");
         write_cmake_project(&root, ".", "demo_library", "1.2.3-alpha.1+build.7");
 
-        let package = CppResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = CppResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "demo_library");
         assert_eq!(
@@ -516,7 +501,7 @@ mod tests {
         write_cmake_project(&root, ".", "root-project", "1.0.0");
         write_cmake_project(&root, "libraries/child", "child-project", "2.0.0");
 
-        let packages = CppResolver.resolve_all(&root).unwrap();
+        let packages = CppResolver.discover_packages(&root).unwrap();
 
         assert_eq!(packages.len(), 1);
         assert_eq!(packages[0].name, "root-project");
@@ -591,9 +576,7 @@ mod tests {
 
         assert!(matches!(
             CppResolver.discover(&project_root),
-            Err(AdapterError::LegacyResolver(
-                ResolveError::InvalidConfig { .. }
-            ))
+            Err(AdapterError::Manifest(ResolveError::InvalidConfig { .. }))
         ));
         fs::remove_dir_all(root).unwrap();
         fs::remove_dir_all(external).unwrap();

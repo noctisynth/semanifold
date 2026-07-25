@@ -1,6 +1,6 @@
 ---
 source: crates/resolver/tests/ecosystem_fixtures.rs
-expression: render_packages(RustResolver.resolve_all(&root).unwrap())
+expression: "render_packages(discover(&RustResolver, &root))"
 ---
 name = app
 version = 1.0.0

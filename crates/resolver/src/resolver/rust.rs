@@ -12,11 +12,11 @@ use serde::Deserialize;
 use crate::{
     adapter::{
         AdapterError, EcosystemAdapter, EcosystemPlanInput, ManifestDependency, PackageInspection,
-        PackageLocation,
+        PackageLocation, ParsedPackage,
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{ResolvedDependency, ResolvedPackage, Resolver, ResolverType},
+    resolver::ResolverType,
 };
 
 #[derive(Deserialize)]
@@ -46,12 +46,6 @@ struct CargoToml {
 
 pub struct RustResolver;
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct RuntimeDependency {
-    pub name: String,
-    pub version_requirement: Option<semver::VersionReq>,
-}
-
 struct PlannedManifest {
     original: String,
     document: toml_edit::DocumentMut,
@@ -72,8 +66,8 @@ impl RustResolver {
 
     fn package_inspection(
         id: PackageId,
-        package: ResolvedPackage,
-        dependencies: Vec<ResolvedDependency>,
+        package: ParsedPackage,
+        dependencies: Vec<ManifestDependency>,
     ) -> Result<PackageInspection, AdapterError> {
         let path = camino::Utf8PathBuf::from_path_buf(package.path).map_err(|path| {
             AdapterError::InvalidInput {
@@ -87,14 +81,7 @@ impl RustResolver {
             ecosystem: Ecosystem::Rust,
             path,
             publishable: !package.private,
-            dependencies: dependencies
-                .into_iter()
-                .map(|dependency| ManifestDependency {
-                    manifest_name: dependency.manifest_name,
-                    kind: dependency.kind,
-                    requirement: dependency.requirement,
-                })
-                .collect(),
+            dependencies,
         })
     }
 
@@ -280,7 +267,7 @@ impl RustResolver {
         dependencies: Option<BTreeMap<String, serde_json::Value>>,
         workspace_dependencies: Option<&BTreeMap<String, serde_json::Value>>,
         kind: DependencyKind,
-    ) -> Vec<ResolvedDependency> {
+    ) -> Vec<ManifestDependency> {
         dependencies
             .unwrap_or_default()
             .into_iter()
@@ -293,7 +280,7 @@ impl RustResolver {
                         workspace_dependencies.and_then(|dependencies| dependencies.get(&name))
                     })
                     .unwrap_or(&dependency);
-                ResolvedDependency {
+                ManifestDependency {
                     manifest_name: dependency
                         .get("package")
                         .and_then(serde_json::Value::as_str)
@@ -309,7 +296,7 @@ impl RustResolver {
     pub fn manifest_dependencies(
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
+    ) -> Result<Vec<ManifestDependency>, ResolveError> {
         let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
         let cargo_toml: CargoToml =
             toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
@@ -352,88 +339,6 @@ impl RustResolver {
         ]
         .concat())
     }
-
-    pub fn internal_dependencies(
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<String>, ResolveError> {
-        let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
-        let cargo_toml: CargoToml =
-            toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
-                ResolveError::ParseError {
-                    path: cargo_toml_path,
-                    reason: e.to_string(),
-                }
-            })?;
-        Ok([
-            cargo_toml.dependencies,
-            cargo_toml.dev_dependencies,
-            cargo_toml.build_dependencies,
-        ]
-        .into_iter()
-        .flatten()
-        .flat_map(|dependencies| dependencies.into_keys())
-        .collect())
-    }
-
-    pub fn runtime_dependencies(
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<RuntimeDependency>, ResolveError> {
-        let cargo_toml_path = root.join(&pkg_config.path).join("Cargo.toml");
-        let cargo_toml: CargoToml =
-            toml_edit::de::from_str(&std::fs::read_to_string(&cargo_toml_path)?).map_err(|e| {
-                ResolveError::ParseError {
-                    path: cargo_toml_path,
-                    reason: e.to_string(),
-                }
-            })?;
-        let workspace_manifest_path = root.join("Cargo.toml");
-        let workspace_dependencies = if workspace_manifest_path.exists() {
-            let workspace_manifest: CargoToml =
-                toml_edit::de::from_str(&std::fs::read_to_string(&workspace_manifest_path)?)
-                    .map_err(|e| ResolveError::ParseError {
-                        path: workspace_manifest_path,
-                        reason: e.to_string(),
-                    })?;
-            workspace_manifest
-                .workspace
-                .and_then(|workspace| workspace.dependencies)
-        } else {
-            None
-        };
-
-        cargo_toml
-            .dependencies
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(name, dependency)| {
-                let workspace_dependency = dependency
-                    .get("workspace")
-                    .and_then(serde_json::Value::as_bool)
-                    .filter(|workspace| *workspace)
-                    .and_then(|_| {
-                        workspace_dependencies
-                            .as_ref()
-                            .and_then(|dependencies| dependencies.get(&name))
-                    });
-                let dependency = workspace_dependency.unwrap_or(&dependency);
-                let version_requirement = dependency
-                    .as_str()
-                    .or_else(|| {
-                        dependency
-                            .get("version")
-                            .and_then(serde_json::Value::as_str)
-                    })
-                    .map(semver::VersionReq::parse)
-                    .transpose()?;
-                Ok(RuntimeDependency {
-                    name,
-                    version_requirement,
-                })
-            })
-            .collect()
-    }
 }
 
 impl EcosystemAdapter for RustResolver {
@@ -442,8 +347,7 @@ impl EcosystemAdapter for RustResolver {
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
-        let mut resolver = Self;
-        let packages = resolver.resolve_all(root.as_std_path())?;
+        let packages = self.discover_packages(root.as_std_path())?;
         let mut inspections = packages
             .into_iter()
             .map(|package| {
@@ -481,8 +385,7 @@ impl EcosystemAdapter for RustResolver {
             });
         }
         let config = Self::package_config(location.path.as_std_path());
-        let mut resolver = Self;
-        let package = resolver.resolve(location.project_root.as_std_path(), &config)?;
+        let package = self.parse_package(location.project_root.as_std_path(), &config)?;
         let dependencies =
             Self::manifest_dependencies(location.project_root.as_std_path(), &config)?;
         Self::package_inspection(location.id.clone(), package, dependencies)
@@ -525,12 +428,12 @@ impl EcosystemAdapter for RustResolver {
     }
 }
 
-impl Resolver for RustResolver {
-    fn resolve(
-        &mut self,
+impl RustResolver {
+    fn parse_package(
+        &self,
         root: &Path,
         pkg_config: &PackageConfig,
-    ) -> Result<ResolvedPackage, ResolveError> {
+    ) -> Result<ParsedPackage, ResolveError> {
         let toml_path = root.join(&pkg_config.path).join("Cargo.toml");
         if !toml_path.exists() {
             return Err(ResolveError::FileOrDirNotFound {
@@ -548,7 +451,7 @@ impl Resolver for RustResolver {
             reason: "Not found package in Cargo.toml".into(),
         })?;
         let publish = cargo_pkg_config.publish.unwrap_or(true);
-        let package = ResolvedPackage {
+        let package = ParsedPackage {
             name: cargo_pkg_config.name,
             version: semver::Version::parse(&cargo_pkg_config.version)?,
             path: pkg_config.path.clone(),
@@ -557,7 +460,7 @@ impl Resolver for RustResolver {
         Ok(package)
     }
 
-    fn resolve_all(&mut self, root: &Path) -> Result<Vec<ResolvedPackage>, ResolveError> {
+    fn discover_packages(&self, root: &Path) -> Result<Vec<ParsedPackage>, ResolveError> {
         let cargo_toml_path = root.join("Cargo.toml");
         if !cargo_toml_path.exists() {
             log::warn!(
@@ -579,7 +482,7 @@ impl Resolver for RustResolver {
                 log::warn!("Failed to resolve package in {}", root.display());
                 return Ok(vec![]);
             }
-            let package = self.resolve(
+            let package = self.parse_package(
                 root,
                 &PackageConfig {
                     path: ".".into(),
@@ -622,7 +525,7 @@ impl Resolver for RustResolver {
             .into_iter()
             .map(|path| {
                 let rel_path = pathdiff::diff_paths(&path, root).unwrap_or(path);
-                self.resolve(
+                self.parse_package(
                     root,
                     &PackageConfig {
                         path: rel_path.to_path_buf(),
@@ -637,14 +540,6 @@ impl Resolver for RustResolver {
 
         Ok(packages)
     }
-
-    fn dependencies(
-        &mut self,
-        root: &Path,
-        pkg_config: &PackageConfig,
-    ) -> Result<Vec<ResolvedDependency>, ResolveError> {
-        Self::manifest_dependencies(root, pkg_config)
-    }
 }
 
 #[cfg(test)]
@@ -658,7 +553,7 @@ mod tests {
     use crate::{
         adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
-        resolver::{Resolver, ResolverType},
+        resolver::ResolverType,
     };
     use semifold_core::{Ecosystem, EditSource, PackageId, PackageSnapshot, VersionMap};
 
@@ -717,7 +612,9 @@ mod tests {
         let root = temp_dir("single-package");
         write_package(&root, ".", "single", "1.2.3", None, None);
 
-        let package = RustResolver.resolve(&root, &package_config(".")).unwrap();
+        let package = RustResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
 
         assert_eq!(package.name, "single");
         assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
@@ -743,7 +640,7 @@ mod tests {
             None,
         );
 
-        let mut packages = RustResolver.resolve_all(&root).unwrap();
+        let mut packages = RustResolver.discover_packages(&root).unwrap();
         packages.sort_by(|left, right| left.name.cmp(&right.name));
 
         assert_eq!(packages.len(), 2);

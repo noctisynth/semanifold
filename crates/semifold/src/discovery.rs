@@ -9,10 +9,9 @@ use semifold_core::{DiscoveredPackage, Ecosystem, PackageId};
 use semifold_resolver::{
     adapter::{AdapterError, EcosystemAdapter},
     config::{PackageConfig, ReleaseChannel},
-    error::ResolveError,
     resolver::{
-        Resolver, ResolverType, cpp::CppResolver, create_resolver, nodejs::NodejsResolver,
-        python::PythonResolver, rust::RustResolver,
+        ResolverType, cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver,
+        rust::RustResolver,
     },
 };
 
@@ -76,19 +75,12 @@ impl ResolverRegistry {
         }
     }
 
-    fn create(&self, resolver: ResolverType) -> Box<dyn Resolver> {
-        create_resolver(resolver)
-    }
-
-    pub(crate) fn create_adapter(
-        &self,
-        resolver: ResolverType,
-    ) -> Option<Box<dyn EcosystemAdapter>> {
+    pub(crate) fn create_adapter(&self, resolver: ResolverType) -> Box<dyn EcosystemAdapter> {
         match resolver {
-            ResolverType::Rust => Some(Box::new(RustResolver)),
-            ResolverType::Nodejs => Some(Box::new(NodejsResolver)),
-            ResolverType::Python => Some(Box::new(PythonResolver)),
-            ResolverType::Cpp => Some(Box::new(CppResolver)),
+            ResolverType::Rust => Box::new(RustResolver),
+            ResolverType::Nodejs => Box::new(NodejsResolver),
+            ResolverType::Python => Box::new(PythonResolver),
+            ResolverType::Cpp => Box::new(CppResolver),
         }
     }
 }
@@ -107,59 +99,34 @@ impl PackageDiscoveryService {
         let resolvers = ResolverRegistry::normalize_selection(resolvers);
         let mut packages = Vec::new();
         for resolver_type in &resolvers {
-            let mut discovered = if let Some(adapter) = self.registry.create_adapter(*resolver_type)
-            {
-                let root = camino::Utf8Path::from_path(project_root).ok_or_else(|| {
-                    PackageDiscoveryError::InvalidProjectRoot {
-                        path: project_root.to_path_buf(),
-                    }
-                })?;
-                adapter
-                    .discover(root)
-                    .map_err(|source| PackageDiscoveryError::Adapter {
-                        resolver: *resolver_type,
-                        source,
-                    })?
-                    .into_iter()
-                    .map(|package| {
-                        let path = normalize_package_path(project_root, package.path.as_std_path())
-                            .map_err(|source| PackageDiscoveryError::PackagePath {
-                                resolver: *resolver_type,
-                                package: package.manifest_name.clone(),
-                                source,
-                            })?;
-                        Ok(DiscoveredPackage {
-                            id: package.id,
-                            ecosystem: package.ecosystem,
-                            path,
-                        })
+            let root = camino::Utf8Path::from_path(project_root).ok_or_else(|| {
+                PackageDiscoveryError::InvalidProjectRoot {
+                    path: project_root.to_path_buf(),
+                }
+            })?;
+            let mut discovered = self
+                .registry
+                .create_adapter(*resolver_type)
+                .discover(root)
+                .map_err(|source| PackageDiscoveryError::Adapter {
+                    resolver: *resolver_type,
+                    source,
+                })?
+                .into_iter()
+                .map(|package| {
+                    let path = normalize_package_path(project_root, package.path.as_std_path())
+                        .map_err(|source| PackageDiscoveryError::PackagePath {
+                            resolver: *resolver_type,
+                            package: package.manifest_name.clone(),
+                            source,
+                        })?;
+                    Ok(DiscoveredPackage {
+                        id: package.id,
+                        ecosystem: package.ecosystem,
+                        path,
                     })
-                    .collect::<Result<Vec<_>, PackageDiscoveryError>>()?
-            } else {
-                let mut resolver = self.registry.create(*resolver_type);
-                resolver
-                    .resolve_all(project_root)
-                    .map_err(|source| PackageDiscoveryError::Resolver {
-                        resolver: *resolver_type,
-                        source,
-                    })?
-                    .into_iter()
-                    .map(|package| {
-                        let path = normalize_package_path(project_root, &package.path).map_err(
-                            |source| PackageDiscoveryError::PackagePath {
-                                resolver: *resolver_type,
-                                package: package.name.clone(),
-                                source,
-                            },
-                        )?;
-                        Ok(DiscoveredPackage {
-                            id: PackageId::new(package.name),
-                            ecosystem: ResolverRegistry::ecosystem(*resolver_type),
-                            path,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, PackageDiscoveryError>>()?
-            };
+                })
+                .collect::<Result<Vec<_>, PackageDiscoveryError>>()?;
             packages.append(&mut discovered);
         }
         packages.sort();
@@ -173,10 +140,6 @@ impl PackageDiscoveryService {
 
 #[derive(Debug)]
 pub(crate) enum PackageDiscoveryError {
-    Resolver {
-        resolver: ResolverType,
-        source: ResolveError,
-    },
     Adapter {
         resolver: ResolverType,
         source: AdapterError,
@@ -197,9 +160,6 @@ pub(crate) enum PackageDiscoveryError {
 impl fmt::Display for PackageDiscoveryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Resolver { resolver, source } => {
-                write!(formatter, "{resolver} package discovery failed: {source}")
-            }
             Self::Adapter { resolver, source } => {
                 write!(formatter, "{resolver} package discovery failed: {source}")
             }
@@ -231,7 +191,6 @@ impl fmt::Display for PackageDiscoveryError {
 impl Error for PackageDiscoveryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Resolver { source, .. } => Some(source),
             Self::Adapter { source, .. } => Some(source),
             Self::PackagePath { source, .. } => Some(source),
             Self::InvalidProjectRoot { .. } | Self::DuplicatePackageId { .. } => None,

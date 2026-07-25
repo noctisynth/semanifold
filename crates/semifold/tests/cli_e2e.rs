@@ -111,6 +111,13 @@ fn status_and_dry_run_version_leave_the_workspace_unchanged() {
     assert!(version.status.success(), "{version:?}");
     assert_eq!(fs::read_to_string(&manifest).unwrap(), manifest_before);
     assert_eq!(fs::read_to_string(&changeset).unwrap(), changeset_before);
+    assert!(fs::read_dir(&root).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".smif-")
+    }));
 
     fs::remove_dir_all(root).unwrap();
 }

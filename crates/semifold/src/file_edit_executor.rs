@@ -24,7 +24,7 @@ impl<'root> FileEditExecutor<'root> {
     }
 
     pub fn apply(&self, edits: &[FileEdit]) -> Result<FileEditApplyReport, FileEditApplyError> {
-        let targets = self.validate_targets(edits)?;
+        let targets = validate_targets(self.project_root, edits)?;
         let mut temporary_files = Vec::with_capacity(edits.len());
 
         for (target, edit) in targets.iter().zip(edits) {
@@ -73,64 +73,67 @@ impl<'root> FileEditExecutor<'root> {
         }
         Ok(FileEditApplyReport { applied })
     }
+}
 
-    /// Validates every target without writing files.
-    pub fn validate(&self, edits: &[FileEdit]) -> Result<(), FileEditApplyError> {
-        self.validate_targets(edits).map(|_| ())
-    }
+/// Validates every planned target without creating or replacing files.
+pub fn validate_file_edits(
+    project_root: &Utf8Path,
+    edits: &[FileEdit],
+) -> Result<(), FileEditApplyError> {
+    validate_targets(project_root, edits).map(|_| ())
+}
 
-    fn validate_targets(
-        &self,
-        edits: &[FileEdit],
-    ) -> Result<Vec<ValidatedTarget>, FileEditApplyError> {
-        let mut paths = BTreeSet::new();
-        let mut targets = Vec::with_capacity(edits.len());
-        for edit in edits {
-            let path = &edit.path;
-            if path.is_absolute()
-                || path
-                    .components()
-                    .any(|component| matches!(component, Utf8Component::ParentDir))
-            {
-                return Err(FileEditApplyError::InvalidPath { path: path.clone() });
-            }
-            if !paths.insert(path.clone()) {
-                return Err(FileEditApplyError::DuplicateTarget { path: path.clone() });
-            }
-            let target = self.project_root.join(path);
-            match &edit.expected {
-                FileEditExpectation::Existing { hash } => {
-                    let content = fs::read(&target).map_err(|source| FileEditApplyError::Read {
-                        path: target.clone(),
-                        source,
-                    })?;
-                    let actual = FileHash::from_bytes(&content);
-                    if actual != *hash {
-                        return Err(FileEditApplyError::HashMismatch {
-                            path: target,
-                            expected: hash.clone(),
-                            actual,
-                        });
-                    }
-                }
-                FileEditExpectation::Missing => match fs::symlink_metadata(&target) {
-                    Ok(_) => return Err(FileEditApplyError::TargetExists { path: target }),
-                    Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(source) => {
-                        return Err(FileEditApplyError::Read {
-                            path: target,
-                            source,
-                        });
-                    }
-                },
-            }
-            targets.push(ValidatedTarget {
-                path: target,
-                expectation: edit.expected.clone(),
-            });
+fn validate_targets(
+    project_root: &Utf8Path,
+    edits: &[FileEdit],
+) -> Result<Vec<ValidatedTarget>, FileEditApplyError> {
+    let mut paths = BTreeSet::new();
+    let mut targets = Vec::with_capacity(edits.len());
+    for edit in edits {
+        let path = &edit.path;
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, Utf8Component::ParentDir))
+        {
+            return Err(FileEditApplyError::InvalidPath { path: path.clone() });
         }
-        Ok(targets)
+        if !paths.insert(path.clone()) {
+            return Err(FileEditApplyError::DuplicateTarget { path: path.clone() });
+        }
+        let target = project_root.join(path);
+        match &edit.expected {
+            FileEditExpectation::Existing { hash } => {
+                let content = fs::read(&target).map_err(|source| FileEditApplyError::Read {
+                    path: target.clone(),
+                    source,
+                })?;
+                let actual = FileHash::from_bytes(&content);
+                if actual != *hash {
+                    return Err(FileEditApplyError::HashMismatch {
+                        path: target,
+                        expected: hash.clone(),
+                        actual,
+                    });
+                }
+            }
+            FileEditExpectation::Missing => match fs::symlink_metadata(&target) {
+                Ok(_) => return Err(FileEditApplyError::TargetExists { path: target }),
+                Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+                Err(source) => {
+                    return Err(FileEditApplyError::Read {
+                        path: target,
+                        source,
+                    });
+                }
+            },
+        }
+        targets.push(ValidatedTarget {
+            path: target,
+            expectation: edit.expected.clone(),
+        });
     }
+    Ok(targets)
 }
 
 /// Files successfully replaced by one completed apply operation.
@@ -339,8 +342,8 @@ mod tests {
     #[test]
     fn rejects_a_changed_target_before_writing_any_file() {
         let root = temporary_root();
-        fs::write(root.join("one.txt"), "changed").unwrap();
-        fs::write(root.join("two.txt"), "two").unwrap();
+        fs::write(root.join("one.txt"), "one").unwrap();
+        fs::write(root.join("two.txt"), "changed").unwrap();
 
         let error = FileEditExecutor::new(&root)
             .apply(&[
@@ -350,7 +353,38 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, FileEditApplyError::HashMismatch { .. }));
-        assert_eq!(fs::read_to_string(root.join("two.txt")).unwrap(), "two");
+        assert_eq!(fs::read_to_string(root.join("one.txt")).unwrap(), "one");
+        assert_eq!(fs::read_to_string(root.join("two.txt")).unwrap(), "changed");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cleans_prepared_temporary_files_when_a_later_prepare_fails() {
+        let root = temporary_root();
+        fs::write(root.join("one.txt"), "one").unwrap();
+        let missing_parent_edit = FileEdit {
+            path: "missing/two.txt".into(),
+            expected: FileEditExpectation::Missing,
+            new_content: "next-two".to_string(),
+            source: EditSource::PackageVersion {
+                package: PackageId::new("two"),
+            },
+        };
+
+        let error = FileEditExecutor::new(&root)
+            .apply(&[edit("one.txt", "one", "next-one"), missing_parent_edit])
+            .unwrap_err();
+
+        assert!(matches!(error, FileEditApplyError::CreateTemporary { .. }));
+        assert_eq!(fs::read_to_string(root.join("one.txt")).unwrap(), "one");
+        assert!(!root.join("missing/two.txt").exists());
+        assert!(fs::read_dir(&root).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".smif-")
+        }));
         fs::remove_dir_all(root).unwrap();
     }
 

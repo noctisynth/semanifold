@@ -17,7 +17,7 @@ use semifold_resolver::{
 };
 
 use crate::{
-    file_edit_executor::{FileEditApplyReport, FileEditExecutor},
+    file_edit_executor::{FileEditApplyReport, FileEditExecutor, validate_file_edits},
     release::plan_release,
 };
 
@@ -157,7 +157,7 @@ pub(crate) async fn version(
         plan_changelog_edits(ctx, repo, root, config, changesets, release_plan).await?;
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
     if ctx.dry_run {
-        FileEditExecutor::new(edit_root).validate(release_plan.file_edits())?;
+        validate_file_edits(edit_root, release_plan.file_edits())?;
         return Ok(ApplyReport::default());
     }
 

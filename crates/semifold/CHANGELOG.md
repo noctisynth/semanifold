@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0-beta.0
+
+### Refactors
+
+- [`0d9f35d`](https://github.com/noctisynth/semifold/commit/0d9f35d368a5b3a84ce93ba20c9dc4dcf96a5090): Route Rust package discovery, inspection, and release edit planning through the side-effect-free ecosystem adapter boundary.
+- [`a88431b`](https://github.com/noctisynth/semifold/commit/a88431bcca5a4fa60b05b0fd291ec3781f7b906d): Route C++ package discovery, inspection, and CMake/vcpkg edit planning through the ecosystem adapter with recursive in-root workspace discovery.
+- [`31a668f`](https://github.com/noctisynth/semifold/commit/31a668f13b31501f406f2c08f32f012780537231): Route Python package discovery, inspection, and native version file planning through the ecosystem adapter while preserving read-only Cargo version sources.
+- [`9e6b717`](https://github.com/noctisynth/semifold/commit/9e6b7170b2b75f44d26b6d5aa80917daa63149ff): Route Node.js package discovery, inspection, and release edit planning through the ecosystem adapter boundary with configured package id support.
+
 ## v0.3.0-alpha.9
 
 ### Bug Fixes

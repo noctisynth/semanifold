@@ -1,6 +1,6 @@
 [package]
 name = "semifold"
-version = "0.3.0-alpha.9"
+version = "0.3.0-beta.0"
 authors.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -44,7 +44,7 @@ saphyr = "0.0.6"
 schemars = "1.0"
 semifold-changelog = { path = "../changelog", version = "0.3.0-alpha.2" }
 semifold-core = { version = "0.1.0-alpha.5", path = "../semifold-core" }
-semifold-resolver = { path = "../resolver", version = "0.4.0-alpha.7", features = [
+semifold-resolver = { path = "../resolver", version = "0.4.0-beta.0", features = [
   "clap",
 ] }
 semver = "1.0.27"

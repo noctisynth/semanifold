@@ -11,10 +11,12 @@ use rust_i18n::t;
 
 use semifold_changelog::read_latest_changelog;
 use semifold_resolver::{
-    config::{PackageConfig, ResolverConfig},
+    config::{Config, PackageConfig, ResolverConfig},
     context::Context,
     resolver::ResolvedPackage,
 };
+
+use crate::workspace::load_workspace_graph;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -121,6 +123,14 @@ pub(crate) async fn pre_check(
     Ok(resp.status() == StatusCode::OK)
 }
 
+fn package_publish_order(root: &std::path::Path, config: &Config) -> anyhow::Result<Vec<String>> {
+    Ok(load_workspace_graph(root, config)?
+        .topological_order()?
+        .into_iter()
+        .map(|package| package.to_string())
+        .collect())
+}
+
 pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Result<()> {
     let config = ctx
         .config
@@ -143,14 +153,14 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
     };
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
-    let mut sorted_packages = config.packages.clone().into_iter().collect::<Vec<_>>();
-    for resolver in config.resolver.keys() {
-        ctx.create_resolver(*resolver)
-            .sort_packages(&root, &mut sorted_packages)?;
-    }
-    log::debug!("Sorted packages: {:?}", sorted_packages);
+    let publish_order = package_publish_order(&root, config)?;
+    log::debug!("Package publish order: {:?}", publish_order);
 
-    for (package_name, package) in &sorted_packages {
+    for package_name in &publish_order {
+        let package = config
+            .packages
+            .get(package_name)
+            .expect("publish order is derived from configured packages");
         let resolver_config = config
             .resolver
             .get(&package.resolver)
@@ -258,4 +268,96 @@ pub(crate) async fn run(opts: &Publish, ctx: &Context) -> anyhow::Result<()> {
     publish(ctx, opts.github_release).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use semifold_resolver::{
+        config::{BranchesConfig, PackageConfig, ReleaseChannel},
+        resolver::ResolverType,
+    };
+
+    use super::{Config, package_publish_order};
+
+    fn temporary_root() -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "semifold-publish-order-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn package(path: &str) -> PackageConfig {
+        PackageConfig {
+            path: path.into(),
+            resolver: ResolverType::Rust,
+            channel: ReleaseChannel::Stable,
+            assets: vec![],
+        }
+    }
+
+    #[test]
+    fn publishes_each_dependency_before_its_transitive_dependents() {
+        let root = temporary_root();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        for (name, dependencies) in [
+            ("core", ""),
+            (
+                "resolver",
+                "\n[dependencies]\ncore = { version = \"1\", path = \"../core\" }\n",
+            ),
+            (
+                "changelog",
+                "\n[dependencies]\nresolver = { version = \"1\", path = \"../resolver\" }\n",
+            ),
+            (
+                "semifold",
+                "\n[dependencies]\nchangelog = { version = \"1\", path = \"../changelog\" }\n",
+            ),
+        ] {
+            let package_root = root.join("crates").join(name);
+            fs::create_dir_all(&package_root).unwrap();
+            fs::write(
+                package_root.join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n{dependencies}"),
+            )
+            .unwrap();
+        }
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("changelog".to_string(), package("crates/changelog")),
+                ("core".to_string(), package("crates/core")),
+                ("resolver".to_string(), package("crates/resolver")),
+                ("semifold".to_string(), package("crates/semifold")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+
+        assert_eq!(
+            package_publish_order(&root, &config).unwrap(),
+            ["core", "resolver", "changelog", "semifold"]
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }

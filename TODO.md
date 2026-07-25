@@ -266,7 +266,7 @@
 - [ ] 将 release branch / release PR 规划归属到 `ReleaseUnit`
 - [ ] 明确 package-level Git tag 与 release-unit branch identity 的区别
 - [ ] 将 preflight、commands 和 assets 纳入计划
-- [ ] 基于 `WorkspaceGraph` 生成确定性发布顺序
+- [x] 基于 `WorkspaceGraph` 生成确定性发布顺序
 - [ ] 为 private package 和已发布版本提供显式 skip reason
 
 ### 外部能力

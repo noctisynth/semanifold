@@ -310,6 +310,12 @@ changeset 只能在 manifest、changelog 和 post-version 命令均成功后删�
 
 `status` 只渲染该计划，`version` 验证并应用该计划。
 
+在完整 `PublishPlan` 落地前，现有 `publish` 迁移层也必须使用同一个
+`WorkspaceGraph.topological_order()` 生成 package 执行顺序；不得继续依次调用各
+resolver 的局部 `sort_packages()`，因为直接依赖比较无法形成多层依赖的全局拓扑序，
+会导致依赖包尚未发布时先发布依赖方。完整发布引擎仍在阶段 5 接管 preflight、skip
+reason、命令和报告，但迁移期发布顺序必须立即满足“依赖先于依赖方”。
+
 ### 6.4 `FileEdit`
 
 ```rust

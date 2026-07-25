@@ -361,6 +361,95 @@ mod tests {
     }
 
     #[test]
+    fn rust_development_and_build_dependencies_order_without_propagating() {
+        let root = temporary_root();
+        for (path, manifest) in [
+            ("core", "[package]\nname = \"core\"\nversion = \"1.0.0\"\n"),
+            (
+                "app",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[dev-dependencies]\ncore = { version = \"^1.0.0\", path = \"../core\" }\n\n[build-dependencies]\ncore = { version = \"^1.0.0\", path = \"../core\" }\n",
+            ),
+        ] {
+            fs::create_dir_all(root.join(path)).unwrap();
+            fs::write(root.join(path).join("Cargo.toml"), manifest).unwrap();
+        }
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("app".to_string(), package("app")),
+                ("core".to_string(), package("core")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("core-major".to_string(), &root);
+        changeset.add_package("core".to_string(), ResolverBumpLevel::Major, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(plan.order(), [PackageId::new("core")]);
+        assert!(plan.package(&PackageId::new("app")).is_none());
+        assert!(
+            plan.file_edits()
+                .iter()
+                .all(|edit| edit.path != "app/Cargo.toml")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn node_manifest_dependency_kinds_do_not_propagate_without_depends_on() {
+        let root = temporary_root();
+        fs::create_dir_all(root.join("core")).unwrap();
+        fs::create_dir_all(root.join("app")).unwrap();
+        fs::write(
+            root.join("core/package.json"),
+            r#"{"name":"core","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("app/package.json"),
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "core": "^1.0.0" },
+  "devDependencies": { "core": "^1.0.0" },
+  "peerDependencies": { "core": "^1.0.0" },
+  "optionalDependencies": { "core": "^1.0.0" }
+}"#,
+        )
+        .unwrap();
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("app".to_string(), node_package("app", &[])),
+                ("core".to_string(), node_package("core", &[])),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("core-major".to_string(), &root);
+        changeset.add_package("core".to_string(), ResolverBumpLevel::Major, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(plan.order(), [PackageId::new("core")]);
+        assert!(plan.package(&PackageId::new("app")).is_none());
+        assert!(
+            plan.file_edits()
+                .iter()
+                .all(|edit| edit.path != "app/package.json")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn plans_one_shared_workspace_dependency_edit_for_aliased_package_ids() {
         let root = temporary_root();
         fs::write(

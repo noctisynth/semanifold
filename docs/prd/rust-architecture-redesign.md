@@ -319,7 +319,21 @@ impl ReleasePlanner {
 }
 ```
 
-`propagating_dependencies` 是 adapter/engine 根据生态规则筛选并解析后的传播策略，而不是 manifest 所有依赖的副本。首版只为 Rust runtime dependency 提供规则；dev、build、peer、optional 和尚未决定传播语义的生态依赖不加入该集合。`Some(requirement)` 在依赖的新版本仍满足约束时不传播；`None` 表示没有可验证的发布约束，依赖发生发布时传播 patch。
+`propagating_dependencies` 是 adapter/engine 根据生态规则筛选并解析后的传播策略，而不是 manifest
+所有依赖的副本。依赖是否参与排序与是否触发发布传播是两项独立决策：
+
+- 所有已解析为内部边的 manifest `Runtime`、`Development`、`Build`、`Optional`、`Peer` 依赖都参与
+  `WorkspaceGraph` 拓扑排序，确保版本修改、构建、测试与发布命令始终在依赖之后执行；
+- 首版只有 Rust `[dependencies]` 的 `Runtime` 边进入约束感知的自动传播；
+- manifest `Development`、`Build`、`Optional` 与 `Peer` 边不自动传播；Node.js、Python 与 C++ 的
+  manifest `Runtime` 边也不自动传播，因为 npm、PEP 440 与 CMake 约束不能交给 Rust semver
+  解析器近似判断；
+- `source = Config` 的 `depends-on` 边不受类别限制，始终以无约束策略传播 patch，作为需要重新构建
+  或重新发布时的显式选择。
+
+`Some(requirement)` 在依赖的新版本仍满足约束时不传播；`None` 表示没有可验证的发布约束，依赖发生
+发布时传播 patch。未来若为其他生态启用 manifest 自动传播，必须先由对应 adapter 将原生约束转换为
+可验证的领域策略，不得在 application/core 中用 `semver::VersionReq` 猜测 npm 或 PEP 440 语义。
 
 planner 合并同一 package 的最高 bump，并为每个贡献 changeset 保留独立原因。依赖约束失效时，将尚未发布的依赖方加入 patch 发布闭包；依赖方已有显式发布时保留其更高 bump，同时追加依赖传播原因。完整闭包计算后一次生成所有 package 的 `VersionMap`，再按 `WorkspaceGraph` 拓扑顺序生成发布顺序。
 
@@ -572,7 +586,12 @@ release package 的遍历顺序。只有目标 package 的计划版本相对当�
 
 Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。
 
-对于 manifest 内部依赖，adapter 必须同时提供依赖类别与可发布版本约束。`ReleasePlanner` 只在依赖的计划新版本不满足该约束时，才将运行时依赖方自动加入发布闭包并规划 manifest 版本更新；约束仍满足时，依赖方不因该依赖单独发布。首版只将 Rust `[dependencies]` 视为运行时依赖，`dev-dependencies`、`build-dependencies`、Node peer/optional 及其他生态依赖类别必须在对应传播策略确定前保持不自动传播。
+对于 manifest 内部依赖，adapter 必须同时提供依赖类别与原生版本约束。所有类别统一参与
+`WorkspaceGraph` 排序；`ReleasePlanner` 的传播 allowlist 则按 6.3 节执行。首版只将 Rust
+`[dependencies]` 视为约束感知的传播依赖：计划新版本不满足约束时，将依赖方自动加入发布闭包并规划
+manifest 版本更新；约束仍满足时不单独发布依赖方。`dev-dependencies`、`build-dependencies`、
+Node peer/optional 以及 Node.js、Python、C++ 的其他 manifest 边不自动传播；需要依赖发布即重新构建
+或发布的关系必须用 `depends-on` 显式声明。
 
 Adapter 不可以：
 
@@ -1501,7 +1520,9 @@ fixtures/rust/
 
 1. [已决定] 运行时内部依赖的新版本不满足依赖方 manifest 约束时，才自动触发依赖方 patch bump；显式 changeset 的更高 bump 优先。约束仍满足时不自动发布依赖方。
 2. [已决定] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播。
-3. peer、optional 和其他生态依赖类别分别采用什么传播策略。
+3. [已决定] 所有内部依赖类别参与拓扑排序；首版 manifest 自动传播仅支持 Rust runtime，
+   development、build、peer、optional 及其他生态 manifest 依赖不自动传播，需要时使用
+   `depends-on`。
 4. [已决定] `PackageId` 全局唯一但不自动添加 namespace；跨生态同名 manifest 由已有配置的稳定 ID 区分，首次发现无法唯一落盘时报告冲突。
 5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
 6. [已决定] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`，并保留可诊断的收集错误。

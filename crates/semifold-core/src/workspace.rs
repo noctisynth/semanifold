@@ -229,6 +229,37 @@ mod tests {
     }
 
     #[test]
+    fn orders_every_manifest_dependency_kind_before_the_dependent() {
+        let mut app = package(
+            "app",
+            &["runtime", "development", "build", "optional", "peer"],
+        );
+        for (dependency, kind) in app.dependencies.iter_mut().zip([
+            DependencyKind::Runtime,
+            DependencyKind::Development,
+            DependencyKind::Build,
+            DependencyKind::Optional,
+            DependencyKind::Peer,
+        ]) {
+            dependency.kind = kind;
+        }
+        let graph = WorkspaceGraph::new(vec![
+            app,
+            package("runtime", &[]),
+            package("development", &[]),
+            package("build", &[]),
+            package("optional", &[]),
+            package("peer", &[]),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            ids(graph.topological_order().unwrap()),
+            ["build", "development", "optional", "peer", "runtime", "app"]
+        );
+    }
+
+    #[test]
     fn orders_unrelated_packages_by_package_id() {
         let graph =
             WorkspaceGraph::new(vec![package("zebra", &[]), package("alpha", &[])]).unwrap();

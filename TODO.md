@@ -247,7 +247,7 @@
 - [x] 在配置中增加可选 `depends-on`
 - [x] 将 manifest 内部依赖与显式跨生态依赖合并到 `WorkspaceGraph`
 - [x] 定义相同包名跨生态冲突策略
-- [ ] 定义 dev、peer、optional 和 build dependency 的排序与传播策略
+- [x] 定义 dev、peer、optional 和 build dependency 的排序与传播策略
 
 ### 阶段完成条件
 
@@ -373,7 +373,7 @@
 
 - [x] 运行时内部依赖仅在计划新版本不满足依赖方 manifest 约束时触发 patch bump；显式 changeset 的更高 bump 优先，约束仍满足时不自动发布依赖方
 - [x] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播
-- [ ] peer、optional 和其他生态依赖类别的传播规则
+- [x] 所有内部依赖类别参与排序；dev、build、peer、optional 不自动传播，需要时使用 `depends-on`
 - [x] `PackageId` 不自动添加 namespace；跨生态同名由稳定配置 ID 区分，首次发现歧义时报告冲突
 - [x] Post-version 命令失败时保留已写入文件和 changeset，不自动回滚，并返回结构化恢复指引
 - [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`

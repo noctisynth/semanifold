@@ -556,4 +556,42 @@ mod tests {
         );
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn plans_python_post_release_with_pep_440_manifest_version() {
+        let root = temporary_root();
+        fs::write(
+            root.join("pyproject.toml"),
+            "[project]\nname = \"example\"\nversion = \"1.2.3\"\n",
+        )
+        .unwrap();
+        let mut package = python_package(".");
+        package.channel = ResolverReleaseChannel::Named("post".to_string());
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([("example".to_string(), package)]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("python-post".to_string(), &root);
+        changeset.add_package("example".to_string(), ResolverBumpLevel::Patch, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(
+            plan.package(&PackageId::new("example"))
+                .unwrap()
+                .next_version,
+            semver::Version::parse("1.2.4-post.0").unwrap()
+        );
+        assert!(
+            plan.file_edits()
+                .iter()
+                .any(|edit| edit.new_content.contains("version = \"1.2.4.post0\""))
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }

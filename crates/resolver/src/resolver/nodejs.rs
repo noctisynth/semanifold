@@ -80,8 +80,16 @@ impl NodejsResolver {
     ) -> Result<FileEdit, ResolveError> {
         let manifest_versions = versions
             .iter()
-            .map(|(package, version)| (package.to_string(), version.clone()))
-            .collect();
+            .map(|(package, version)| {
+                NodejsResolver
+                    .encode_version(version)
+                    .map(|version| (package.to_string(), version))
+                    .map_err(|error| ResolveError::InvalidVersion {
+                        version: version.to_string(),
+                        reason: error.to_string(),
+                    })
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         Self::plan_package_edit(root, package, versions, &manifest_versions)
     }
 
@@ -89,7 +97,7 @@ impl NodejsResolver {
         root: &Path,
         package: &PackageSnapshot,
         versions: &VersionMap,
-        manifest_versions: &BTreeMap<String, semver::Version>,
+        manifest_versions: &BTreeMap<String, String>,
     ) -> Result<FileEdit, ResolveError> {
         let package_json_path = root.join(package.path.as_std_path()).join("package.json");
         let original = std::fs::read_to_string(&package_json_path)?;
@@ -116,7 +124,12 @@ impl NodejsResolver {
         })?;
         object.insert(
             "version".to_string(),
-            serde_json::Value::String(next_version.to_string()),
+            serde_json::Value::String(NodejsResolver.encode_version(next_version).map_err(
+                |error| ResolveError::InvalidVersion {
+                    version: next_version.to_string(),
+                    reason: error.to_string(),
+                },
+            )?),
         );
         for field in [
             "dependencies",
@@ -211,22 +224,25 @@ impl NodejsResolver {
     }
 }
 
-fn node_requirement(requirement: &str, version: &semver::Version) -> String {
+fn node_requirement(requirement: &str, version: &str) -> String {
     if requirement == "workspace:*" {
         return requirement.to_string();
     }
-    let version = version.to_string();
     for prefix in ["workspace:^", "workspace:~", "^", "~"] {
         if requirement.starts_with(prefix) {
             return format!("{prefix}{version}");
         }
     }
-    version
+    version.to_string()
 }
 
 impl EcosystemAdapter for NodejsResolver {
     fn ecosystem(&self) -> Ecosystem {
         Ecosystem::Node
+    }
+
+    fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
+        Ok(version.to_string())
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
@@ -297,9 +313,10 @@ impl EcosystemAdapter for NodejsResolver {
                     .versions
                     .get(&package.id)
                     .filter(|version| *version != &package.version)
-                    .map(|version| (package.manifest_name.clone(), version.clone()))
+                    .map(|version| (package.manifest_name.clone(), version))
             })
-            .collect::<BTreeMap<_, _>>();
+            .map(|(name, version)| self.encode_version(version).map(|version| (name, version)))
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         let released_packages = input
             .released_packages
             .iter()

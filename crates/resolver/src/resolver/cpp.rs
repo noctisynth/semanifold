@@ -60,13 +60,19 @@ impl CppResolver {
         package: &PackageSnapshot,
         versions: &VersionMap,
     ) -> Result<Vec<FileEdit>, ResolveError> {
-        let version = versions
-            .get(&package.id)
-            .ok_or_else(|| ResolveError::InvalidConfig {
-                path: root.join(package.path.as_std_path()),
-                reason: format!("missing planned version for {}", package.id),
-            })?
-            .to_string();
+        let next_version =
+            versions
+                .get(&package.id)
+                .ok_or_else(|| ResolveError::InvalidConfig {
+                    path: root.join(package.path.as_std_path()),
+                    reason: format!("missing planned version for {}", package.id),
+                })?;
+        let version = CppResolver.encode_version(next_version).map_err(|error| {
+            ResolveError::InvalidVersion {
+                version: next_version.to_string(),
+                reason: error.to_string(),
+            }
+        })?;
         let package_path = root.join(package.path.as_std_path());
         let cmake_path = package_path.join("CMakeLists.txt");
         let cmake = std::fs::read_to_string(&cmake_path)?;
@@ -291,6 +297,18 @@ impl CppResolver {
 impl EcosystemAdapter for CppResolver {
     fn ecosystem(&self) -> Ecosystem {
         Ecosystem::Cpp
+    }
+
+    fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
+        if version.pre.is_empty() && version.build.is_empty() {
+            Ok(version.to_string())
+        } else {
+            Err(AdapterError::InvalidVersion {
+                ecosystem: Ecosystem::Cpp,
+                version: version.clone(),
+                reason: "CMake project(VERSION) only accepts stable numeric versions".to_string(),
+            })
+        }
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
@@ -628,5 +646,18 @@ mod tests {
                 .contains("VERSION 1.0.0")
         );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_named_channels_for_cmake_versions() {
+        let version = semver::Version::parse("1.2.3-alpha.0").unwrap();
+
+        assert!(matches!(
+            CppResolver.encode_version(&version),
+            Err(AdapterError::InvalidVersion {
+                ecosystem: Ecosystem::Cpp,
+                ..
+            })
+        ));
     }
 }

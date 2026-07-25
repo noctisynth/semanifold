@@ -228,7 +228,7 @@
 - [x] 实现 `inspect()`
 - [x] 实现 `plan_edits()`
 - [x] Adapter 接收完整 `VersionMap`
-- [ ] 由各 ecosystem adapter 验证并编码命名通道版本；支持 post-release 生态格式
+- [x] 由各 ecosystem adapter 验证并编码命名通道版本；支持 Python PEP 440 post-release 格式
 
 ### 迁移
 

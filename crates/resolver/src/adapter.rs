@@ -55,6 +55,9 @@ pub struct EcosystemPlanInput<'input> {
 pub trait EcosystemAdapter: Send + Sync {
     fn ecosystem(&self) -> Ecosystem;
 
+    /// Validates a planned domain version and encodes it for this ecosystem's manifests.
+    fn encode_version(&self, version: &Version) -> Result<String, AdapterError>;
+
     fn discover(&self, root: &Utf8Path) -> Result<Vec<PackageInspection>, AdapterError>;
 
     fn inspect(&self, package: &PackageLocation) -> Result<PackageInspection, AdapterError>;
@@ -69,6 +72,12 @@ pub enum AdapterError {
     Manifest(#[from] ResolveError),
     #[error("invalid adapter input: {reason}")]
     InvalidInput { reason: String },
+    #[error("{ecosystem:?} cannot encode version {version}: {reason}")]
+    InvalidVersion {
+        ecosystem: Ecosystem,
+        version: Version,
+        reason: String,
+    },
 }
 
 #[cfg(test)]
@@ -84,6 +93,10 @@ mod tests {
     impl EcosystemAdapter for ContractAdapter {
         fn ecosystem(&self) -> Ecosystem {
             Ecosystem::Node
+        }
+
+        fn encode_version(&self, version: &Version) -> Result<String, AdapterError> {
+            Ok(version.to_string())
         }
 
         fn discover(&self, _root: &Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {

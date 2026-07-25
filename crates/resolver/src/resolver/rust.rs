@@ -98,14 +98,18 @@ impl RustResolver {
                 versions
                     .get(&package.id)
                     .filter(|version| *version != &package.version)
-                    .map(|version| {
-                        (
-                            package.manifest_name.clone(),
-                            (package.id.clone(), version.clone()),
-                        )
+                    .map(|version| (package, version))
+            })
+            .map(|(package, version)| {
+                RustResolver
+                    .encode_version(version)
+                    .map(|version| (package.manifest_name.clone(), (package.id.clone(), version)))
+                    .map_err(|error| ResolveError::InvalidVersion {
+                        version: version.to_string(),
+                        reason: error.to_string(),
                     })
             })
-            .collect::<BTreeMap<_, _>>();
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         let mut manifests = BTreeMap::<String, PlannedManifest>::new();
 
         for package in released_packages {
@@ -125,7 +129,13 @@ impl RustResolver {
                         path: root.join(&relative_path),
                         reason: "package table not found".to_string(),
                     })?;
-            package_table["version"] = toml_edit::value(next_version.to_string());
+            package_table["version"] =
+                toml_edit::value(RustResolver.encode_version(next_version).map_err(|error| {
+                    ResolveError::InvalidVersion {
+                        version: next_version.to_string(),
+                        reason: error.to_string(),
+                    }
+                })?);
             manifest.package = Some(package.id.clone());
 
             for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
@@ -224,7 +234,7 @@ impl RustResolver {
 
     fn update_dependency_versions(
         dependencies: &mut toml_edit::Table,
-        changed_versions: &BTreeMap<String, (PackageId, semver::Version)>,
+        changed_versions: &BTreeMap<String, (PackageId, String)>,
     ) -> BTreeSet<PackageId> {
         let mut updated = BTreeSet::new();
         for (name, dependency) in dependencies.iter_mut() {
@@ -235,7 +245,6 @@ impl RustResolver {
             let Some((package, version)) = changed_versions.get(manifest_name) else {
                 continue;
             };
-            let version = version.to_string();
             if dependency.is_str() {
                 if dependency.as_str() != Some(version.as_str()) {
                     *dependency = toml_edit::value(version);
@@ -344,6 +353,10 @@ impl RustResolver {
 impl EcosystemAdapter for RustResolver {
     fn ecosystem(&self) -> Ecosystem {
         Ecosystem::Rust
+    }
+
+    fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
+        Ok(version.to_string())
     }
 
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {

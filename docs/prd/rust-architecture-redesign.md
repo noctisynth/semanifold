@@ -1113,14 +1113,15 @@ pub enum ReleaseChannel {
 
 配置加载时，缺省值和 `stable` 都解析为 `ReleaseChannel::Stable`；其余值解析为 `ReleaseChannel::Named`。配置同步对新 stable package 省略 `channel`，但不应因无关同步操作删除用户显式写入的 `channel = "stable"`。
 
-`ReleaseChannel` 是发布流程概念，不是 SemVer 的 `Prerelease` 概念。核心仅处理通道状态与序号推进，具体版本字符串由 ecosystem adapter 按各自版本规范编码和验证：
+`ReleaseChannel` 是发布流程概念，不是 SemVer 的 `Prerelease` 概念。核心仅处理通道状态与序号推进；为保持现有 `ReleasePlan` 的统一排序和序列化，它暂以 SemVer 形状保存过渡版本值，但这个值不是 manifest 的最终版本字符串。`EcosystemAdapter::encode_version()` 必须在 `plan_edits()` 前将其验证并编码为所属生态的版本文本，所有 package version 与内部依赖版本编辑都必须使用该结果：
 
 | 生态 | `channel = "alpha"` 的一种编码 | `channel = "post"` 的一种编码 |
 | --- | --- | --- |
 | Rust / Node（SemVer） | `1.0.0-alpha.1` | `1.0.0-post.1` |
 | Python（PEP 440） | `1.0.0a1` 或项目约定格式 | `1.0.0.post1` |
+| CMake / vcpkg | 不支持命名通道；`project(VERSION)` 只接受稳定数字版本 | 不支持 |
 
-因此，`channel` 的字符串不在 core 中按 SemVer 限制；adapter 必须在规划阶段验证该通道能否表示为对应生态的合法版本，并在无法表示时返回结构化错误。
+Rust 和 Node adapter 直接使用合法的 SemVer 文本。Python adapter 将 `alpha.N`、`beta.N`、`rc.N` 和 `post.N` 分别编码为 PEP 440 的 `aN`、`bN`、`rcN` 和 `.postN`，并在 inspection 时将这四种 PEP 440 格式还原为领域的过渡值；其他命名通道在 Python 规划时失败。CMake adapter 拒绝任何含 prerelease 的过渡值，避免生成 CMake 不接受的 `project(VERSION)`。因此，`channel` 的字符串不在 core 中按各生态规范限制；adapter 必须在规划阶段验证其能否表示并在无法表示时返回结构化错误。
 
 版本通道的状态完全由当前版本和当前 `channel` 决定，不能依赖已经被 version 命令消费的 changeset。规则如下：
 

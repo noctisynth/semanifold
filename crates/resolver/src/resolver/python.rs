@@ -4,6 +4,7 @@ use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, VersionMap,
 };
+use semver::{Prerelease, Version};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -67,6 +68,85 @@ struct CargoPackage {
 
 pub struct PythonResolver;
 
+fn parse_python_version(value: &str) -> Result<Version, ResolveError> {
+    if let Ok(version) = Version::parse(value) {
+        return Ok(version);
+    }
+
+    let (base, channel, sequence) = if let Some((base, sequence)) = value.rsplit_once(".post") {
+        (base, "post", sequence)
+    } else if let Some((base, sequence)) = value.rsplit_once("rc") {
+        (base, "rc", sequence)
+    } else if let Some((base, sequence)) = value.rsplit_once('a') {
+        (base, "alpha", sequence)
+    } else if let Some((base, sequence)) = value.rsplit_once('b') {
+        (base, "beta", sequence)
+    } else {
+        return Err(ResolveError::InvalidVersion {
+            version: value.to_string(),
+            reason: "expected SemVer or a supported PEP 440 pre/post-release".to_string(),
+        });
+    };
+    if sequence.is_empty() || !sequence.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(ResolveError::InvalidVersion {
+            version: value.to_string(),
+            reason: "PEP 440 release sequence must be a non-negative integer".to_string(),
+        });
+    }
+    let mut version = Version::parse(base).map_err(|error| ResolveError::InvalidVersion {
+        version: value.to_string(),
+        reason: format!("invalid PEP 440 release base: {error}"),
+    })?;
+    version.pre = Prerelease::new(&format!("{channel}.{sequence}"))?;
+    Ok(version)
+}
+
+fn encode_python_version(version: &Version) -> Result<String, AdapterError> {
+    if version.pre.is_empty() {
+        return Ok(version.to_string());
+    }
+    if !version.build.is_empty() {
+        return Err(AdapterError::InvalidVersion {
+            ecosystem: Ecosystem::Python,
+            version: version.clone(),
+            reason: "PEP 440 named channels do not support SemVer build metadata".to_string(),
+        });
+    }
+    let Some((channel, sequence)) = version.pre.as_str().split_once('.') else {
+        return Err(AdapterError::InvalidVersion {
+            ecosystem: Ecosystem::Python,
+            version: version.clone(),
+            reason: "named release channels require a numeric sequence".to_string(),
+        });
+    };
+    if sequence.is_empty()
+        || !sequence.bytes().all(|byte| byte.is_ascii_digit())
+        || sequence.contains('.')
+    {
+        return Err(AdapterError::InvalidVersion {
+            ecosystem: Ecosystem::Python,
+            version: version.clone(),
+            reason: "named release channel sequences must be non-negative integers".to_string(),
+        });
+    }
+
+    let base = format!("{}.{}.{}", version.major, version.minor, version.patch);
+    let encoded = match channel {
+        "alpha" => format!("{base}a{sequence}"),
+        "beta" => format!("{base}b{sequence}"),
+        "rc" => format!("{base}rc{sequence}"),
+        "post" => format!("{base}.post{sequence}"),
+        _ => {
+            return Err(AdapterError::InvalidVersion {
+                ecosystem: Ecosystem::Python,
+                version: version.clone(),
+                reason: format!("unsupported Python release channel {channel}"),
+            });
+        }
+    };
+    Ok(encoded)
+}
+
 impl PythonResolver {
     fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
         PackageConfig {
@@ -104,13 +184,19 @@ impl PythonResolver {
         package: &PackageSnapshot,
         versions: &VersionMap,
     ) -> Result<Vec<FileEdit>, ResolveError> {
-        let version = versions
-            .get(&package.id)
-            .ok_or_else(|| ResolveError::InvalidConfig {
-                path: root.join(package.path.as_std_path()),
-                reason: format!("missing planned version for {}", package.id),
-            })?
-            .to_string();
+        let next_version =
+            versions
+                .get(&package.id)
+                .ok_or_else(|| ResolveError::InvalidConfig {
+                    path: root.join(package.path.as_std_path()),
+                    reason: format!("missing planned version for {}", package.id),
+                })?;
+        let version = PythonResolver
+            .encode_version(next_version)
+            .map_err(|error| ResolveError::InvalidVersion {
+                version: next_version.to_string(),
+                reason: error.to_string(),
+            })?;
         let mut edits = Vec::new();
         let mut configured_version_path = None;
 
@@ -415,7 +501,7 @@ impl PythonResolver {
 
         Ok(ParsedPackage {
             name,
-            version: semver::Version::parse(&version)?,
+            version: parse_python_version(&version)?,
             path: pkg_path.to_path_buf(),
             private: false,
         })
@@ -470,7 +556,7 @@ impl PythonResolver {
 
         Ok(ParsedPackage {
             name,
-            version: semver::Version::parse(&version)?,
+            version: parse_python_version(&version)?,
             path: pkg_path.to_path_buf(),
             private: false,
         })
@@ -637,6 +723,10 @@ impl EcosystemAdapter for PythonResolver {
         Ecosystem::Python
     }
 
+    fn encode_version(&self, version: &Version) -> Result<String, AdapterError> {
+        encode_python_version(version)
+    }
+
     fn discover(&self, root: &camino::Utf8Path) -> Result<Vec<PackageInspection>, AdapterError> {
         let packages = self.discover_packages(root.as_std_path())?;
         let mut inspections = packages
@@ -780,7 +870,7 @@ mod tests {
     };
     use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
 
-    use super::PythonResolver;
+    use super::{PythonResolver, parse_python_version};
 
     fn temp_dir(test_name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -828,6 +918,74 @@ mod tests {
         assert_eq!(package.version, semver::Version::parse("1.2.3").unwrap());
         assert_eq!(package.path, PathBuf::from("."));
         assert!(!package.private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn encodes_and_parses_supported_pep_440_release_channels() {
+        let cases = [
+            ("1.2.3-alpha.4", "1.2.3a4"),
+            ("1.2.3-beta.4", "1.2.3b4"),
+            ("1.2.3-rc.4", "1.2.3rc4"),
+            ("1.2.3-post.4", "1.2.3.post4"),
+        ];
+
+        for (domain, encoded) in cases {
+            let domain = semver::Version::parse(domain).unwrap();
+            assert_eq!(PythonResolver.encode_version(&domain).unwrap(), encoded);
+            assert_eq!(parse_python_version(encoded).unwrap(), domain);
+        }
+    }
+
+    #[test]
+    fn rejects_python_channels_without_a_pep_440_encoding() {
+        let version = semver::Version::parse("1.2.3-nightly.0").unwrap();
+
+        assert!(matches!(
+            PythonResolver.encode_version(&version),
+            Err(crate::adapter::AdapterError::InvalidVersion {
+                ecosystem: Ecosystem::Python,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn plans_pep_440_post_release_versions() {
+        let root = temp_dir("pep-440-post-release-plan");
+        write_pyproject(
+            &root,
+            ".",
+            "[project]\nname = \"example\"\nversion = \"1.2.3\"\n",
+        );
+        let package = PackageSnapshot {
+            id: PackageId::new("example"),
+            manifest_name: "example".to_string(),
+            version: semver::Version::new(1, 2, 3),
+            ecosystem: Ecosystem::Python,
+            path: ".".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([(
+            package.id.clone(),
+            semver::Version::parse("1.2.3-post.0").unwrap(),
+        )]);
+
+        let edits = PythonResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&package),
+                released_packages: std::slice::from_ref(&package.id),
+                versions: &versions,
+            })
+            .unwrap();
+
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit.new_content.contains("version = \"1.2.3.post0\""))
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

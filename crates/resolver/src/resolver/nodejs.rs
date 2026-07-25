@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::Path,
-};
+use std::{collections::BTreeMap, path::Path};
 
 use saphyr::LoadableYamlNode;
 use semifold_core::{
@@ -474,65 +471,6 @@ impl Resolver for NodejsResolver {
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
         Self::manifest_dependencies(root, pkg_config)
-    }
-
-    fn sort_packages(
-        &mut self,
-        root: &Path,
-        packages: &mut Vec<(String, PackageConfig)>,
-    ) -> Result<(), ResolveError> {
-        let cached_packages = packages
-            .iter()
-            .filter(|(_, cfg)| cfg.resolver == ResolverType::Nodejs)
-            .try_fold(HashMap::new(), |mut acc, (name, cfg)| {
-                let package_json: PackageJson = serde_json::from_str(&std::fs::read_to_string(
-                    root.join(&cfg.path).join("package.json"),
-                )?)
-                .map_err(|e| ResolveError::ParseError {
-                    path: cfg.path.join("package.json"),
-                    reason: e.to_string(),
-                })?;
-                acc.insert(name.clone(), package_json);
-                Ok::<_, ResolveError>(acc)
-            })?;
-
-        packages.sort_by(|(a, a_cfg), (b, b_cfg)| {
-            if a_cfg.resolver == ResolverType::Nodejs && b_cfg.resolver == ResolverType::Nodejs {
-                let a_pkg = cached_packages
-                    .get(a)
-                    .expect("every configured Node package must have a cached manifest");
-                let b_pkg = cached_packages
-                    .get(b)
-                    .expect("every configured Node package must have a cached manifest");
-
-                // 检查依赖关系
-                let has_dep = |pkg: &PackageJson, dep_name: &str| -> bool {
-                    pkg.dependencies
-                        .as_ref()
-                        .is_some_and(|deps| deps.contains_key(dep_name))
-                        || pkg
-                            .dev_dependencies
-                            .as_ref()
-                            .is_some_and(|deps| deps.contains_key(dep_name))
-                        || pkg
-                            .peer_dependencies
-                            .as_ref()
-                            .is_some_and(|deps| deps.contains_key(dep_name))
-                };
-
-                if has_dep(a_pkg, b) {
-                    std::cmp::Ordering::Greater
-                } else if has_dep(b_pkg, a) {
-                    std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        });
-
-        Ok(())
     }
 
     fn publish(

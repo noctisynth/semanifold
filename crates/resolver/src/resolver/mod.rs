@@ -68,12 +68,6 @@ pub trait Resolver {
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError>;
-    /// Sort packages by their dependencies
-    fn sort_packages(
-        &mut self,
-        root: &Path,
-        packages: &mut Vec<(String, PackageConfig)>,
-    ) -> Result<(), ResolveError>;
     /// Publish a package
     fn publish(
         &mut self,

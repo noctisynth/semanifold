@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::Path,
-};
+use std::{collections::BTreeMap, path::Path};
 
 use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
@@ -644,18 +641,6 @@ impl PythonResolver {
         }
         None
     }
-
-    fn parse_dependencies(
-        &self,
-        root: &Path,
-        pkg_path: &Path,
-    ) -> Result<Vec<String>, ResolveError> {
-        Ok(self
-            .manifest_dependencies(root, pkg_path)?
-            .into_iter()
-            .map(|dependency| dependency.manifest_name)
-            .collect())
-    }
 }
 
 impl EcosystemAdapter for PythonResolver {
@@ -796,45 +781,6 @@ impl Resolver for PythonResolver {
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
         self.manifest_dependencies(root, &pkg_config.path)
-    }
-
-    fn sort_packages(
-        &mut self,
-        root: &Path,
-        packages: &mut Vec<(String, PackageConfig)>,
-    ) -> Result<(), ResolveError> {
-        let cached_deps: HashMap<String, Vec<String>> = packages
-            .iter()
-            .filter(|(_, cfg)| cfg.resolver == ResolverType::Python)
-            .fold(HashMap::new(), |mut acc, (name, cfg)| {
-                match self.parse_dependencies(root, &cfg.path) {
-                    Ok(deps) => {
-                        acc.insert(name.clone(), deps);
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to parse dependencies for {}: {}", name, e);
-                        acc.insert(name.clone(), vec![]);
-                    }
-                }
-                acc
-            });
-
-        packages.sort_by(|(a, a_cfg), (b, b_cfg)| {
-            if a_cfg.resolver == ResolverType::Python
-                && b_cfg.resolver == ResolverType::Python
-                && let (Some(a_deps), Some(b_deps)) = (cached_deps.get(a), cached_deps.get(b))
-            {
-                if a_deps.iter().any(|dep| dep == b) {
-                    return std::cmp::Ordering::Greater;
-                }
-                if b_deps.iter().any(|dep| dep == a) {
-                    return std::cmp::Ordering::Less;
-                }
-            }
-            std::cmp::Ordering::Equal
-        });
-
-        Ok(())
     }
 
     fn publish(
@@ -1135,14 +1081,20 @@ mod tests {
         let resolver = PythonResolver;
         assert_eq!(
             resolver
-                .parse_dependencies(&root, Path::new("packages/pep"))
-                .unwrap(),
+                .manifest_dependencies(&root, Path::new("packages/pep"))
+                .unwrap()
+                .into_iter()
+                .map(|dependency| dependency.manifest_name)
+                .collect::<Vec<_>>(),
             vec!["core", "helpers"]
         );
         assert_eq!(
             resolver
-                .parse_dependencies(&root, Path::new("packages/poetry"))
-                .unwrap(),
+                .manifest_dependencies(&root, Path::new("packages/poetry"))
+                .unwrap()
+                .into_iter()
+                .map(|dependency| dependency.manifest_name)
+                .collect::<Vec<_>>(),
             vec!["core", "helpers"]
         );
         fs::remove_dir_all(root).unwrap();

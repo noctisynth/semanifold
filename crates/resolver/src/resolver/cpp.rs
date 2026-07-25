@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -436,44 +436,6 @@ impl Resolver for CppResolver {
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
         self.manifest_dependencies(root, pkg_config)
-    }
-
-    fn sort_packages(
-        &mut self,
-        root: &Path,
-        packages: &mut Vec<(String, PackageConfig)>,
-    ) -> Result<(), ResolveError> {
-        let dependencies = packages
-            .iter()
-            .filter(|(_, config)| config.resolver == ResolverType::Cpp)
-            .try_fold(HashMap::new(), |mut dependencies, (name, config)| {
-                dependencies.insert(name.clone(), self.internal_dependencies(root, config)?);
-                Ok::<_, ResolveError>(dependencies)
-            })?;
-
-        packages.sort_by(|(left_name, left_config), (right_name, right_config)| {
-            if left_config.resolver == ResolverType::Cpp
-                && right_config.resolver == ResolverType::Cpp
-                && let (Some(left_dependencies), Some(right_dependencies)) =
-                    (dependencies.get(left_name), dependencies.get(right_name))
-            {
-                if left_dependencies
-                    .iter()
-                    .any(|dependency| dependency == right_name)
-                {
-                    return std::cmp::Ordering::Greater;
-                }
-                if right_dependencies
-                    .iter()
-                    .any(|dependency| dependency == left_name)
-                {
-                    return std::cmp::Ordering::Less;
-                }
-            }
-            std::cmp::Ordering::Equal
-        });
-
-        Ok(())
     }
 
     fn publish(

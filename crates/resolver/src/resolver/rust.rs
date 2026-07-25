@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet},
     path::Path,
 };
 
@@ -642,58 +642,6 @@ impl Resolver for RustResolver {
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ResolvedDependency>, ResolveError> {
         Self::manifest_dependencies(root, pkg_config)
-    }
-
-    fn sort_packages(
-        &mut self,
-        root: &Path,
-        packages: &mut Vec<(String, PackageConfig)>,
-    ) -> Result<(), ResolveError> {
-        let cached_packages = packages
-            .iter()
-            .filter(|(_, cfg)| cfg.resolver == ResolverType::Rust)
-            .try_fold(HashMap::new(), |mut acc, (name, cfg)| {
-                let cargo_toml: CargoToml = toml_edit::de::from_str(&std::fs::read_to_string(
-                    root.join(&cfg.path).join("Cargo.toml"),
-                )?)
-                .map_err(|e| ResolveError::ParseError {
-                    path: cfg.path.join("Cargo.toml"),
-                    reason: e.to_string(),
-                })?;
-                acc.insert(name.clone(), cargo_toml);
-                Ok::<_, ResolveError>(acc)
-            })?;
-
-        packages.sort_by(
-            |(a, a_cfg), (b, b_cfg)| match (a_cfg.resolver, b_cfg.resolver) {
-                (ResolverType::Rust, ResolverType::Rust) => {
-                    let a_package = cached_packages
-                        .get(a)
-                        .expect("every configured Rust package must have a cached manifest");
-                    let b_package = cached_packages
-                        .get(b)
-                        .expect("every configured Rust package must have a cached manifest");
-                    let a_depends_on_b = a_package
-                        .dependencies
-                        .as_ref()
-                        .is_some_and(|dependencies| dependencies.contains_key(b));
-                    let b_depends_on_a = b_package
-                        .dependencies
-                        .as_ref()
-                        .is_some_and(|dependencies| dependencies.contains_key(a));
-                    if a_depends_on_b {
-                        std::cmp::Ordering::Greater
-                    } else if b_depends_on_a {
-                        std::cmp::Ordering::Less
-                    } else {
-                        std::cmp::Ordering::Equal
-                    }
-                }
-                _ => std::cmp::Ordering::Equal,
-            },
-        );
-
-        Ok(())
     }
 
     fn publish(

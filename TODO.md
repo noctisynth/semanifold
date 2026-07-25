@@ -236,7 +236,7 @@
 - [x] 迁移 Node.js adapter（discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
 - [x] 迁移 Python adapter（discovery、workspace inspection 与 version edit planning 已接入；动态版本只读 Cargo.toml，旧 publish 桥接由统一发布引擎移除）
 - [x] 迁移 C++ adapter（递归 discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
-- [ ] 删除 `Resolver::sort_packages()`
+- [x] 删除 `Resolver::sort_packages()`
 - [ ] 删除 `Resolver::publish()`
 - [ ] 删除 adapter 对 `Context` 的依赖
 - [ ] 删除 adapter 内的 dry-run 分支
@@ -252,7 +252,7 @@
 ### 阶段完成条件
 
 - [ ] Adapter 只负责发现、解析和变更规划
-- [ ] 所有包顺序由统一 `WorkspaceGraph` 计算
+- [x] 所有包顺序由统一 `WorkspaceGraph` 计算
 - [ ] 跨生态依赖参与同一拓扑排序
 
 ## 阶段 5：统一发布引擎

@@ -1,14 +1,18 @@
 #![allow(clippy::unwrap_used)]
 
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use insta::assert_snapshot;
-use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
+use semifold_core::{
+    Dependency, Ecosystem, PackageId, PackageSnapshot, VersionMap, WorkspaceGraph,
+};
 use semifold_resolver::{
+    adapter::{EcosystemAdapter, PackageLocation},
     config::{PackageConfig, ReleaseChannel},
     resolver::{
         ResolvedPackage, Resolver, ResolverType, cpp::CppResolver, nodejs::NodejsResolver,
@@ -77,6 +81,60 @@ fn render_packages(mut packages: Vec<ResolvedPackage>) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+fn adapter_order(
+    adapter: &dyn EcosystemAdapter,
+    root: &Path,
+    packages: &[(&str, &str)],
+) -> Vec<PackageId> {
+    let project_root = camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).unwrap();
+    let inspections = packages
+        .iter()
+        .map(|(id, path)| {
+            adapter
+                .inspect(&PackageLocation {
+                    id: PackageId::new(*id),
+                    project_root: project_root.clone(),
+                    path: (*path).into(),
+                })
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let package_ids = inspections
+        .iter()
+        .map(|package| (package.manifest_name.clone(), package.id.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let snapshots = inspections
+        .into_iter()
+        .map(|package| PackageSnapshot {
+            id: package.id,
+            manifest_name: package.manifest_name,
+            version: package.version,
+            ecosystem: package.ecosystem,
+            path: package.path,
+            publishable: package.publishable,
+            dependencies: package
+                .dependencies
+                .into_iter()
+                .filter_map(|dependency| {
+                    package_ids
+                        .get(&dependency.manifest_name)
+                        .cloned()
+                        .map(|package| Dependency {
+                            package,
+                            kind: dependency.kind,
+                            requirement: dependency.requirement,
+                        })
+                })
+                .collect(),
+        })
+        .collect();
+
+    WorkspaceGraph::new(snapshots)
+        .unwrap()
+        .topological_order()
+        .unwrap()
 }
 
 #[test]
@@ -162,23 +220,13 @@ fn cpp_workspace_fixture_discovers_members_and_orders_dependencies() {
         render_packages(CppResolver.resolve_all(&root).unwrap())
     );
 
-    let mut packages = vec![
-        (
-            "app".to_string(),
-            config("applications/app", ResolverType::Cpp),
-        ),
-        (
-            "core".to_string(),
-            config("libraries/core", ResolverType::Cpp),
-        ),
-    ];
-    CppResolver.sort_packages(&root, &mut packages).unwrap();
     assert_eq!(
-        packages
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>(),
-        vec!["core", "app"]
+        adapter_order(
+            &CppResolver,
+            &root,
+            &[("app", "applications/app"), ("core", "libraries/core")]
+        ),
+        [PackageId::new("core"), PackageId::new("app")]
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -402,24 +450,13 @@ fn node_peer_dependency_fixture_orders_dependency_before_dependent() {
         &root.join("packages/app/package.json"),
     );
 
-    let mut packages = vec![
-        (
-            "app".to_string(),
-            config("packages/app", ResolverType::Nodejs),
-        ),
-        (
-            "core".to_string(),
-            config("packages/core", ResolverType::Nodejs),
-        ),
-    ];
-    NodejsResolver.sort_packages(&root, &mut packages).unwrap();
-
     assert_eq!(
-        packages
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>(),
-        vec!["core", "app"]
+        adapter_order(
+            &NodejsResolver,
+            &root,
+            &[("app", "packages/app"), ("core", "packages/core")]
+        ),
+        [PackageId::new("core"), PackageId::new("app")]
     );
     fs::remove_dir_all(root).unwrap();
 }
@@ -465,24 +502,13 @@ fn node_dependency_fixture_orders_dependency_before_dependent() {
         &root.join("packages/app/package.json"),
     );
 
-    let mut packages = vec![
-        (
-            "app".to_string(),
-            config("packages/app", ResolverType::Nodejs),
-        ),
-        (
-            "core".to_string(),
-            config("packages/core", ResolverType::Nodejs),
-        ),
-    ];
-    NodejsResolver.sort_packages(&root, &mut packages).unwrap();
-
     assert_eq!(
-        packages
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>(),
-        vec!["core", "app"]
+        adapter_order(
+            &NodejsResolver,
+            &root,
+            &[("app", "packages/app"), ("core", "packages/core")]
+        ),
+        [PackageId::new("core"), PackageId::new("app")]
     );
     fs::remove_dir_all(root).unwrap();
 }

@@ -10,7 +10,9 @@ use semifold_resolver::{
     adapter::{AdapterError, EcosystemAdapter},
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::{Resolver, ResolverType, create_resolver, rust::RustResolver},
+    resolver::{
+        Resolver, ResolverType, create_resolver, nodejs::NodejsResolver, rust::RustResolver,
+    },
 };
 
 use crate::package_path::{PackagePathError, normalize_package_path};
@@ -75,6 +77,17 @@ impl ResolverRegistry {
     fn create(&self, resolver: ResolverType) -> Box<dyn Resolver> {
         create_resolver(resolver)
     }
+
+    pub(crate) fn create_adapter(
+        &self,
+        resolver: ResolverType,
+    ) -> Option<Box<dyn EcosystemAdapter>> {
+        match resolver {
+            ResolverType::Rust => Some(Box::new(RustResolver)),
+            ResolverType::Nodejs => Some(Box::new(NodejsResolver)),
+            ResolverType::Python | ResolverType::Cpp => None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -91,13 +104,14 @@ impl PackageDiscoveryService {
         let resolvers = ResolverRegistry::normalize_selection(resolvers);
         let mut packages = Vec::new();
         for resolver_type in &resolvers {
-            let mut discovered = if *resolver_type == ResolverType::Rust {
+            let mut discovered = if let Some(adapter) = self.registry.create_adapter(*resolver_type)
+            {
                 let root = camino::Utf8Path::from_path(project_root).ok_or_else(|| {
                     PackageDiscoveryError::InvalidProjectRoot {
                         path: project_root.to_path_buf(),
                     }
                 })?;
-                RustResolver
+                adapter
                     .discover(root)
                     .map_err(|source| PackageDiscoveryError::Adapter {
                         resolver: *resolver_type,
@@ -363,7 +377,7 @@ mod tests {
 
         assert!(matches!(
             PackageDiscoveryService::default().discover(&root.0, &[ResolverType::Nodejs]),
-            Err(PackageDiscoveryError::Resolver {
+            Err(PackageDiscoveryError::Adapter {
                 resolver: ResolverType::Nodejs,
                 ..
             })

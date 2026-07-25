@@ -233,7 +233,7 @@
 ### 迁移
 
 - [x] 迁移 Rust adapter（discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
-- [ ] 迁移 Node.js adapter
+- [x] 迁移 Node.js adapter（discovery、workspace inspection 与 version edit planning 已接入；旧 publish 桥接由统一发布引擎移除）
 - [ ] 迁移 Python adapter
 - [ ] 迁移 C++ adapter
 - [ ] 删除 `Resolver::sort_packages()`

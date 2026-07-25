@@ -3,11 +3,9 @@ use std::{collections::BTreeMap, path::Path};
 use anyhow::Context as _;
 use semifold_core::{Dependency, Ecosystem, PackageId, PackageSnapshot, WorkspaceGraph};
 use semifold_resolver::{
-    adapter::{EcosystemAdapter, ManifestDependency, PackageLocation},
+    adapter::{ManifestDependency, PackageLocation},
     config::Config,
-    resolver::{
-        ResolvedDependency, ResolvedPackage, ResolverType, create_resolver, rust::RustResolver,
-    },
+    resolver::{ResolvedDependency, ResolvedPackage, create_resolver},
 };
 
 use crate::{discovery::ResolverRegistry, package_path::normalize_package_path};
@@ -22,14 +20,15 @@ struct ResolvedSnapshot {
 
 pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<WorkspaceGraph> {
     let mut resolved = Vec::with_capacity(config.packages.len());
+    let registry = ResolverRegistry;
     for (id, package_config) in &config.packages {
-        if package_config.resolver == ResolverType::Rust {
+        if let Some(adapter) = registry.create_adapter(package_config.resolver) {
             let project_root =
                 camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).map_err(|path| {
                     anyhow::anyhow!("project root is not valid UTF-8: {}", path.display())
                 })?;
             let path = normalize_package_path(root, &package_config.path)?;
-            let inspection = RustResolver.inspect(&PackageLocation {
+            let inspection = adapter.inspect(&PackageLocation {
                 id: PackageId::new(id),
                 project_root,
                 path,

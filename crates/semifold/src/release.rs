@@ -46,6 +46,23 @@ pub(crate) fn plan_release(
         released_packages: &rust_released_packages,
         versions: plan.versions(),
     })?;
+    let node_workspace_packages = graph
+        .packages()
+        .filter(|package| package.ecosystem == Ecosystem::Node)
+        .cloned()
+        .collect::<Vec<_>>();
+    let node_released_packages = plan
+        .packages()
+        .iter()
+        .filter(|release| release.ecosystem == Ecosystem::Node)
+        .map(|release| release.id.clone())
+        .collect::<Vec<_>>();
+    file_edits.extend(NodejsResolver.plan_edits(EcosystemPlanInput {
+        project_root,
+        workspace_packages: &node_workspace_packages,
+        released_packages: &node_released_packages,
+        versions: plan.versions(),
+    })?);
     file_edits.extend(
         plan.packages()
             .iter()
@@ -54,11 +71,7 @@ pub(crate) fn plan_release(
                     .package(&release.id)
                     .expect("release plan packages are derived from the workspace graph");
                 match package.ecosystem {
-                    Ecosystem::Rust => None,
-                    Ecosystem::Node => Some(
-                        NodejsResolver::plan_file_edit(root, package, plan.versions())
-                            .map(|edit| vec![edit]),
-                    ),
+                    Ecosystem::Rust | Ecosystem::Node => None,
                     Ecosystem::Cpp => {
                         Some(CppResolver::plan_file_edits(root, package, plan.versions()))
                     }

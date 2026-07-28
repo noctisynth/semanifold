@@ -64,7 +64,11 @@ pub fn format_line(
         );
         line.push_str(&format!("[`{}`]({}): ", &commit_hash[..7], commit_url));
     }
-    line.push_str(&changeset.summary);
+
+    let mut summary_lines = changeset.summary.lines();
+    if let Some(first_line) = summary_lines.next() {
+        line.push_str(first_line);
+    }
 
     if let Some(pr_info) = pr_info.as_ref() {
         if let Some(url) = pr_info.url.as_ref() {
@@ -76,6 +80,16 @@ pub fn format_line(
             line.push_str(&format!(" by @{}", author));
         }
         line.push(')');
+    }
+
+    let mut has_continuation = false;
+    for summary_line in summary_lines {
+        line.push_str("\n\n    ");
+        line.push_str(summary_line);
+        has_continuation = true;
+    }
+    if has_continuation {
+        line.push('\n');
     }
 
     line
@@ -257,12 +271,16 @@ pub async fn read_latest_changelog<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    };
 
-    use std::collections::BTreeMap;
+    use semifold_resolver::{changeset::Changeset, context::RepoInfo};
 
     use super::{
-        ChangelogContext, format_changelog, format_dependency_updates, utils::render_changelog,
+        ChangelogContext, format_changelog, format_dependency_updates, format_line,
+        utils::{PrInfo, render_changelog},
     };
 
     #[test]
@@ -279,6 +297,53 @@ mod tests {
         assert_eq!(
             format_changelog(&context),
             "## v1.0.0\n\n### Changes\n\n- Add release planning\n\n### Dependencies\n\n- Update core to 1.0.0."
+        );
+    }
+
+    #[test]
+    fn formats_multiline_changesets_as_separate_list_item_paragraphs() {
+        let context = ChangelogContext {
+            package_version: "1.0.0".to_string(),
+            sections: BTreeMap::from([(
+                "Changes".to_string(),
+                vec![
+                    "- First line\n\n    Second line\n\n    \n\n    Third line\n".to_string(),
+                    "- Another changeset".to_string(),
+                ],
+            )]),
+            dependency_updates: vec![],
+        };
+
+        assert_eq!(
+            format_changelog(&context),
+            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n\n    \n\n    Third line\n\n- Another changeset"
+        );
+    }
+
+    #[test]
+    fn attaches_metadata_to_the_first_line_of_a_multiline_changeset() {
+        let changeset = Changeset {
+            name: "multiline".to_string(),
+            packages: vec![],
+            summary: "First line\r\nSecond line\r\nThird line".to_string(),
+            root_path: PathBuf::new(),
+            path: None,
+        };
+        let repo = Some(RepoInfo {
+            owner: "semifold".to_string(),
+            repo_name: "semifold".to_string(),
+            base_url: "https://github.com".to_string(),
+        });
+        let pull_request = Some(PrInfo {
+            number: 42,
+            author: Some("author".to_string()),
+            url: Some("https://github.com/semifold/semifold/pull/42".to_string()),
+        });
+        let commit = Some("1234567890abcdef".to_string());
+
+        assert_eq!(
+            format_line(&changeset, &repo, &pull_request, &commit),
+            "- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line ([#42](https://github.com/semifold/semifold/pull/42) by @author)\n\n    Second line\n\n    Third line\n"
         );
     }
 

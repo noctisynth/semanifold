@@ -830,6 +830,18 @@ Changelog 生成应分为两部分：
 
 格式化器接收 `ChangelogContext` 或其序列化后的模板视图，不应持有 `Context`、`git2::Repository` 或自行创建 `Octocrab`。GitHub PR 元数据查询失败时记录诊断并降级为不含 PR 信息的 changelog，不中断 `version`；该策略必须在收集层实现，不能成为格式化函数的隐式行为。
 
+每个用户 changeset 必须渲染为一个独立的 Markdown 列表项。只有单行 summary 时，连续列表项保持紧凑。summary 含后续行时，每个后续行必须以一个空行分隔，并使用四个空格缩进为同一列表项内的独立段落；最后一个后续行后也必须保留一个空行，再渲染下一个列表项，避免依赖 Markdown 渲染器对 soft break 的不同处理。必须保留原有行序与段落边界。commit 与 PR 元数据属于该 changeset 的列表项标题，必须附在第一行，不能落到最后一个续行之后。例如：
+
+```markdown
+- First line ([#42](https://example.com/pull/42) by @author)
+
+    Second line
+
+    Third line
+
+- Another changeset
+```
+
 依赖传播而自动加入发布闭包的 package 仍会被发布，不能生成空 changelog。规划器必须为它记录 `ReleaseReason::DependencyPropagation { dependency, next_version }`；格式化器将该原因渲染为独立的 `Dependencies` 区段，例如：
 
 ```markdown

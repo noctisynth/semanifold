@@ -244,6 +244,40 @@ fn version_applies_manifest_and_changelog_edits_together() {
 }
 
 #[test]
+fn version_renders_multiline_changesets_as_single_list_items() {
+    let root = temporary_project(
+        "version-multiline-changelog",
+        &config("channel = \"stable\""),
+    );
+    let changelog = root.join("CHANGELOG.md");
+    let first_changeset = root.join(".changes/feature.md");
+    let second_changeset = root.join(".changes/follow-up.md");
+    fs::write(
+        &first_changeset,
+        "app: patch:chore\n---\n\nFirst line\nSecond line\nThird line\n",
+    )
+    .unwrap();
+    fs::write(
+        &second_changeset,
+        "app: patch:chore\n---\n\nAnother changeset\n",
+    )
+    .unwrap();
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    let content = fs::read_to_string(&changelog).unwrap();
+    assert!(
+        content.contains("- First line\n\n    Second line\n\n    Third line\n\n"),
+        "{content}"
+    );
+    assert!(content.contains("- Another changeset"), "{content}");
+    assert!(!first_changeset.exists());
+    assert!(!second_changeset.exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn version_keeps_changesets_when_changelog_planning_fails() {
     let root = temporary_project(
         "version-changelog-validation",

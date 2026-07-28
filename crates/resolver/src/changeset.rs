@@ -275,7 +275,7 @@ mod tests {
             Some("feat".to_string()),
         );
         changeset.add_package("web".to_string(), BumpLevel::Patch, None);
-        changeset.summary("Add the new API.".to_string());
+        changeset.summary("Add the new API.\n\nIt supports batch requests.".to_string());
 
         changeset.commit().unwrap();
 
@@ -283,7 +283,10 @@ mod tests {
         let parsed = Changeset::from_file(&ctx, &path).unwrap();
 
         assert_eq!(parsed.name, "add-api");
-        assert_eq!(parsed.summary, "Add the new API.");
+        assert_eq!(
+            parsed.summary,
+            "Add the new API.\n\nIt supports batch requests."
+        );
         assert_eq!(parsed.packages.len(), 2);
         assert_eq!(parsed.packages[0].name, "api");
         assert_eq!(parsed.packages[0].level, BumpLevel::Minor);

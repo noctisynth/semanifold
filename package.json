@@ -14,7 +14,7 @@
     "email": "fu050409@163.com"
   },
   "license": "AGPL-3.0-only",
-  "packageManager": "pnpm@11.0.8",
+  "packageManager": "pnpm@11.17.0",
   "dependencies": {
     "@biomejs/biome": "^2.3.4"
   }

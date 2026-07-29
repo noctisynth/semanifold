@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0-beta.2
+
+### Bug Fixes
+
+- [`90e6cd6`](https://github.com/noctisynth/semifold/commit/90e6cd697eed4686dcfc946eb833ba76bc89c1ff): Render multiline changeset summaries as separate paragraphs in one changelog list item.
+
 ## v0.3.0-beta.1
 
 ### Bug Fixes

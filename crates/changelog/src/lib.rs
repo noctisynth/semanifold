@@ -379,4 +379,17 @@ mod tests {
             "# Changelog\n\n## v1.0.0\n\n### Changes\n\n- Add\n\n## v0.1.0\n\n- Old\n"
         );
     }
+
+    #[test]
+    fn preserves_a_multiline_entries_trailing_blank_line_when_inserting() {
+        assert_eq!(
+            render_changelog(
+                Path::new("CHANGELOG.md"),
+                None,
+                "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n"
+            )
+            .unwrap(),
+            "# Changelog\n\n## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n\n"
+        );
+    }
 }

@@ -122,14 +122,18 @@ pub fn render_changelog<P: AsRef<Path>>(
 
     let before = &content[..after_header_pos].trim_end_matches('\n');
     let after = &content[after_header_pos..].trim_start_matches('\n');
-    let new_entry = new_entry.trim();
+    let new_entry = new_entry.trim_start();
 
     let mut new_content = String::with_capacity(content.len() + new_entry.len() + 4);
     new_content.push_str(before);
     new_content.push_str("\n\n");
     new_content.push_str(new_entry);
     if !after.is_empty() {
-        new_content.push_str("\n\n");
+        if new_entry.ends_with('\n') {
+            new_content.push('\n');
+        } else {
+            new_content.push_str("\n\n");
+        }
         new_content.push_str(after.trim_end_matches('\n'));
     }
     new_content.push('\n');

@@ -65,8 +65,29 @@ pub fn format_line(
         line.push_str(&format!("[`{}`]({}): ", &commit_hash[..7], commit_url));
     }
 
-    let mut summary_lines = changeset.summary.lines();
-    if let Some(first_line) = summary_lines.next() {
+    let summary_paragraphs =
+        changeset
+            .summary
+            .lines()
+            .fold(Vec::<Vec<&str>>::new(), |mut paragraphs, summary_line| {
+                if summary_line.trim().is_empty() {
+                    if paragraphs
+                        .last()
+                        .is_some_and(|paragraph| !paragraph.is_empty())
+                    {
+                        paragraphs.push(Vec::new());
+                    }
+                } else if let Some(paragraph) = paragraphs.last_mut() {
+                    paragraph.push(summary_line);
+                } else {
+                    paragraphs.push(vec![summary_line]);
+                }
+                paragraphs
+            });
+    if let Some(first_line) = summary_paragraphs
+        .first()
+        .and_then(|paragraph| paragraph.first())
+    {
         line.push_str(first_line);
     }
 
@@ -83,10 +104,17 @@ pub fn format_line(
     }
 
     let mut has_continuation = false;
-    for summary_line in summary_lines.filter(|summary_line| !summary_line.trim().is_empty()) {
-        line.push_str("\n\n    ");
-        line.push_str(summary_line);
-        has_continuation = true;
+    for (paragraph_index, paragraph) in summary_paragraphs.iter().enumerate() {
+        let first_line_index = usize::from(paragraph_index == 0);
+        for (line_index, summary_line) in paragraph.iter().enumerate().skip(first_line_index) {
+            if line_index == 0 {
+                line.push_str("\n\n    ");
+            } else {
+                line.push_str("\n    ");
+            }
+            line.push_str(summary_line);
+            has_continuation = true;
+        }
     }
     if has_continuation {
         line.push('\n');
@@ -307,7 +335,7 @@ mod tests {
             sections: BTreeMap::from([(
                 "Changes".to_string(),
                 vec![
-                    "- First line\n\n    Second line\n\n    Third line\n".to_string(),
+                    "- First line\n\n    Second line\n    Third line\n".to_string(),
                     "- Another changeset".to_string(),
                 ],
             )]),
@@ -316,7 +344,7 @@ mod tests {
 
         assert_eq!(
             format_changelog(&context),
-            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n\n    Third line\n\n- Another changeset"
+            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n    Third line\n\n- Another changeset"
         );
     }
 
@@ -333,7 +361,7 @@ mod tests {
 
         assert_eq!(
             format_line(&changeset, &None, &None, &None),
-            "- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so\n\n    long content wraps without displacing adjacent fields. Linked titles no longer include trailing\n\n    underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
+            "- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so\n    long content wraps without displacing adjacent fields. Linked titles no longer include trailing\n    underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
         );
     }
 
@@ -360,7 +388,7 @@ mod tests {
 
         assert_eq!(
             format_line(&changeset, &repo, &pull_request, &commit),
-            "- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line ([#42](https://github.com/semifold/semifold/pull/42) by @author)\n\n    Second line\n\n    Third line\n"
+            "- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line ([#42](https://github.com/semifold/semifold/pull/42) by @author)\n    Second line\n    Third line\n"
         );
     }
 

@@ -83,7 +83,7 @@ pub fn format_line(
     }
 
     let mut has_continuation = false;
-    for summary_line in summary_lines {
+    for summary_line in summary_lines.filter(|summary_line| !summary_line.trim().is_empty()) {
         line.push_str("\n\n    ");
         line.push_str(summary_line);
         has_continuation = true;
@@ -307,7 +307,7 @@ mod tests {
             sections: BTreeMap::from([(
                 "Changes".to_string(),
                 vec![
-                    "- First line\n\n    Second line\n\n    \n\n    Third line\n".to_string(),
+                    "- First line\n\n    Second line\n\n    Third line\n".to_string(),
                     "- Another changeset".to_string(),
                 ],
             )]),
@@ -316,7 +316,24 @@ mod tests {
 
         assert_eq!(
             format_changelog(&context),
-            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n\n    \n\n    Third line\n\n- Another changeset"
+            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n\n    Third line\n\n- Another changeset"
+        );
+    }
+
+    #[test]
+    fn ignores_source_blank_lines_without_emitting_whitespace_only_paragraphs() {
+        let changeset = Changeset {
+            name: "realistic-multiline".to_string(),
+            packages: vec![],
+            summary: "Keep resume item columns within predictable bounds\n\nThe default template now gives job titles, organizations, and dates independent grid columns so\nlong content wraps without displacing adjacent fields. Linked titles no longer include trailing\nunderline space, and a complete Chinese sample covers long-title wrapping and all resume sections."
+                .to_string(),
+            root_path: PathBuf::new(),
+            path: None,
+        };
+
+        assert_eq!(
+            format_line(&changeset, &None, &None, &None),
+            "- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so\n\n    long content wraps without displacing adjacent fields. Linked titles no longer include trailing\n\n    underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
         );
     }
 

@@ -254,7 +254,7 @@ fn version_renders_multiline_changesets_as_single_list_items() {
     let second_changeset = root.join(".changes/follow-up.md");
     fs::write(
         &first_changeset,
-        "app: patch:chore\n---\n\nFirst line\nSecond line\nThird line\n",
+        "---\napp: patch:chore\n---\n\nFirst line\n\nSecond line\nThird line\n",
     )
     .unwrap();
     fs::write(
@@ -271,6 +271,7 @@ fn version_renders_multiline_changesets_as_single_list_items() {
         content.contains("- First line\n\n    Second line\n\n    Third line\n\n"),
         "{content}"
     );
+    assert!(!content.contains("\n    \n"), "{content}");
     assert!(content.contains("- Another changeset"), "{content}");
     assert!(!first_changeset.exists());
     assert!(!second_changeset.exists());

@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.3.0-beta.3
+
+### Bug Fixes
+
+- [`de16b01`](https://github.com/noctisynth/semifold/commit/de16b017c5163a563aee17f6dfc2fd37345ca74a): Render multiline changeset entries as valid nested Markdown paragraphs
+
+    Blank lines in a changeset summary now separate content without producing whitespace-only
+    paragraphs. Every non-empty continuation line is emitted after a blank line with four spaces of
+    indentation, and regression coverage uses the same front matter and prose shape as real changesets.
+
+- [`9da27d5`](https://github.com/noctisynth/semifold/commit/9da27d5191fe15900de27882e6a6cac0d8061e1c): Preserve wrapped lines within changelog paragraphs
+
+    Changelog formatting now uses blank lines, rather than every physical line break, as paragraph
+    boundaries. Hard-wrapped lines remain together inside an indented continuation paragraph.
+
+
+### New Features
+
+- [`e8f8a09`](https://github.com/noctisynth/semifold/commit/e8f8a0966142aacdab13a33d41332fd9612e4cf9): Add one-shot channel transition bump overrides to `config channel set`, including a preserve mode for entering prerelease channels without raising the stable version base.
+
 ## v0.3.0-beta.2
 
 ### Bug Fixes

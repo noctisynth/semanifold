@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0-beta.2
+
+### New Features
+
+- [`e8f8a09`](https://github.com/noctisynth/semifold/commit/e8f8a0966142aacdab13a33d41332fd9612e4cf9): Add one-shot channel transition bump overrides to `config channel set`, including a preserve mode for entering prerelease channels without raising the stable version base.
+
 ## v0.4.0-beta.1
 
 ### New Features

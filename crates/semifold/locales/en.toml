@@ -68,6 +68,8 @@ plan_failed = "Failed to build release plan: %{error}"
 comment = "Create GitHub pull request comments, only available in CI environment"
 
 [cli.version]
+channel_bump_config_missing = "Configuration path is unavailable while consuming channel transition state"
+channel_bump_cleanup_failed = "Failed to consume channel transition state"
 no_git_repo = "No Git repository found"
 empty_changesets = "No changesets found, skipping versioning"
 unchanged = "%{package} is unchanged, skipping versioning"
@@ -197,6 +199,7 @@ prune_sync = "Remove configured packages that are absent from a complete workspa
 resolver_sync = "Resolver to synchronize. May be repeated"
 check_migration = "Report whether migration is required without writing the configuration"
 channel = "Named release channel to set, such as alpha or beta"
+bump = "One-shot stable-base bump when first entering the channel: preserve, patch, minor, or major"
 package = "Package ID to update. May be repeated"
 all = "Update every configured package"
 check_channel = "Check whether the requested channel state is already configured"

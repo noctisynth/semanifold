@@ -8,7 +8,7 @@ use semifold_core::{
 use semifold_resolver::{
     adapter::{EcosystemAdapter, EcosystemPlanInput},
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
-    config::{Config, ReleaseChannel as ResolverReleaseChannel},
+    config::{ChannelBump, Config, ReleaseChannel as ResolverReleaseChannel},
     resolver::{
         cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver, rust::RustResolver,
     },
@@ -154,6 +154,7 @@ fn release_policies(graph: &WorkspaceGraph, config: &Config) -> anyhow::Result<R
                 package.id.clone(),
                 PackageReleasePolicy {
                     channel: release_channel(&package_config.channel),
+                    channel_bump: package_config.channel_bump.map(channel_bump),
                     propagating_dependencies,
                 },
             ))
@@ -174,6 +175,15 @@ fn release_channel(channel: &ResolverReleaseChannel) -> ReleaseChannel {
     match channel {
         ResolverReleaseChannel::Stable => ReleaseChannel::Stable,
         ResolverReleaseChannel::Named(name) => ReleaseChannel::Named(name.clone()),
+    }
+}
+
+const fn channel_bump(bump: ChannelBump) -> BumpLevel {
+    match bump {
+        ChannelBump::Preserve => BumpLevel::Unchanged,
+        ChannelBump::Patch => BumpLevel::Patch,
+        ChannelBump::Minor => BumpLevel::Minor,
+        ChannelBump::Major => BumpLevel::Major,
     }
 }
 
@@ -216,6 +226,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Rust,
             channel: ResolverReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }
@@ -226,6 +237,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Python,
             channel: ResolverReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }
@@ -236,6 +248,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Nodejs,
             channel: ResolverReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: depends_on.iter().copied().map(PackageId::new).collect(),
         }

@@ -17,6 +17,7 @@ use semifold_resolver::{
 };
 
 use crate::{
+    cli::config::consume_channel_bumps,
     file_edit_executor::{FileEditApplyReport, FileEditExecutor, validate_file_edits},
     release::plan_release,
 };
@@ -153,6 +154,20 @@ pub(crate) async fn version(
         return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
     let release_plan = plan_release(root, config, changesets)?;
+    let consumed_channel_bumps = release_plan
+        .packages()
+        .iter()
+        .filter(|release| {
+            release.current_version.pre.is_empty()
+                && config
+                    .packages
+                    .get(release.id.as_str())
+                    .is_some_and(|package| {
+                        package.channel_bump.is_some() && !package.channel.is_stable()
+                    })
+        })
+        .map(|release| release.id.clone())
+        .collect::<Vec<_>>();
     let (release_plan, changelogs_map) =
         plan_changelog_edits(ctx, repo, root, config, changesets, release_plan).await?;
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
@@ -177,6 +192,12 @@ pub(crate) async fn version(
         }
         .into());
     }
+    let config_path = ctx
+        .config_path
+        .as_deref()
+        .context(t!("cli.version.channel_bump_config_missing"))?;
+    consume_channel_bumps(config_path, &consumed_channel_bumps)
+        .context(t!("cli.version.channel_bump_cleanup_failed"))?;
     if !ctx.dry_run {
         changesets.iter().try_for_each(|c| c.clean())?;
     }
@@ -342,6 +363,7 @@ mod tests {
             path: path.into(),
             resolver,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }

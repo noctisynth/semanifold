@@ -59,6 +59,7 @@ impl RustResolver {
             path: path.into(),
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: Vec::new(),
             depends_on: vec![],
         }
@@ -501,6 +502,7 @@ impl RustResolver {
                     path: ".".into(),
                     resolver: ResolverType::Rust,
                     channel: ReleaseChannel::Stable,
+                    channel_bump: None,
                     assets: vec![],
                     depends_on: vec![],
                 },
@@ -544,6 +546,7 @@ impl RustResolver {
                         path: rel_path.to_path_buf(),
                         resolver: ResolverType::Rust,
                         channel: ReleaseChannel::Stable,
+                        channel_bump: None,
                         assets: vec![],
                         depends_on: vec![],
                     },
@@ -590,6 +593,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }

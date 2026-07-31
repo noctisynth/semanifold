@@ -243,6 +243,7 @@ mod tests {
                         path: PathBuf::from(name),
                         resolver: ResolverType::Rust,
                         channel: ReleaseChannel::Stable,
+                        channel_bump: None,
                         assets: vec![],
                         depends_on: vec![],
                     },

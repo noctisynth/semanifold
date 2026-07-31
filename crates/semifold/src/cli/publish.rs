@@ -410,6 +410,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Rust,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }

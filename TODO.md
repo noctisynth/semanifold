@@ -91,6 +91,7 @@
 
 ### CLI
 
+- [x] `config channel set` 支持一次性 `--bump preserve|patch|minor|major`，并由成功的 `version` 消费
 - [x] 新增 `smif config migrate`
 - [x] 新增 `smif config migrate --check`
 - [x] 新增 `smif config channel set <channel> --package <PackageId>` 与 `--all`

@@ -930,12 +930,26 @@ smif config migrate --check
 smif config channel set alpha --package semifold
 smif config channel set alpha --package semifold --package semifold-resolver
 smif config channel set alpha --all
+smif config channel set alpha --package semifold --bump preserve
 smif config channel clear --package semifold
 ```
 
 `set` 只接受非空的命名通道；`stable` 是保留值，恢复 stable 必须使用 `clear`。命令必须指定一个或多个 `--package <PackageId>`，或显式指定 `--all`，两者不能同时使用。未知 package 是错误，避免因拼写失误产生无效配置。
 
-`set` 仅修改目标 package 的 `channel` 字段。`clear` 删除该字段，使 package 回到缺省 stable 状态。二者都使用 `toml_edit::DocumentMut` 与原子写回，保留目标 table 的其他字段、注释和所有非目标 package。无实际变化时不得写入文件。
+`set` 修改目标 package 的 `channel` 字段，并可通过可选的
+`--bump <preserve|patch|minor|major>` 记录一次性 `channel-bump` 转换策略。未指定
+`--bump` 时保持现有行为，由 changeset 的最高 bump 决定首次进入通道的稳定基准。
+`preserve` 保留当前稳定基准，`patch`、`minor` 和 `major` 则显式覆盖该基准的提升级别。
+例如 `0.1.0` 进入 `alpha` 时分别得到 `0.1.0-alpha.0`、`0.1.1-alpha.0`、
+`0.2.0-alpha.0` 和 `1.0.0-alpha.0`。该策略仅写入本次 `set` 需要覆盖的目标 package；
+已处于请求 channel 的 package 不会因 `--bump` 单独发生变化。
+
+`channel-bump` 只在 package 当前为 stable 且下一次 `version` 首次进入配置的命名通道时生效。
+成功应用 manifest、changelog 和 post-version 后，`version` 从对应 package table 删除该字段；
+dry-run、规划失败、文件应用失败或 post-version 失败都不得消费它。通道内后续发布仍只推进序号。
+
+`clear` 删除 `channel` 和未消费的 `channel-bump`，使 package 回到缺省 stable 状态，且不接受
+`--bump`。二者都使用 `toml_edit::DocumentMut` 与原子写回，保留目标 table 的其他字段、注释和所有非目标 package。无实际变化时不得写入文件。
 
 全局 `--dry-run` 只输出将修改的 package 而不写入；`--check` 断言目标已处于请求状态，存在需要修改的 package 时返回非零。JSON 配置不受支持。
 
@@ -1416,6 +1430,8 @@ fixtures/rust/
 - `config channel set` 与 `clear` 仅修改指定 package 的 `channel` 字段，并保留 table 的其他内容；
 - `config channel --check` 在目标 channel 不匹配时不写入并返回非零；
 - `config channel --all` 显式应用至每个已配置 package，重复执行无 diff。
+- `config channel set --bump` 仅为实际切换 channel 的目标 package 写入一次性策略，并覆盖 preserve/patch/minor/major 的首次进入通道版本。
+- `version` 仅在成功完成后清理已使用的 `channel-bump`；dry-run 和各失败路径保留它。
 
 ## 17. 迁移计划
 

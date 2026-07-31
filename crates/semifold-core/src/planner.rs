@@ -19,6 +19,8 @@ pub struct ChangesetInput {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackageReleasePolicy {
     pub channel: ReleaseChannel,
+    /// One-shot override for the stable base when first entering a named channel.
+    pub channel_bump: Option<BumpLevel>,
     pub propagating_dependencies: BTreeMap<PackageId, Option<VersionReq>>,
 }
 
@@ -71,10 +73,10 @@ impl ReleasePlanner {
             let snapshot = graph
                 .package(&dependency)
                 .expect("release package ids are derived from the workspace graph");
-            let dependency_next = bump_version(
+            let dependency_next = bump_with_policy(
                 &snapshot.version,
                 levels[&dependency],
-                &policies[&dependency].channel,
+                &policies[&dependency],
             )
             .map_err(|source| ReleasePlannerError::InvalidVersionTransition {
                 package: dependency.clone(),
@@ -109,13 +111,11 @@ impl ReleasePlanner {
         let mut warnings = Vec::new();
         for snapshot in graph.packages() {
             let bump = levels[&snapshot.id];
-            let next_version =
-                bump_version(&snapshot.version, bump, &policies[&snapshot.id].channel).map_err(
-                    |source| ReleasePlannerError::InvalidVersionTransition {
-                        package: snapshot.id.clone(),
-                        source,
-                    },
-                )?;
+            let next_version = bump_with_policy(&snapshot.version, bump, &policies[&snapshot.id])
+                .map_err(|source| ReleasePlannerError::InvalidVersionTransition {
+                package: snapshot.id.clone(),
+                source,
+            })?;
             versions.insert(snapshot.id.clone(), next_version.clone());
             if bump == BumpLevel::Unchanged {
                 continue;
@@ -218,6 +218,31 @@ impl ReleasePlanner {
     }
 }
 
+fn bump_with_policy(
+    current: &semver::Version,
+    changeset_bump: BumpLevel,
+    policy: &PackageReleasePolicy,
+) -> Result<semver::Version, VersioningError> {
+    let bump = if current.pre.is_empty() && matches!(policy.channel, ReleaseChannel::Named(_)) {
+        policy.channel_bump.unwrap_or(changeset_bump)
+    } else {
+        changeset_bump
+    };
+    if bump == BumpLevel::Unchanged && changeset_bump != BumpLevel::Unchanged {
+        let mut next = current.clone();
+        if let ReleaseChannel::Named(name) = &policy.channel {
+            next.pre = semver::Prerelease::new(&format!("{name}.0")).map_err(|error| {
+                VersioningError::InvalidChannel {
+                    channel: name.clone(),
+                    reason: error.to_string(),
+                }
+            })?;
+        }
+        return Ok(next);
+    }
+    bump_version(current, bump, &policy.channel)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ReleasePlannerError {
     #[error("missing release policy for package: {package}")]
@@ -286,6 +311,7 @@ mod tests {
                     PackageId::new(*package),
                     PackageReleasePolicy {
                         channel: channel.clone(),
+                        channel_bump: None,
                         propagating_dependencies: BTreeMap::new(),
                     },
                 )
@@ -337,6 +363,33 @@ mod tests {
             plan.consumed_changesets(),
             [ChangesetId::new("feature"), ChangesetId::new("patch")]
         );
+    }
+
+    #[test]
+    fn channel_bump_overrides_only_the_first_named_channel_base() {
+        let graph = WorkspaceGraph::new(vec![package("app", "0.1.0", &[])]).unwrap();
+        for (override_bump, expected) in [
+            (BumpLevel::Unchanged, "0.1.0-alpha.0"),
+            (BumpLevel::Patch, "0.1.1-alpha.0"),
+            (BumpLevel::Minor, "0.2.0-alpha.0"),
+            (BumpLevel::Major, "1.0.0-alpha.0"),
+        ] {
+            let mut policies = policies(&[("app", ReleaseChannel::Named("alpha".into()))]);
+            policies
+                .get_mut(&PackageId::new("app"))
+                .unwrap()
+                .channel_bump = Some(override_bump);
+            let plan = ReleasePlanner::plan(
+                &graph,
+                &[changeset("feature", &[("app", BumpLevel::Patch)])],
+                &policies,
+            )
+            .unwrap();
+            assert_eq!(
+                plan.versions()[&PackageId::new("app")].to_string(),
+                expected
+            );
+        }
     }
 
     #[test]

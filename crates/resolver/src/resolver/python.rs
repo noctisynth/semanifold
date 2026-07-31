@@ -153,6 +153,7 @@ impl PythonResolver {
             path: path.into(),
             resolver: ResolverType::Python,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: Vec::new(),
             depends_on: vec![],
         }
@@ -890,6 +891,7 @@ mod tests {
             path: path.into(),
             resolver: ResolverType::Python,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }

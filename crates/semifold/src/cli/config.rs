@@ -2,9 +2,9 @@ use std::{fs::OpenOptions, io::Write, path::Path};
 
 use anyhow::{Context as _, anyhow};
 use camino::Utf8Path;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use rust_i18n::t;
-use semifold_core::ConfigSyncWarning;
+use semifold_core::{ConfigSyncWarning, PackageId};
 use semifold_resolver::{
     config,
     context::Context,
@@ -74,8 +74,29 @@ enum ChannelCommands {
 struct ChannelSet {
     #[arg(help = t!("cli.config.flags.channel"))]
     channel: String,
+    #[arg(long, value_enum, help = t!("cli.config.flags.bump"))]
+    bump: Option<ChannelBumpArg>,
     #[command(flatten)]
     target: ChannelTarget,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ChannelBumpArg {
+    Preserve,
+    Patch,
+    Minor,
+    Major,
+}
+
+impl ChannelBumpArg {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Preserve => "preserve",
+            Self::Patch => "patch",
+            Self::Minor => "minor",
+            Self::Major => "major",
+        }
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -221,14 +242,15 @@ fn manage_channel(command: &Channel, ctx: &Context) -> anyhow::Result<()> {
             if options.channel.trim().is_empty() || options.channel == "stable" {
                 anyhow::bail!(t!("cli.config.channel_set_requires_named"));
             }
-            update_channel(Some(&options.channel), &options.target, ctx)
+            update_channel(Some(&options.channel), options.bump, &options.target, ctx)
         }
-        ChannelCommands::Clear(options) => update_channel(None, &options.target, ctx),
+        ChannelCommands::Clear(options) => update_channel(None, None, &options.target, ctx),
     }
 }
 
 fn update_channel(
     channel: Option<&str>,
+    bump: Option<ChannelBumpArg>,
     target: &ChannelTarget,
     ctx: &Context,
 ) -> anyhow::Result<()> {
@@ -237,7 +259,7 @@ fn update_channel(
     })?;
     let original = std::fs::read_to_string(path)?;
     config::load_config(path)?;
-    let plan = plan_channel_update(&original, channel, &target.packages, target.all)?;
+    let plan = plan_channel_update(&original, channel, bump, &target.packages, target.all)?;
     if plan.packages.is_empty() {
         println!("{}", t!("cli.config.channels_already_match"));
         return Ok(());
@@ -362,6 +384,7 @@ fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
 fn plan_channel_update(
     content: &str,
     channel: Option<&str>,
+    bump: Option<ChannelBumpArg>,
     requested: &[String],
     all: bool,
 ) -> anyhow::Result<MigrationPlan> {
@@ -396,9 +419,18 @@ fn plan_channel_update(
         match channel {
             Some(channel) => {
                 table.insert("channel", toml_edit::value(channel));
+                match bump {
+                    Some(bump) => {
+                        table.insert("channel-bump", toml_edit::value(bump.as_str()));
+                    }
+                    None => {
+                        table.remove("channel-bump");
+                    }
+                }
             }
             None => {
                 table.remove("channel");
+                table.remove("channel-bump");
             }
         }
         updated.push(name.to_string());
@@ -423,6 +455,34 @@ fn parse_legacy_version_mode(
         toml_edit::de::from_str::<LegacyVersionMode>(&format!("version-mode = {value}"))?
             .version_mode,
     )
+}
+
+pub(crate) fn consume_channel_bumps(path: &Path, packages: &[PackageId]) -> anyhow::Result<()> {
+    if packages.is_empty() {
+        return Ok(());
+    }
+    let original = std::fs::read_to_string(path)?;
+    let mut document = original.parse::<toml_edit::DocumentMut>()?;
+    let configured = document["packages"]
+        .as_table_mut()
+        .context(t!("cli.config.missing_packages_table"))?;
+    for package in packages {
+        let table = configured[package.as_str()]
+            .as_table_like_mut()
+            .with_context(|| {
+                t!(
+                    "cli.config.package_must_be_table",
+                    package = package.as_str()
+                )
+            })?;
+        table.remove("channel-bump");
+    }
+    let content = document.to_string();
+    if content != original {
+        config::load_config_from_str(path, &content)?;
+        write_atomically(path, &content)?;
+    }
+    Ok(())
 }
 
 fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
@@ -455,8 +515,8 @@ mod tests {
     use semifold_resolver::{config, context::Context, resolver::ResolverType};
 
     use super::{
-        ChannelTarget, Config as ConfigCommand, ConfigPathError, Migrate, Sync, migrate,
-        plan_channel_update, plan_migration, sync, toml_config_path, update_channel,
+        ChannelBumpArg, ChannelTarget, Config as ConfigCommand, ConfigPathError, Migrate, Sync,
+        migrate, plan_channel_update, plan_migration, sync, toml_config_path, update_channel,
     };
 
     fn temporary_config_path(name: &str) -> PathBuf {
@@ -618,7 +678,7 @@ resolver = "rust"
 channel = "beta"
 "#;
         let requested = vec!["app".to_string()];
-        let set = plan_channel_update(content, Some("alpha"), &requested, false).unwrap();
+        let set = plan_channel_update(content, Some("alpha"), None, &requested, false).unwrap();
 
         assert_eq!(set.packages, ["app"]);
         assert!(set.content.contains("# retained"));
@@ -627,13 +687,13 @@ channel = "beta"
         assert!(set.content.contains("[packages.library]"));
         assert!(set.content.contains("channel = \"beta\""));
         assert!(
-            plan_channel_update(&set.content, Some("alpha"), &requested, false)
+            plan_channel_update(&set.content, Some("alpha"), None, &requested, false)
                 .unwrap()
                 .packages
                 .is_empty()
         );
 
-        let clear = plan_channel_update(&set.content, None, &requested, false).unwrap();
+        let clear = plan_channel_update(&set.content, None, None, &requested, false).unwrap();
         assert_eq!(clear.packages, ["app"]);
         assert!(!clear.content.contains("channel = \"alpha\""));
         assert!(clear.content.contains("channel = \"beta\""));
@@ -652,6 +712,7 @@ path = "library"
 resolver = "rust"
 "#,
             Some("alpha"),
+            None,
             &[],
             true,
         )
@@ -659,6 +720,34 @@ resolver = "rust"
 
         assert_eq!(plan.packages, ["app", "library"]);
         assert_eq!(plan.content.matches("channel = \"alpha\"").count(), 2);
+    }
+
+    #[test]
+    fn channel_bump_is_written_only_when_the_channel_changes() {
+        let content = r#"
+[packages.app]
+path = "."
+resolver = "rust"
+
+[packages.already]
+path = "already"
+resolver = "rust"
+channel = "alpha"
+"#;
+        let all = plan_channel_update(
+            content,
+            Some("alpha"),
+            Some(ChannelBumpArg::Preserve),
+            &[],
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(all.packages, ["app"]);
+        assert_eq!(
+            all.content.matches("channel-bump = \"preserve\"").count(),
+            1
+        );
     }
 
     #[test]
@@ -688,7 +777,7 @@ resolver = "rust"
             check: true,
         };
 
-        let error = update_channel(Some("alpha"), &target, &context).unwrap_err();
+        let error = update_channel(Some("alpha"), None, &target, &context).unwrap_err();
 
         assert!(error.to_string().contains("do not match"));
         assert_eq!(fs::read_to_string(&path).unwrap(), original);

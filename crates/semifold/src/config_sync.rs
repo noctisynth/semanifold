@@ -198,6 +198,7 @@ mod tests {
             path: path.into(),
             resolver,
             channel: ReleaseChannel::Stable,
+            channel_bump: None,
             assets: vec![],
             depends_on: vec![],
         }

@@ -336,3 +336,49 @@ fn config_migrate_and_channel_check_preserve_expected_file_state() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn channel_preserve_is_consumed_only_after_successful_version() {
+    let root = temporary_project("channel-preserve", &config(""));
+    let config_path = root.join(".changes/config.toml");
+
+    let set = run_smif(
+        &root,
+        &[
+            "config",
+            "channel",
+            "set",
+            "alpha",
+            "--package",
+            "app",
+            "--bump",
+            "preserve",
+        ],
+    );
+    assert!(set.status.success(), "{set:?}");
+    let configured = fs::read_to_string(&config_path).unwrap();
+    assert!(configured.contains("channel-bump = \"preserve\""));
+
+    let dry_run = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+    assert!(dry_run.status.success(), "{dry_run:?}");
+    assert!(
+        fs::read_to_string(&config_path)
+            .unwrap()
+            .contains("channel-bump = \"preserve\"")
+    );
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+    assert!(version.status.success(), "{version:?}");
+    assert!(
+        fs::read_to_string(root.join("Cargo.toml"))
+            .unwrap()
+            .contains("version = \"1.0.0-alpha.0\"")
+    );
+    assert!(
+        !fs::read_to_string(&config_path)
+            .unwrap()
+            .contains("channel-bump")
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}

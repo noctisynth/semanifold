@@ -48,6 +48,15 @@ pub enum ReleaseChannel {
     Named(String),
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChannelBump {
+    Preserve,
+    Patch,
+    Minor,
+    Major,
+}
+
 impl ReleaseChannel {
     pub fn is_stable(&self) -> bool {
         matches!(self, Self::Stable)
@@ -93,6 +102,13 @@ pub struct PackageConfig {
     /// Release channel to use. Stable is the default and is omitted when saved.
     #[serde(default, skip_serializing_if = "ReleaseChannel::is_stable")]
     pub channel: ReleaseChannel,
+    /// One-shot stable-base override for the next transition into `channel`.
+    #[serde(
+        default,
+        rename = "channel-bump",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub channel_bump: Option<ChannelBump>,
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
@@ -107,6 +123,8 @@ struct PackageConfigInput {
     resolver: resolver::ResolverType,
     #[serde(default)]
     channel: Option<ReleaseChannel>,
+    #[serde(default, rename = "channel-bump")]
+    channel_bump: Option<ChannelBump>,
     #[serde(default, rename = "version-mode")]
     legacy_version_mode: Option<VersionMode>,
     #[serde(default)]
@@ -129,6 +147,7 @@ impl<'de> Deserialize<'de> for PackageConfig {
             path: input.path,
             resolver: input.resolver,
             channel,
+            channel_bump: input.channel_bump,
             assets: input.assets,
             depends_on: input.depends_on,
         })
@@ -298,7 +317,7 @@ pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveErr
 mod tests {
     use semifold_core::PackageId;
 
-    use super::{PackageConfig, ReleaseChannel};
+    use super::{ChannelBump, PackageConfig, ReleaseChannel};
 
     #[test]
     fn missing_and_explicit_stable_channels_are_equivalent() {
@@ -343,6 +362,21 @@ version-mode = { pre-release = { tag = "beta" } }
 
         assert_eq!(named.channel, ReleaseChannel::Named("alpha".to_string()));
         assert_eq!(legacy.channel, ReleaseChannel::Named("beta".to_string()));
+    }
+
+    #[test]
+    fn loads_one_shot_channel_bump() {
+        let package: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+channel = "alpha"
+channel-bump = "preserve"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(package.channel_bump, Some(ChannelBump::Preserve));
     }
 
     #[test]

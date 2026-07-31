@@ -33,6 +33,7 @@ impl PackageDiscovery {
                 path: PathBuf::from(package.path.as_str()),
                 resolver: ResolverRegistry::resolver_type(package.ecosystem),
                 channel: ReleaseChannel::Stable,
+                channel_bump: None,
                 assets: vec![],
                 depends_on: vec![],
             };

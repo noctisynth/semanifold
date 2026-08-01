@@ -1561,6 +1561,10 @@ adapter 暴露旧 `ResolvedPackage`。
 14. 对同一工作区连续执行两次同步，第二次不产生文件修改。
 15. release branch、release PR 与模板变量由 `ReleaseUnit` 决定，不依赖隐式主项目。
 16. MiniJinja 模板严格校验未定义变量和渲染结果；多包 release unit 不会隐式选择某个 `package.tag`。
+17. 官网 Unix 与 Windows 安装脚本接受可选的具体版本参数；未传参数时安装 latest，传入
+    `X.Y.Z` 时从 GitHub Release 标签 `semifold-X.Y.Z` 下载对应平台资产。下载失败必须终止
+    安装，不能将 GitHub 错误响应写为可执行文件。两个脚本还必须接受可选安装目录；未指定
+    时保持 `$HOME/.local/bin`，并允许安装目录与可选版本独立组合。
 
 ## 19. 开放决策
 

@@ -19,10 +19,34 @@ You can install Semifold using the installation script:
 ```bash
 curl -L https://semifold.noctisynth.org/install/install.sh | sh
 ```
+
+To install a specific version, pass it as the first script argument:
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh -s -- 0.2.0
+```
+
+Use `--install-dir` to choose the installation directory. It can be used with or without a version:
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh -s -- 0.2.0 --install-dir "$HOME/bin"
+```
   </Tab>
   <Tab label="Windows">
 ```bash
 irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+To install a specific version:
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) 0.2.0
+```
+
+Use `-InstallDir` to choose the installation directory:
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) -InstallDir "$HOME\bin"
 ```
   </Tab>
 </Tabs>

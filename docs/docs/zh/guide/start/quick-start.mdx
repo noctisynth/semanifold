@@ -19,10 +19,34 @@ import { TabLabel } from "@components/tab-label";
 ```bash
 curl -L https://semifold.noctisynth.org/install/install.sh | sh
 ```
+
+如需安装具体版本，将版本号作为脚本的第一个参数传入：
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh -s -- 0.2.0
+```
+
+使用 `--install-dir` 可以指定安装目录，并可与具体版本组合使用：
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh -s -- 0.2.0 --install-dir "$HOME/bin"
+```
   </Tab>
   <Tab label="Windows">
 ```bash
 irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+如需安装具体版本：
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) 0.2.0
+```
+
+使用 `-InstallDir` 可以指定安装目录：
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) -InstallDir "$HOME\bin"
 ```
   </Tab>
 </Tabs>

@@ -370,6 +370,8 @@
 - [ ] release branch / release PR 支持单包、lockstep、静态和多单元发布策略
 - [ ] 模板在严格模式下渲染，且不会为多包发布隐式选择 package tag
 - [ ] 现有 CLI 主要用法和配置文件保持兼容
+- [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
+- [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 
 ## 实施前需要确认的决策
 

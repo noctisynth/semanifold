@@ -5,7 +5,7 @@
 ## 总体目标
 
 - [ ] 以跨生态 `WorkspaceGraph` 和不可变 `ReleasePlan` 取代以 `Resolver` 为中心的设计
-- [ ] 以可配置 `ReleaseUnit` 支持单包、lockstep、多项目和 workspace 级发布流
+- [ ] 以 workspace 级 `ReleaseContext` 统一 version/release PR 事实，并以 package 级 `PublishContext` 统一发布事实
 - [ ] 让 `status`、`version`、`publish` 和 CI 使用同一套应用服务
 - [ ] 将领域计算与文件系统、Git、HTTP、GitHub 和子进程副作用分离
 - [x] 使用 `smif config sync` 增量同步 `.changes/config.toml`，不再依赖重复执行 `init`
@@ -123,7 +123,7 @@
 - [x] 使用 `toml_edit::DocumentMut` 读取和修改原始文档
 - [x] 修改前将文档反序列化为强类型 `Config` 并验证
 - [x] 只更新 `[packages]` 下需要变化的 table
-- [x] 保留 `[release]`、`[[release.units]]` 和其他发布策略配置
+- [x] 保留 `[branches]`、`[release]` 和其他发布策略配置
 - [x] 保留注释、空行、字段顺序和未知字段
 - [x] 保留 `assets`、`channel` 和 `depends-on` 等手工字段
 - [x] 在配置模型中以 `ReleaseChannel::{Stable, Named}` 取代 `VersionMode`（仅保留 legacy 解析兼容）
@@ -259,24 +259,28 @@
 
 ## 阶段 5：统一发布引擎
 
-### Release unit 与发布身份
+### Workspace release context
 
-- [ ] 定义 `ReleaseUnit`、`ReleaseIdentityStrategy` 和 `ResolvedReleaseUnit`
-- [ ] 为 `Package`、`SharedVersion`、`Static` 和 `Fingerprint` identity 建立解析与校验规则
-- [ ] 单包仓库自动形成 package identity release unit
-- [ ] 多包仓库未配置 release unit 时保留固定 `release` 分支
-- [ ] 为单包、入口包、lockstep、静态分支和多 release unit 建立规划测试
+- [x] 定义可序列化的 `ReleasePlanContext`、`ReleaseContext`、`RepositoryContext` 和 `CiContext`
+- [x] `ReleasePlanContext.changesets` 直接使用稳定排序的 `Vec<ChangesetId>`，不复用 changelog `ChangesetContext`
+- [x] `ReleasePlanContext.packages` 只包含实际发布 package，并按 `PackageId` 稳定序列化
+- [x] 仅在所有实际发布 package 的 `next_version` 相同时生成 `common_version`
+- [x] 以规范化 package 版本与 changeset ID 生成确定性 SHA-256 plan fingerprint，对外使用前 12 位小写十六进制
+- [x] 首版不引入没有明确消费者的 `ProjectContext`，也不向模板暴露项目绝对路径或完整配置
+- [x] 为单包、多包同版本、多包不同版本、空计划和输入顺序无关性建立上下文测试
+- [ ] 决定并实现 Rust `workspace.package.version` / `package.version.workspace = true` 的版本来源、bump、channel、发布闭包、private crate 和单点编辑语义；不从 `ReleaseContext` 反向推导
+- [ ] 为 workspace 继承版本建立 discovery、status 和 version 不 panic 回归测试
 
 ### Publish plan
 
-- [ ] 定义 `PublishPlan` 和 `PackagePublish`
-- [ ] 依据 `ReleasePlan` 解析每个 `ReleaseUnit`
-- [ ] 为 package、shared-version、static 和 fingerprint identity 生成 `ResolvedReleaseUnit`
-- [ ] 将 release branch / release PR 规划归属到 `ReleaseUnit`
-- [ ] 明确 package-level Git tag 与 release-unit branch identity 的区别
-- [ ] 将 preflight、commands 和 assets 纳入计划
+- [x] 定义可从当前 workspace 重建的 `PublishContext`、`PublishPlan` 和 `PackagePublish`
+- [x] publish 不依赖或持久化 version 阶段的 `ReleaseContext`，也不从已消费 changeset 反推发布集合
+- [x] 依据 `ReleasePlan` 构造唯一 workspace `ReleaseContext`
+- [ ] 从 `ReleaseContext` 渲染 release branch / release PR，不隐式选择主 package
+- [x] 明确 package-level Git tag 与 workspace release branch / PR 的区别
+- [x] 将 preflight、commands 和 assets 纳入计划
 - [x] 基于 `WorkspaceGraph` 生成确定性发布顺序
-- [ ] 为 private package 和已发布版本提供显式 skip reason
+- [x] 为 private package 和已发布版本提供显式 skip reason
 
 ### 外部能力
 
@@ -290,12 +294,15 @@
 ### 执行与报告
 
 - [ ] 在执行发布前完成所有可执行的 preflight
-- [ ] 定义 `ReleaseContext`、`PackageContext` 和只读 `TemplateContext`
-- [ ] 分支模板只暴露 `release.*`
-- [ ] changelog、GitHub Release 与包级命令模板暴露 `package.*`
-- [ ] 使用 MiniJinja 严格未定义变量模式
-- [ ] 在渲染后校验 branch ref、Git tag 和命令参数
-- [ ] 模板中引用不适用的 `release.tag` 或 `release.version` 时返回配置错误
+- [ ] 定义 `ReleasePackageContext`、`PublishContext`、`ChangelogContext` 和按场景构造的只读 `TemplateContext`
+- [x] 定义 changelog 专用 `ChangesetContext`、`PackageChangesetContext` 和 `DependencyUpdateContext`
+- [x] `ChangelogContext` 按 package 聚合 changesets 和依赖更新；tag 在收集层解析为 section，不进入 `ChangesetContext`
+- [x] 分支模板只暴露 `release.*`
+- [ ] changelog 与 version 包级模板暴露 `release.*`、`package.*`；publish 模板只暴露可从当前 package 重建的 `package.*`
+- [x] 使用 MiniJinja 严格未定义变量模式
+- [x] 在渲染后校验 branch ref、Git tag 和命令参数
+- [x] workspace 模板中不暴露 `release.tag` 或 `release.version`；`common_version = None` 时引用它必须返回配置错误
+- [x] 以 `ReleaseContext` 渲染 `branches.release`，并保持无模板语法的现有字面量配置
 - [ ] 支持 dry-run 发布计划
 - [ ] 返回结构化 `PublishReport`
 - [ ] 报告 succeeded、skipped、failed 和 not-started package
@@ -315,10 +322,10 @@
 - [ ] 定义结构化 `ProjectLoadError`
 - [ ] 不再使用 `.ok()` 吞掉配置、路径或 Git 错误
 - [ ] GitHub 环境、Git 句柄和 dry-run 不进入 `Project`
-- [ ] 将发布事实建模为不可变 `ReleaseContext`，而不是恢复万能 `Context`
-- [ ] 将包级事实建模为 `PackageContext`
-- [ ] 将 changelog 所需事实建模为 `ChangelogContext`
-- [ ] 确保 context 不持有 Git、HTTP、文件系统、resolver 或可变缓存
+- [x] 将发布事实建模为不可变 `ReleaseContext`，而不是恢复万能 `Context`
+- [x] 将 version 包级事实建模为 `ReleasePackageContext`，将发布事实建模为独立 `PublishContext`
+- [x] 将 changelog 所需事实建模为 `ChangelogContext`
+- [x] 确保 context 不持有 Git、HTTP、文件系统、resolver 或可变缓存
 
 ### 应用服务
 
@@ -367,8 +374,8 @@
 - [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
 - [x] `config sync --check` 可稳定用于 CI
 - [ ] 连续执行配置同步和版本规划均具有幂等性
-- [ ] release branch / release PR 支持单包、lockstep、静态和多单元发布策略
-- [ ] 模板在严格模式下渲染，且不会为多包发布隐式选择 package tag
+- [ ] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
+- [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
 - [ ] 现有 CLI 主要用法和配置文件保持兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
@@ -384,8 +391,7 @@
 - [ ] 是否长期支持 JSON 配置更新
 - [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`
 - [ ] 是否提供 `--rewrite-changesets` 辅助包重命名
-- [ ] 一个 package 是否允许同时属于多个 `ReleaseUnit`
-- [ ] `Fingerprint` identity 的格式与适用场景
+- [ ] Rust workspace 继承版本的共享版本来源、bump 合并、channel 与发布闭包规则
 
 ## 低优先级优化
 

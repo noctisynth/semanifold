@@ -380,15 +380,39 @@ pub struct PublishPlan {
 }
 
 pub struct PackagePublish {
-    pub id: PackageId,
-    pub version: semver::Version,
+    pub context: PublishContext,
     pub preflight: Option<RegistryCheck>,
     pub commands: Vec<CommandSpec>,
     pub assets: Vec<ReleaseAsset>,
+    pub skip_reason: Option<PublishSkipReason>,
+}
+
+pub struct PublishContext {
+    pub package: PublishPackageContext,
+    pub repository: Option<RepositoryContext>,
+    pub ci: Option<CiContext>,
+}
+
+pub struct PublishPackageContext {
+    pub id: PackageId,
+    pub name: String,
+    pub ecosystem: Ecosystem,
+    pub version: semver::Version,
+    pub tag: String,
+    pub path: Utf8PathBuf,
+    pub private: bool,
 }
 ```
 
 Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem adapter 中。它们由 engine 根据统一包模型和用户配置组装。
+
+`PublishPlan` 在 publish 进程中根据当前 `WorkspaceSnapshot`、强类型配置和
+`WorkspaceGraph` 重新构造，不依赖已被 version 消费的 changeset，也不持久化或恢复
+`ReleaseContext`。`PublishContext` 是单个 package 的只读模板快照；pre-check、
+prepublish、publish、asset 和 package GitHub Release 只消费 `package.*` 以及可选的
+repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中的 package；private package
+和 registry 中已存在的版本通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan`
+推断本次发布集合。
 
 在完整 `PublishPlan` 落地前，阶段 4 使用 application 层的统一发布命令执行桥接：按 package 的
 拓扑顺序依次执行全部 `prepublish`，成功后再执行全部 `publish`；命令工作目录为 package path，任一
@@ -397,101 +421,192 @@ Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem ad
 与 assets 仍由同一 application 流程编排，不回到 adapter。四个旧 resolver 不再暴露 `publish()`，
 也不接收 dry-run；该桥接后续由 `PublishPlan` 与注入的 `CommandRunner` 取代。
 
-### 6.6 `ReleaseUnit`、发布身份与模板上下文
+### 6.6 Workspace 级 `ReleaseContext` 与分层模板视图
 
-一个发布分支或 release PR 不必等同于一个 package。Semifold 应将其建模为 `ReleaseUnit`：一次发布流程的命名、成员和分支边界。
+一次 Semifold release 的技术事实是完整 workspace `ReleasePlan`，而不是某个隐式主 package
+的版本或 tag。workspace release 天然是 `PackageId -> next_version` 的集合；多包计划不
+自动具有单一 `release.version`、`release.tag` 或一个需要额外配置的“release identity”。
+因此当前设计不引入 `ReleaseUnit`、`ReleaseIdentityStrategy` 或
+`ResolvedReleaseIdentity`。version 阶段的分支与 release PR 消费一个 workspace 级
+`ReleaseContext`；它不跨 release PR 持久化，也不是 publish 阶段的输入。registry、发布命令、
+package tag 和 package GitHub Release 使用从当前 workspace 重建的 `PublishContext`。
 
-```rust
-pub struct ReleaseUnit {
-    pub name: ReleaseUnitName,
-    pub members: Vec<PackageId>,
-    pub identity: ReleaseIdentityStrategy,
-    pub branch_template: Template,
-}
-
-pub enum ReleaseIdentityStrategy {
-    /// 以一个成员包的下一版本定义发布身份。
-    Package { package: PackageId },
-    /// 要求所有成员的下一版本相同。
-    SharedVersion,
-    /// 使用固定字符串；适合长期更新的稳定 release 分支。
-    Static { value: String },
-    /// 使用本次计划的稳定摘要；仅适合高级自动化。
-    Fingerprint,
-}
-```
-
-`Package { package }` 是“入口项目”场景的一个 identity 策略，而不是所有仓库必须设置的 `primary-package`。例如，`semifold` 可以用 CLI package 的下一版本为 release PR 命名，同时在同一个 release unit 内升级 resolver 和 changelog crate。
-
-```toml
-[[release.units]]
-name = "cli"
-members = ["semifold", "semifold-resolver", "semifold-changelog"]
-identity = { kind = "package", package = "semifold" }
-branch = "release/{{ release.tag }}"
-```
-
-一个 lockstep 组可以使用：
-
-```toml
-[[release.units]]
-name = "sdk"
-members = ["sdk-core", "sdk-node", "sdk-python"]
-identity = { kind = "shared-version" }
-branch = "release/v{{ release.version }}"
-```
-
-一个没有单一版本身份的 workspace 可以使用稳定分支：
-
-```toml
-[[release.units]]
-name = "workspace"
-members = ["*"]
-identity = { kind = "static", value = "workspace" }
-branch = "release/{{ release.identity.value }}"
-```
-
-#### 模板变量作用域
-
-模板渲染必须在 `ReleasePlan` 完成后执行。分支、changelog、GitHub Release 和发布命令不共享一个无约束 map，而使用按场景构造的不可变数据视图：
+`ReleaseContext` 是在 `ReleasePlan` 完成后构造的不可变、可序列化事实快照：
 
 ```rust
 pub struct ReleaseContext {
-    pub project: ProjectInfo,
-    pub unit: ResolvedReleaseUnit,
-    pub plan: ReleasePlanSummary,
-    pub repository: Option<RepositoryInfo>,
-    pub ci: Option<CiInfo>,
+    pub plan: ReleasePlanContext,
+    pub repository: Option<RepositoryContext>,
+    pub ci: Option<CiContext>,
 }
 
-pub struct PackageContext {
-    pub release: ReleaseContext,
-    pub package: PackageRelease,
+pub struct ReleasePlanContext {
+    pub packages: BTreeMap<PackageId, PackageReleaseContext>,
+    pub changesets: Vec<ChangesetId>,
+    pub common_version: Option<semver::Version>,
+    pub fingerprint: String,
 }
 
-pub struct ChangelogContext {
-    pub package: PackageContext,
-    pub changeset: ChangesetView,
-    pub commit: Option<CommitInfo>,
-    pub pull_request: Option<PullRequestInfo>,
+pub struct PackageReleaseContext {
+    pub id: PackageId,
+    pub ecosystem: Ecosystem,
+    pub current_version: semver::Version,
+    pub next_version: semver::Version,
+    pub bump: BumpLevel,
+    pub reasons: Vec<ReleaseReasonContext>,
+}
+
+pub struct RepositoryContext {
+    pub host: String,
+    pub owner: String,
+    pub name: String,
+    pub web_url: String,
+    pub commit: Option<CommitContext>,
+}
+
+pub struct CiContext {
+    pub provider: CiProvider,
+    pub run_id: Option<String>,
+    pub run_url: Option<String>,
+    pub ref_name: Option<String>,
 }
 ```
 
-最终传入 MiniJinja 的 `TemplateContext` 只序列化上述事实，不携带 Git client、文件系统、HTTP client、resolver 或可变缓存。
+`ReleasePlanContext.packages` 只包含本次实际发布的 package，使用 `BTreeMap`保证
+序列化稳定。`common_version` 是该集合的派生属性：仅当集合非空且所有
+`next_version` 相同时存在；它不触发 lockstep bump，也不使 workspace 获得隐式
+版本。`fingerprint` 是计划事实，不是 release identity：它以按 `PackageId` 排序的
+`(PackageId, next_version)` 和按 ID 排序的已消费 changeset 为规范化输入，计算
+SHA-256 并输出前 12 位小写十六进制。它不包含路径、遍历顺序、时间、
+Git SHA、远程元数据或 changeset 文本。
 
-- 分支模板只暴露 `release.*`。它代表一个 release unit，不能隐式挑选多个 package 中的某一个。
-- 包级发布命令、GitHub Release 和 changelog 模板暴露 `package.*`，每个 package 有自己的 `package.tag` 和 `package.next_version`。
-- `release.tag` 与 `release.version` 仅在 identity 能够唯一提供它们时存在；例如 `Package` 和 `SharedVersion`。
-- 使用 `Static` 或 `Fingerprint` identity 时，引用未定义的 `release.tag` 必须报错。
+`RepositoryContext` 和 `CiContext` 只保存收集完成的可序列化事实，不持有
+`git2::Repository`、Forge client、token、完整环境变量或命令执行器。非必需远程
+元数据收集失败时保留诊断并使用 `None`，不得回滚或重新计算 `ReleasePlan`。
 
-MiniJinja 必须使用严格未定义变量模式，并在渲染后验证 branch ref、git tag 和命令参数的目标格式。当前 `Config.tags` 是 changelog 分类，不得作为 `release.tag` 的来源。
+当前没有已证明的项目级模板字段，因此首版不引入 `ProjectContext`。应用层的
+`Project` 仍负责 root、changeset directory、config path 和强类型配置的加载；这些
+运行时路径不默认暴露给模板。只有在出现明确消费者和配置来源后，才能增加
+最小、只读的 `ProjectContext`。
 
-#### 默认行为
+#### 分层模板变量作用域
 
-- 单包仓库：自动形成一个 package identity release unit，默认分支模板为 `release/{{ release.tag }}`。
-- 多包仓库且没有 release unit：保持现有固定 `release` 分支，避免猜测某个包是“主项目”。
-- 多包仓库有入口项目：用户显式配置 `Package` identity。
-- 需要多个独立发布流的仓库：定义多个 `ReleaseUnit`；一个 package 同时属于多个 unit 时必须显式处理冲突。
+模板渲染必须在 `ReleasePlan` 完成和必需事实收集后执行。不同场景使用不同的
+不可变视图，不共享无约束 map：
+
+```rust
+pub struct ReleasePackageContext<'a> {
+    pub release: &'a ReleaseContext,
+    pub package: ReleasePackageTemplateContext,
+}
+
+pub struct ReleasePackageTemplateContext {
+    pub id: PackageId,
+    pub name: String,
+    pub ecosystem: Ecosystem,
+    pub current_version: semver::Version,
+    pub next_version: semver::Version,
+    /// 迁移期对 `next_version` 的兼容别名。
+    pub version: semver::Version,
+    pub tag: String,
+    pub path: Utf8PathBuf,
+    pub private: bool,
+}
+
+pub struct ChangelogContext<'a> {
+    pub package: ReleasePackageContext<'a>,
+    pub changesets: Vec<PackageChangesetContext>,
+    pub dependency_updates: Vec<DependencyUpdateContext>,
+}
+
+pub struct ChangesetContext {
+    pub id: ChangesetId,
+    pub summary: String,
+    pub commit: Option<CommitContext>,
+    pub pull_request: Option<PullRequestContext>,
+}
+
+pub struct PackageChangesetContext {
+    pub changeset: ChangesetContext,
+    pub section: String,
+}
+
+pub struct DependencyUpdateContext {
+    pub package: PackageId,
+    pub next_version: semver::Version,
+}
+```
+
+现有 resolver `Changeset` 是包含 source path、全部 package 条目和清理方法的存储模型；
+`ChangesetInput` 是只包含 `ChangesetId -> package bump` 的 planner 输入；二者都不直接暴露
+给模板。`ReleasePlanContext.changesets` 只记录按 ID 稳定排序的已消费 changeset，不为 ID
+额外包装 context，也不包含 summary 或远程元数据。
+
+changelog 收集层从原始 `Changeset` 构造只读 `ChangesetContext`。一条 changeset 本身没有
+唯一 tag；tag 和 bump 属于其中的 package 条目。对当前 package 收集 changelog 时，将 tag
+通过 `[tags]` 解析为最终展示栏目 `section`，并构造 `PackageChangesetContext`；formatter
+不读取原始 tag 配置。未指定或未配置 tag 时使用兼容栏目 `Changes`。bump 已由
+`ReleasePlan` 消费且 formatter 不展示，因此不进入 changelog context。
+
+`ChangelogContext` 是一个实际发布 package 的完整聚合输入，而不是单条 changeset 的别名。
+commit 和 pull request 与其来源 changeset 保持在同一个 `ChangesetContext` 内；依赖传播
+产生的条目使用独立 `DependencyUpdateContext`。远程 PR 查询失败时收集层记录诊断并设置
+`pull_request = None`，纯 formatter 不感知查询失败原因。
+
+- release branch 和 release PR 只暴露 `release.*`。
+- version 与 changelog 中的包级视图同时暴露 `release.*` 与 `package.*`；
+  `package.next_version` 和 `package.tag` 始终是该次版本计划的 package 事实。
+- publish 的 pre-check、prepublish、publish、asset 和 GitHub Release 使用独立
+  `PublishContext`，只暴露当前 manifest 可重建的 `package.*` 以及可选 repository/CI
+  事实，不暴露或伪造 `release.*`。
+- changelog 额外暴露 `changesets[*].changeset.*`、对应的 `section`、changeset 内可选的
+  `commit` / `pull_request`，以及 `dependency_updates[*]`。
+- workspace 级不提供 `release.version` 或 `release.tag`。需要共同版本时显式引用
+  `release.plan.common_version`；需要具体 package 版本时按 `PackageId` 显式访问
+  `release.plan.packages`。
+
+MiniJinja 必须使用严格未定义变量模式，并在渲染后验证 branch ref、Git tag 和
+命令参数的目标格式。`common_version = None` 时引用该字段必须返回配置错误，
+不渲染为空字符串。现有 pre-check 和 publish command 的 `package.name`、
+`package.version`、`package.path` 与 `package.private` 字段在迁移期保持兼容。
+version 阶段的 `package.version` 为 `package.next_version` 的兼容别名；publish 阶段的
+`package.version` 是当前 manifest 版本。默认 package Git tag 保持当前
+`<manifest-name>-v<next-version>` 约定，并以 `package.tag` 暴露；workspace 不从这些
+package tag 中挑选一个作为自身 tag。
+
+#### 分支配置与默认行为
+
+`branches.base` 继续是基础分支字面量。`branches.release` 保持现有配置位置，但在
+`ReleaseContext` 上以严格 MiniJinja 模板解析；不含模板语法的现有 `release` 值原样
+渲染，因此单包和多包仓库均保持当前固定 release branch 行为。如需按计划
+命名，可显式配置：
+
+```toml
+[branches]
+base = "main"
+release = "release/{{ release.plan.fingerprint }}"
+```
+
+具有共同版本的计划可以显式使用：
+
+```toml
+[branches]
+base = "main"
+release = "release/v{{ release.plan.common_version }}"
+```
+
+如需引用某个 package，必须在模板中显式使用它的 `PackageId`：
+
+```toml
+[branches]
+base = "main"
+release = 'release/v{{ release.plan.packages["semifold"].next_version }}'
+```
+
+该 package 不在本次实际发布集合时，严格模板渲染失败；Semifold 不配置或推断
+“主 package”。多个独立 release branch / PR 不属于当前迭代；未来若存在明确产品
+需求，必须先设计 scoped `ReleasePlan`、changeset 消费、跨 scope 依赖传播、共享文件
+edit ownership 和独立恢复报告；不以恢复 `ReleaseUnit` 配置作为默认解法。
 
 ## 7. 生态适配器
 
@@ -576,7 +691,7 @@ Adapter 可以：
 Python 或 Node binding 可以读取 Rust manifest 作为动态版本来源或构建输入，但不得写入
 `Cargo.toml`。跨生态 package 默认保持独立版本序列；Rust 产物变化是否触发 binding
 重新发布由显式依赖传播决定，不能通过复制 Rust 版本隐式实现。需要同版本发布时使用
-`ReleaseUnit::SharedVersion`；动态派生版本关系后续以显式 `version-source` 模型表达。
+后续显式 lockstep 版本规划策略；动态派生版本关系后续以显式 `version-source` 模型表达。
 
 Rust manifest 与 Semifold TOML 配置必须使用保格式编辑器，保留无关的文本布局。`package.json` 则允许在完成 `serde_json::Value` 语义校验后使用启用 `preserve_order` 的序列化器规范化输出：对象键顺序必须保持，输出使用标准缩进并始终以一个换行结束。不得为 `package.json` 版本修改维护自定义字节级 JSON 解析或扫描器；JSON 结构、转义和边缘语法应完全由 `serde_json` 处理。
 
@@ -590,6 +705,13 @@ release package 的遍历顺序。只有目标 package 的计划版本相对当�
 对应依赖约束，避免将未变化的宽松约束无意义地规范化为精确版本。虚拟 workspace 根
 没有可归属的 package 时，edit source 使用 `EditSource::WorkspaceDependencies` 并按
 `PackageId` 稳定记录所有被更新的内部依赖。
+
+Rust package 还可以通过 `package.version.workspace = true` 继承
+`workspace.package.version`。当前实现尚未支持这种 manifest，并可能在发现或版本规划时
+panic；这是已知缺口，不得被视为不支持该 Cargo 语义的长期决策。正式支持前必须先明确共享
+workspace 版本的来源表示、bump 合并、channel 一致性、发布闭包、private crate
+以及 manifest 编辑所有权。该问题属于 `ReleasePlan` 与 Rust adapter 的版本来源设计，
+不从 `ReleaseContext`、分支或模板配置推导共享版本关系。
 
 Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。
 
@@ -762,7 +884,12 @@ pub struct ProjectLocation {
 
 GitHub 环境、Git 仓库和 dry-run 均不是 `Project` 数据的一部分。
 
-项目级稳定数据、一次 release 的动态事实，以及包或 changelog 的模板数据应分层表示为 `Project`、`ReleaseContext`、`PackageContext` 和 `ChangelogContext`。这些 context 可以为文本生成提供丰富信息，但必须是不可变数据快照；Git、Forge、文件系统和 resolver 等能力通过 engine 的依赖注入提供，而不放回 context。
+`Project` 负责项目加载，一次 release 的动态事实以及包或 changelog 的模板数据则
+分层表示为 `ReleaseContext`、`ReleasePackageContext`、`PublishContext` 和
+`ChangelogContext`。`Project` 不是
+模板 context；首版不将其 root、配置路径或完整 `Config` 序列化给模板。所有
+context 必须是不可变数据快照；Git、Forge、文件系统和 resolver 等能力通过 engine 的
+依赖注入提供，而不放回 context。
 
 ## 10. 副作用边界
 
@@ -1219,7 +1346,7 @@ let packages = document["packages"]
 
 - 加载后先反序列化成强类型 `Config` 完成语义验证；
 - 使用 `DocumentMut` 修改原文档，而不是从 `Config` 重新序列化；
-- 只修改 `[packages]` 下需要同步的 table；`[release]` 与 `[[release.units]]` 等发布策略配置完全保留；
+- 只修改 `[packages]` 下需要同步的 table；`[branches]`、`[release]` 与其他发布策略配置完全保留；
 - 保留未知字段，确保旧版 Semifold 不会抹掉新版或插件写入的配置；
 - 写回前再次从修改后的文档反序列化并验证；
 - 使用临时文件与 rename 原子替换；
@@ -1266,7 +1393,7 @@ resolver 选择先按类型稳定排序并去重。服务通过 registry 创建�
 
 区别仅在于：
 
-- `init` 从空配置生成初始文档和 CI 模板；单包仓库可生成 package identity 的默认 release unit，多包仓库默认保留固定 `release` 分支；
+- `init` 从空配置生成初始文档和 CI 模板，并对单包与多包仓库都生成兼容现有行为的固定 `branches.release`；
 - `config sync` 从现有 `DocumentMut` 生成并应用增量修改；
 - `init --force` 也不应继续成为日常同步工作区的方式。
 
@@ -1521,15 +1648,22 @@ adapter 暴露旧 `ResolvedPackage`。
 
 ### 阶段 5：发布引擎与外部边界
 
-目标：统一 preflight、发布命令和 GitHub release。
+目标：以 workspace 级 `ReleaseContext` 统一 version/release PR 模板事实，以 package 级
+`PublishContext` 统一 preflight、发布命令和 GitHub release。
 
+- 定义 `ReleasePlanContext`、`ReleaseContext`、`ReleasePackageContext`、
+  `PublishContext` 和按场景构造的只读模板视图；
+- 从已验证 `ReleasePlan` 确定性派生 `common_version` 与 plan fingerprint；
+- 将 `branches.release` 作为严格 MiniJinja 模板渲染并校验，保持现有字面量配置兼容；
 - 引入 `PublishPlan`；
 - 抽出 `CommandRunner` 和 `RegistryClient`；
 - 将重复 publish 实现替换为统一 publisher；
 - 将 GitHub release 和 asset upload 移到 Forge adapter；
 - 为部分发布失败提供结构化 report。
 
-完成条件：生态 adapter 不再运行任何外部命令。
+完成条件：生态 adapter 不再运行任何外部命令；version 阶段的 release branch 与 PR
+消费同一个 `ReleaseContext`；publish 与 CI 的发布路径使用相同的 `PublishPlan`、
+`PublishContext` 和 publisher。
 
 ### 阶段 6：拆分 `Context` 并收敛入口层
 
@@ -1559,8 +1693,8 @@ adapter 暴露旧 `ResolvedPackage`。
 12. 缺失包默认不删除，只有完整扫描成功且显式指定 `--prune` 时才允许删除。
 13. `smif config sync --check` 可用于 CI 检测配置漂移。
 14. 对同一工作区连续执行两次同步，第二次不产生文件修改。
-15. release branch、release PR 与模板变量由 `ReleaseUnit` 决定，不依赖隐式主项目。
-16. MiniJinja 模板严格校验未定义变量和渲染结果；多包 release unit 不会隐式选择某个 `package.tag`。
+15. release branch、release PR 与模板变量消费同一个 workspace 级 `ReleaseContext`，不依赖隐式主项目。
+16. MiniJinja 模板严格校验未定义变量和渲染结果；workspace 级不暴露隐式 `release.version` 或 `release.tag`。
 17. 官网 Unix 与 Windows 安装脚本接受可选的具体版本参数；未传参数时安装 latest，传入
     `X.Y.Z` 时从 GitHub Release 标签 `semifold-X.Y.Z` 下载对应平台资产。下载失败必须终止
     安装，不能将 GitHub 错误响应写为可执行文件。两个脚本还必须接受可选安装目录；未指定
@@ -1581,8 +1715,10 @@ adapter 暴露旧 `ResolvedPackage`。
 7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。
 8. 未启用 resolver 但发现对应生态 manifest 时，是提示用户启用，还是允许 `--resolver` 自动创建默认 resolver 配置。
 9. rename 后是否提供独立 `--rewrite-changesets` 选项更新尚未消费的 changeset，默认行为仍是不修改。
-10. 一个 package 是否允许属于多个 `ReleaseUnit`；若允许，如何界定它们的发布和版本修改冲突。
-11. `Fingerprint` identity 的稳定输入、可见格式和适用场景。
+10. Rust `package.version.workspace = true` 应如何表示多个 package 共享同一
+    manifest 版本位置；决策必须同时定义 bump 合并、channel 一致性、发布闭包、
+    private crate 以及 `[workspace.package].version` 单点编辑规则，且不从
+    `ReleaseContext` 反向推导该关系。
 
 ### 19.1 低优先级优化：首次发布状态
 

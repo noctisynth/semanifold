@@ -94,6 +94,7 @@ allow_dirty = "Allow versioning packages with dirty Git working tree"
 
 [cli.publish]
 non_utf8_project_root = "Publishing requires a UTF-8 project root"
+plan_failed = "Failed to build publish plan: %{error}"
 skip_private = "Skip publishing %{package} %{version} as it is private"
 pre_check = "Pre-check passed for %{package} %{version}, skipping publish"
 run_prepublish_commands = "Running prepublish commands for %{package}"
@@ -115,6 +116,7 @@ not_base_branch = "Not a push to base branch, skip versioning and publishing."
 no_changesets_publish = "No changesets found, will publish the current version."
 no_existing_pr = "No existing PR found, create a new one."
 existing_pr_found = "Existing PR #%{number} found, skip creating a new one."
+release_branch_invalid = "Failed to render a valid release branch: %{error}"
 
 [cli.mcp]
 not_initialized = "Semifold not initialized. Run 'smif init' first."

@@ -11,6 +11,7 @@ pub(crate) mod discovery;
 pub mod file_edit_executor;
 pub mod logger;
 pub(crate) mod package_path;
+pub(crate) mod publish_plan;
 pub(crate) mod release;
 pub mod utils;
 pub mod workspace;

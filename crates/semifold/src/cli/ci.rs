@@ -6,9 +6,13 @@ use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
 
+use semifold_core::ReleaseContext;
 use semifold_resolver::{context::Context, resolver};
 
-use crate::cli::{publish, version};
+use crate::{
+    cli::{publish, version},
+    release::{plan_release, render_release_branch},
+};
 
 #[derive(Debug, Parser)]
 pub struct CI;
@@ -83,20 +87,27 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return publish::publish(ctx, true).await;
     }
 
+    let root = ctx
+        .repo_root
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.ci.git_repo_not_initialized")))?;
+    let release_plan = plan_release(root, config, &changesets)?;
+    let release_context = ReleaseContext::from_plan(&release_plan);
+    let release_branch = render_release_branch(&config.branches.release, &release_context)
+        .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)))?;
+
     let version::ApplyReport {
         changelogs: changelogs_map,
         file_edits,
         unconsumed_changesets: _,
-    } = version::version(ctx, &changesets).await?;
+    } = version::apply_version_plan(ctx, &changesets, release_plan).await?;
     let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;
 
     let base_branch = &config.branches.base;
-    let release_branch = &config.branches.release;
-
-    repo.branch(release_branch, &commit, true)?;
+    repo.branch(&release_branch, &commit, true)?;
     repo.set_head(&format!("refs/heads/{}", release_branch))?;
     repo.checkout_head(None)?;
 
@@ -118,7 +129,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         &[&parent_commit],
     )?;
 
-    force_push_release(repo, &github_token, release_branch)?;
+    force_push_release(repo, &github_token, &release_branch)?;
 
     let head = format!("{}:{}", owner, release_branch);
     let pulls = octocrab.pulls(owner, repo_name);
@@ -144,7 +155,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     if existing_prs.is_empty() {
         log::info!("{}", t!("cli.ci.no_existing_pr"));
         pulls
-            .create(pr_title, release_branch, base_branch)
+            .create(pr_title, &release_branch, base_branch)
             .body(pr_body)
             .send()
             .await?;

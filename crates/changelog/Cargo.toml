@@ -19,4 +19,8 @@ git2 = { version = "0.20.2", features = ["vendored-openssl"] }
 octocrab = "0.47.0"
 pathdiff = "0.2.3"
 regex = "1.12.2"
+semifold-core = { version = "0.1.0-beta.1", path = "../semifold-core" }
 semifold-resolver = { version = "0.4.0-beta.2", path = "../resolver" }
+
+[dev-dependencies]
+semver = "1.0.28"

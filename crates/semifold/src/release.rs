@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, path::Path};
 
+use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_core::{
     BumpLevel, ChangesetId, ChangesetInput, DependencyKind, DependencySource, Ecosystem, PackageId,
-    PackageReleasePolicy, ReleaseChannel, ReleasePlan, ReleasePlanner, ReleasePolicies,
-    WorkspaceGraph,
+    PackageReleasePolicy, ReleaseChannel, ReleaseContext, ReleasePlan, ReleasePlanner,
+    ReleasePolicies, WorkspaceGraph,
 };
 use semifold_resolver::{
     adapter::{EcosystemAdapter, EcosystemPlanInput},
@@ -16,6 +17,30 @@ use semifold_resolver::{
 use semver::VersionReq;
 
 use crate::workspace::load_workspace_graph;
+
+pub(crate) fn render_release_branch(
+    template: &str,
+    release: &ReleaseContext,
+) -> anyhow::Result<String> {
+    let mut release_value = serde_json::to_value(release)?;
+    if release.plan.common_version.is_none()
+        && let Some(plan) = release_value
+            .as_object_mut()
+            .and_then(|release| release.get_mut("plan"))
+            .and_then(serde_json::Value::as_object_mut)
+    {
+        plan.remove("common_version");
+    }
+
+    let mut environment = Environment::new();
+    environment.set_undefined_behavior(UndefinedBehavior::Strict);
+    let branch = environment.render_str(template, context!(release => release_value))?;
+    let reference = format!("refs/heads/{branch}");
+    if !git2::Reference::is_valid_name(&reference) {
+        anyhow::bail!("rendered release branch is not a valid Git branch: {branch}");
+    }
+    Ok(branch)
+}
 
 /// Builds the immutable release plan from the current migration-layer inputs.
 pub(crate) fn plan_release(
@@ -196,7 +221,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use semifold_core::{PackageId, ReleaseReason};
+    use semifold_core::{
+        ChangesetId, PackageId, PackageRelease, ReleaseContext, ReleasePlan, ReleaseReason,
+        VersionMap,
+    };
     use semifold_resolver::{
         changeset::Changeset,
         config::{BranchesConfig, PackageConfig},
@@ -252,6 +280,76 @@ mod tests {
             assets: vec![],
             depends_on: depends_on.iter().copied().map(PackageId::new).collect(),
         }
+    }
+
+    fn context(packages: Vec<PackageRelease>) -> ReleaseContext {
+        let versions = packages
+            .iter()
+            .map(|package| (package.id.clone(), package.next_version.clone()))
+            .collect::<VersionMap>();
+        let order = packages.iter().map(|package| package.id.clone()).collect();
+        let plan = ReleasePlan::new(
+            packages,
+            versions,
+            order,
+            vec![ChangesetId::new("release-change")],
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+        ReleaseContext::from_plan(&plan)
+    }
+
+    fn planned_package(id: &str, version: semver::Version) -> PackageRelease {
+        PackageRelease {
+            id: PackageId::new(id),
+            ecosystem: Ecosystem::Rust,
+            current_version: semver::Version::new(1, 0, 0),
+            next_version: version,
+            bump: BumpLevel::Minor,
+            reasons: vec![ReleaseReason::Changeset {
+                changeset: ChangesetId::new("release-change"),
+            }],
+        }
+    }
+
+    #[test]
+    fn release_branch_supports_literals_and_release_plan_templates() {
+        let context = context(vec![planned_package("core", semver::Version::new(1, 1, 0))]);
+
+        assert_eq!(
+            render_release_branch("release", &context).unwrap(),
+            "release"
+        );
+        assert_eq!(
+            render_release_branch("release/v{{ release.plan.common_version }}", &context).unwrap(),
+            "release/v1.1.0"
+        );
+        assert_eq!(
+            render_release_branch("release/{{ release.plan.fingerprint }}", &context).unwrap(),
+            format!("release/{}", context.plan.fingerprint)
+        );
+    }
+
+    #[test]
+    fn release_branch_rejects_missing_common_version_unknown_fields_and_invalid_refs() {
+        let context = context(vec![
+            planned_package("core", semver::Version::new(1, 1, 0)),
+            planned_package("cli", semver::Version::new(2, 0, 0)),
+        ]);
+
+        assert!(
+            render_release_branch("release/v{{ release.plan.common_version }}", &context).is_err()
+        );
+        assert!(render_release_branch("{{ release.version }}", &context).is_err());
+        assert!(
+            render_release_branch(
+                "release/{{ release.plan.packages.missing.next_version }}",
+                &context
+            )
+            .is_err()
+        );
+        assert!(render_release_branch("release branch", &context).is_err());
     }
 
     #[test]

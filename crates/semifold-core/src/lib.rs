@@ -7,6 +7,7 @@ pub mod dependency;
 pub mod file_edit;
 pub mod package;
 pub mod planner;
+pub mod release_context;
 pub mod release_plan;
 pub mod versioning;
 pub mod workspace;
@@ -21,6 +22,12 @@ pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash};
 pub use package::{Ecosystem, PackageId, PackageSnapshot};
 pub use planner::{
     ChangesetInput, PackageReleasePolicy, ReleasePlanner, ReleasePlannerError, ReleasePolicies,
+};
+pub use release_context::{
+    ChangelogContext, ChangesetContext, CiContext, CiProvider, CommitContext,
+    DependencyUpdateContext, PackageChangesetContext, PackageReleaseContext, PullRequestContext,
+    ReleaseContext, ReleasePackageContext, ReleasePackageContextError,
+    ReleasePackageTemplateContext, ReleasePlanContext, ReleaseReasonContext, RepositoryContext,
 };
 pub use release_plan::{PackageRelease, ReleasePlan, ReleasePlanError, VersionMap};
 pub use versioning::{ReleaseChannel, VersioningError, bump_version};

@@ -5,9 +5,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub use semifold_core::{
+    ChangelogContext, ChangesetContext, DependencyUpdateContext, PackageChangesetContext,
+};
+use semifold_core::{ChangesetId, CommitContext, PullRequestContext, ReleasePackageContext};
 use semifold_resolver::{changeset, context, error::ResolveError};
-
-use crate::utils::PrInfo;
 
 pub mod types;
 pub mod utils;
@@ -17,24 +19,26 @@ pub struct GeneratedChangelog {
     pub remote_metadata_failed: bool,
 }
 
-pub struct CollectedChangelogContext {
-    pub context: ChangelogContext,
+pub struct CollectedChangelogContext<'release> {
+    pub context: ChangelogContext<'release>,
     pub remote_metadata_failed: bool,
 }
 
-/// Immutable, fully collected input for pure changelog Markdown formatting.
-pub struct ChangelogContext {
-    pub package_version: String,
-    pub sections: BTreeMap<String, Vec<String>>,
-    pub dependency_updates: Vec<(String, String)>,
-}
-
-pub fn format_changelog(context: &ChangelogContext) -> String {
-    let header = format!("## v{}\n\n", context.package_version);
-    let changes_body = context
-        .sections
+pub fn format_changelog(context: &ChangelogContext<'_>) -> String {
+    let header = format!("## v{}\n\n", context.package.package.next_version);
+    let sections = context.changesets.iter().fold(
+        BTreeMap::<&str, Vec<String>>::new(),
+        |mut sections, package_changeset| {
+            sections
+                .entry(&package_changeset.section)
+                .or_default()
+                .push(format_line(&package_changeset.changeset));
+            sections
+        },
+    );
+    let changes_body = sections
         .iter()
-        .map(|(tag, lines)| format!("### {tag}\n\n{}", lines.join("\n")))
+        .map(|(section, lines)| format!("### {section}\n\n{}", lines.join("\n")))
         .collect::<Vec<_>>()
         .join("\n\n");
     let dependencies_body = format_dependency_updates(&context.dependency_updates);
@@ -47,22 +51,14 @@ pub fn format_changelog(context: &ChangelogContext) -> String {
     header + &body
 }
 
-pub fn format_line(
-    changeset: &changeset::Changeset,
-    repo_info: &Option<context::RepoInfo>,
-    pr_info: &Option<PrInfo>,
-    commit_hash: &Option<String>,
-) -> String {
+pub fn format_line(changeset: &ChangesetContext) -> String {
     let mut line = String::from("- ");
 
-    if let Some(repo_info) = repo_info.as_ref()
-        && let Some(commit_hash) = commit_hash
+    if let Some(commit) = changeset.commit.as_ref()
+        && let Some(commit_url) = commit.web_url.as_ref()
     {
-        let commit_url = format!(
-            "{}/{}/{}/commit/{}",
-            repo_info.base_url, repo_info.owner, repo_info.repo_name, commit_hash
-        );
-        line.push_str(&format!("[`{}`]({}): ", &commit_hash[..7], commit_url));
+        let short_sha = commit.sha.chars().take(7).collect::<String>();
+        line.push_str(&format!("[`{short_sha}`]({commit_url}): "));
     }
 
     let summary_paragraphs =
@@ -91,13 +87,13 @@ pub fn format_line(
         line.push_str(first_line);
     }
 
-    if let Some(pr_info) = pr_info.as_ref() {
-        if let Some(url) = pr_info.url.as_ref() {
-            line.push_str(&format!(" ([#{}]({url})", pr_info.number));
+    if let Some(pull_request) = changeset.pull_request.as_ref() {
+        if let Some(url) = pull_request.web_url.as_ref() {
+            line.push_str(&format!(" ([#{}]({url})", pull_request.number));
         } else {
-            line.push_str(&format!(" (#{}", pr_info.number));
+            line.push_str(&format!(" (#{}", pull_request.number));
         }
-        if let Some(author) = pr_info.author.as_ref() {
+        if let Some(author) = pull_request.author.as_ref() {
             line.push_str(&format!(" by @{}", author));
         }
         line.push(')');
@@ -123,16 +119,15 @@ pub fn format_line(
     line
 }
 
-pub async fn collect_changelog_context(
+pub async fn collect_changelog_context<'release>(
     ctx: &context::Context,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
-    package_name: &str,
-    package_version: &str,
-    dependency_updates: &[(String, String)],
+    package: ReleasePackageContext<'release>,
+    dependency_updates: Vec<DependencyUpdateContext>,
     collect_remote_metadata: bool,
-) -> Result<CollectedChangelogContext, ResolveError> {
-    let mut changes_map = BTreeMap::new();
+) -> Result<CollectedChangelogContext<'release>, ResolveError> {
+    let mut collected_changesets = Vec::new();
     let mut remote_metadata_failed = false;
 
     let tags = ctx
@@ -142,6 +137,13 @@ pub async fn collect_changelog_context(
         .unwrap_or_default();
 
     for changeset in changesets {
+        let Some(changed_package) = changeset
+            .packages
+            .iter()
+            .find(|changed| changed.name == package.package.id.as_str())
+        else {
+            continue;
+        };
         let changeset_path = changeset
             .path
             .as_ref()
@@ -159,7 +161,6 @@ pub async fn collect_changelog_context(
             },
         )?;
         let commit_info = utils::find_first_commit_for_path(repo, &rel_path);
-        let commit_hash = commit_info.as_ref().map(|c| c.oid.to_string());
         let pr_info = if collect_remote_metadata
             && let Some(repo_info) = ctx.repo_info.as_ref()
             && let Some(commit_info) = commit_info.as_ref()
@@ -172,8 +173,7 @@ pub async fn collect_changelog_context(
             .await
             {
                 Ok(pr_info) => pr_info,
-                Err(error) => {
-                    eprintln!("{error:?}");
+                Err(_error) => {
                     remote_metadata_failed = true;
                     None
                 }
@@ -182,51 +182,62 @@ pub async fn collect_changelog_context(
             None
         };
 
-        let package = changeset.packages.iter().find(|p| p.name == package_name);
-        if let Some(package) = package {
-            let tag = package
-                .tag
-                .as_ref()
-                .and_then(|t| tags.get(t).map(|s| s.as_str()))
-                .unwrap_or("Changes")
-                .to_string();
-            changes_map
-                .entry(tag)
-                .or_insert_with(Vec::new)
-                .push(format_line(
-                    changeset,
-                    &ctx.repo_info,
-                    &pr_info,
-                    &commit_hash,
-                ));
-        }
+        let commit = commit_info.map(|commit| {
+            let sha = commit.oid.to_string();
+            let web_url = ctx.repo_info.as_ref().map(|repo_info| {
+                format!(
+                    "{}/{}/{}/commit/{sha}",
+                    repo_info.base_url, repo_info.owner, repo_info.repo_name
+                )
+            });
+            CommitContext { sha, web_url }
+        });
+        let pull_request = pr_info.map(|pull_request| PullRequestContext {
+            number: pull_request.number,
+            author: pull_request.author,
+            web_url: pull_request.url,
+        });
+        let section = changed_package
+            .tag
+            .as_ref()
+            .and_then(|tag| tags.get(tag))
+            .cloned()
+            .unwrap_or_else(|| "Changes".to_string());
+        collected_changesets.push(PackageChangesetContext {
+            changeset: ChangesetContext {
+                id: ChangesetId::new(&changeset.name),
+                summary: changeset.summary.clone(),
+                commit,
+                pull_request,
+            },
+            section,
+        });
     }
+    collected_changesets.sort_by(|left, right| left.changeset.id.cmp(&right.changeset.id));
 
     Ok(CollectedChangelogContext {
         context: ChangelogContext {
-            package_version: package_version.to_string(),
-            sections: changes_map,
-            dependency_updates: dependency_updates.to_vec(),
+            package,
+            changesets: collected_changesets,
+            dependency_updates,
         },
         remote_metadata_failed,
     })
 }
 
-pub async fn generate_changelog(
+pub async fn generate_changelog<'release>(
     ctx: &context::Context,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
-    package_name: &str,
-    package_version: &str,
-    dependency_updates: &[(String, String)],
+    package: ReleasePackageContext<'release>,
+    dependency_updates: Vec<DependencyUpdateContext>,
     collect_remote_metadata: bool,
 ) -> Result<GeneratedChangelog, ResolveError> {
     let collected = collect_changelog_context(
         ctx,
         repo,
         changesets,
-        package_name,
-        package_version,
+        package,
         dependency_updates,
         collect_remote_metadata,
     )
@@ -237,13 +248,18 @@ pub async fn generate_changelog(
     })
 }
 
-pub fn format_dependency_updates(dependency_updates: &[(String, String)]) -> String {
+pub fn format_dependency_updates(dependency_updates: &[DependencyUpdateContext]) -> String {
     if dependency_updates.is_empty() {
         return String::new();
     }
     let lines = dependency_updates
         .iter()
-        .map(|(dependency, version)| format!("- Update {dependency} to {version}."))
+        .map(|dependency| {
+            format!(
+                "- Update {} to {}.",
+                dependency.package, dependency.next_version
+            )
+        })
         .collect::<Vec<_>>();
     format!("### Dependencies\n\n{}", lines.join("\n"))
 }
@@ -299,27 +315,83 @@ pub async fn read_latest_changelog<P: AsRef<Path>>(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::BTreeMap,
-        path::{Path, PathBuf},
-    };
+    use std::path::Path;
 
-    use semifold_resolver::{changeset::Changeset, context::RepoInfo};
+    use semifold_core::{
+        BumpLevel, ChangesetId, CommitContext, DependencyUpdateContext, Ecosystem, PackageId,
+        PackageRelease, PackageSnapshot, PullRequestContext, ReleaseContext, ReleasePackageContext,
+        ReleasePlan, ReleaseReason, VersionMap,
+    };
+    use semver::Version;
 
     use super::{
-        ChangelogContext, format_changelog, format_dependency_updates, format_line,
-        utils::{PrInfo, render_changelog},
+        ChangelogContext, ChangesetContext, PackageChangesetContext, format_changelog,
+        format_dependency_updates, format_line, utils::render_changelog,
     };
+
+    fn release_context() -> ReleaseContext {
+        let id = PackageId::new("package");
+        let release = PackageRelease {
+            id: id.clone(),
+            ecosystem: Ecosystem::Rust,
+            current_version: Version::new(0, 9, 0),
+            next_version: Version::new(1, 0, 0),
+            bump: BumpLevel::Major,
+            reasons: vec![ReleaseReason::Changeset {
+                changeset: ChangesetId::new("release"),
+            }],
+        };
+        ReleaseContext::from_plan(
+            &ReleasePlan::new(
+                vec![release],
+                VersionMap::from([(id.clone(), Version::new(1, 0, 0))]),
+                vec![id],
+                vec![ChangesetId::new("release")],
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap(),
+        )
+    }
+
+    fn package_context(release: &ReleaseContext) -> ReleasePackageContext<'_> {
+        ReleasePackageContext::from_snapshot(
+            release,
+            &PackageSnapshot {
+                id: PackageId::new("package"),
+                manifest_name: "package".to_string(),
+                version: Version::new(0, 9, 0),
+                ecosystem: Ecosystem::Rust,
+                path: "crates/package".into(),
+                publishable: true,
+                dependencies: Vec::new(),
+            },
+        )
+        .unwrap()
+    }
+
+    fn changeset(id: &str, summary: &str) -> ChangesetContext {
+        ChangesetContext {
+            id: ChangesetId::new(id),
+            summary: summary.to_string(),
+            commit: None,
+            pull_request: None,
+        }
+    }
 
     #[test]
     fn formats_an_immutable_context_without_external_clients() {
+        let release = release_context();
         let context = ChangelogContext {
-            package_version: "1.0.0".to_string(),
-            sections: BTreeMap::from([(
-                "Changes".to_string(),
-                vec!["- Add release planning".to_string()],
-            )]),
-            dependency_updates: vec![("core".to_string(), "1.0.0".to_string())],
+            package: package_context(&release),
+            changesets: vec![PackageChangesetContext {
+                changeset: changeset("release", "Add release planning"),
+                section: "Changes".to_string(),
+            }],
+            dependency_updates: vec![DependencyUpdateContext {
+                package: PackageId::new("core"),
+                next_version: Version::new(1, 0, 0),
+            }],
         };
 
         assert_eq!(
@@ -330,15 +402,19 @@ mod tests {
 
     #[test]
     fn formats_multiline_changesets_as_separate_list_item_paragraphs() {
+        let release = release_context();
         let context = ChangelogContext {
-            package_version: "1.0.0".to_string(),
-            sections: BTreeMap::from([(
-                "Changes".to_string(),
-                vec![
-                    "- First line\n\n    Second line\n    Third line\n".to_string(),
-                    "- Another changeset".to_string(),
-                ],
-            )]),
+            package: package_context(&release),
+            changesets: vec![
+                PackageChangesetContext {
+                    changeset: changeset("first", "First line\n\nSecond line\nThird line"),
+                    section: "Changes".to_string(),
+                },
+                PackageChangesetContext {
+                    changeset: changeset("second", "Another changeset"),
+                    section: "Changes".to_string(),
+                },
+            ],
             dependency_updates: vec![],
         };
 
@@ -350,44 +426,34 @@ mod tests {
 
     #[test]
     fn ignores_source_blank_lines_without_emitting_whitespace_only_paragraphs() {
-        let changeset = Changeset {
-            name: "realistic-multiline".to_string(),
-            packages: vec![],
-            summary: "Keep resume item columns within predictable bounds\n\nThe default template now gives job titles, organizations, and dates independent grid columns so\nlong content wraps without displacing adjacent fields. Linked titles no longer include trailing\nunderline space, and a complete Chinese sample covers long-title wrapping and all resume sections."
-                .to_string(),
-            root_path: PathBuf::new(),
-            path: None,
-        };
+        let changeset = changeset(
+            "realistic-multiline",
+            "Keep resume item columns within predictable bounds\n\nThe default template now gives job titles, organizations, and dates independent grid columns so\nlong content wraps without displacing adjacent fields. Linked titles no longer include trailing\nunderline space, and a complete Chinese sample covers long-title wrapping and all resume sections.",
+        );
 
         assert_eq!(
-            format_line(&changeset, &None, &None, &None),
+            format_line(&changeset),
             "- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so\n    long content wraps without displacing adjacent fields. Linked titles no longer include trailing\n    underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
         );
     }
 
     #[test]
     fn attaches_metadata_to_the_first_line_of_a_multiline_changeset() {
-        let changeset = Changeset {
-            name: "multiline".to_string(),
-            packages: vec![],
-            summary: "First line\r\nSecond line\r\nThird line".to_string(),
-            root_path: PathBuf::new(),
-            path: None,
-        };
-        let repo = Some(RepoInfo {
-            owner: "semifold".to_string(),
-            repo_name: "semifold".to_string(),
-            base_url: "https://github.com".to_string(),
+        let mut changeset = changeset("multiline", "First line\r\nSecond line\r\nThird line");
+        changeset.commit = Some(CommitContext {
+            sha: "1234567890abcdef".to_string(),
+            web_url: Some(
+                "https://github.com/semifold/semifold/commit/1234567890abcdef".to_string(),
+            ),
         });
-        let pull_request = Some(PrInfo {
+        changeset.pull_request = Some(PullRequestContext {
             number: 42,
             author: Some("author".to_string()),
-            url: Some("https://github.com/semifold/semifold/pull/42".to_string()),
+            web_url: Some("https://github.com/semifold/semifold/pull/42".to_string()),
         });
-        let commit = Some("1234567890abcdef".to_string());
 
         assert_eq!(
-            format_line(&changeset, &repo, &pull_request, &commit),
+            format_line(&changeset),
             "- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line ([#42](https://github.com/semifold/semifold/pull/42) by @author)\n    Second line\n    Third line\n"
         );
     }
@@ -395,10 +461,10 @@ mod tests {
     #[test]
     fn formats_propagated_dependency_updates_as_a_separate_section() {
         assert_eq!(
-            format_dependency_updates(&[(
-                "semifold-resolver".to_string(),
-                "0.4.0-alpha.0".to_string(),
-            )]),
+            format_dependency_updates(&[DependencyUpdateContext {
+                package: PackageId::new("semifold-resolver"),
+                next_version: Version::parse("0.4.0-alpha.0").unwrap(),
+            }]),
             "### Dependencies\n\n- Update semifold-resolver to 0.4.0-alpha.0."
         );
     }

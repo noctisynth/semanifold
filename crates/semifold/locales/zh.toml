@@ -94,6 +94,7 @@ allow_dirty = "允许在不干净的 Git 工作树中进行版本提升"
 
 [cli.publish]
 non_utf8_project_root = "发布需要 UTF-8 项目根目录"
+plan_failed = "无法生成发布计划：%{error}"
 skip_private = "由于包 %{package} %{version} 是私有的，跳过发布"
 pre_check = "包 %{package} %{version} 的预检查通过，跳过发布"
 run_prepublish_commands = "正在为包 %{package} 运行预发布命令"
@@ -115,6 +116,7 @@ not_base_branch = "不是推送到基础分支，跳过版本提升和发布。"
 no_changesets_publish = "未找到变更集，将发布当前版本。"
 no_existing_pr = "未找到现有 PR，创建新的 PR。"
 existing_pr_found = "找到现有 PR #%{number}，跳过创建新 PR。"
+release_branch_invalid = "无法渲染有效的发布分支：%{error}"
 
 [cli.mcp]
 not_initialized = "Semifold 未初始化。请先运行 'smif init'。"

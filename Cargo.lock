@@ -2133,7 +2133,9 @@ dependencies = [
  "octocrab",
  "pathdiff",
  "regex",
+ "semifold-core",
  "semifold-resolver",
+ "semver",
 ]
 
 [[package]]

@@ -8,28 +8,16 @@ use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
 };
 use rust_i18n::t;
-use serde::Serialize;
-
 use semifold_changelog::read_latest_changelog;
 use semifold_resolver::{
-    adapter::PackageLocation,
-    config::{Config, PackageConfig, ResolverConfig},
+    config::{CommandConfig, PackageConfig},
     context::Context,
     utils,
 };
 
-use crate::{
-    discovery::ResolverRegistry, package_path::normalize_package_path,
-    workspace::load_workspace_graph,
+use crate::publish_plan::{
+    PlannedRegistryCheck, PublishPackageContext, PublishSkipReason, plan_publish,
 };
-
-#[derive(Debug, Serialize)]
-struct PublishPackage {
-    name: String,
-    version: semver::Version,
-    path: std::path::PathBuf,
-    private: bool,
-}
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -110,38 +98,24 @@ pub(crate) async fn create_github_release(
     }
 }
 
-async fn pre_check(
-    resolver_config: &ResolverConfig,
-    resolved_package: &PublishPackage,
-) -> anyhow::Result<bool> {
-    let url = minijinja::render!(
-        &resolver_config.pre_check.url,
-        package => &resolved_package,
-    );
-    log::debug!("Pre-check URL: {}", url);
+async fn pre_check(preflight: &PlannedRegistryCheck) -> anyhow::Result<bool> {
+    log::debug!("Pre-check URL: {}", preflight.url);
     let client = reqwest::Client::new();
-    let headers = resolver_config.pre_check.extra_headers.iter().try_fold(
-        HeaderMap::new(),
-        |mut acc, (key, value)| {
-            let header_name = HeaderName::from_bytes(key.as_bytes())
-                .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
-            let header_value = HeaderValue::from_str(value)
-                .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
-            acc.insert(header_name, header_value);
-            Ok::<_, anyhow::Error>(acc)
-        },
-    )?;
-    let resp = client.get(url).headers(headers).send().await?;
+    let headers =
+        preflight
+            .extra_headers
+            .iter()
+            .try_fold(HeaderMap::new(), |mut acc, (key, value)| {
+                let header_name = HeaderName::from_bytes(key.as_bytes())
+                    .map_err(|e| anyhow::anyhow!("Invalid header name: {:?}", e))?;
+                let header_value = HeaderValue::from_str(value)
+                    .map_err(|e| anyhow::anyhow!("Invalid header value: {:?}", e))?;
+                acc.insert(header_name, header_value);
+                Ok::<_, anyhow::Error>(acc)
+            })?;
+    let resp = client.get(&preflight.url).headers(headers).send().await?;
     log::debug!("Pre-check response: {:?}", resp);
     Ok(resp.status() == StatusCode::OK)
-}
-
-fn package_publish_order(root: &std::path::Path, config: &Config) -> anyhow::Result<Vec<String>> {
-    Ok(load_workspace_graph(root, config)?
-        .topological_order()?
-        .into_iter()
-        .map(|package| package.to_string())
-        .collect())
 }
 
 fn command_display(command: &semifold_resolver::config::CommandConfig) -> String {
@@ -152,8 +126,10 @@ fn command_display(command: &semifold_resolver::config::CommandConfig) -> String
 }
 
 fn run_publish_commands(
-    package: &PublishPackage,
-    resolver_config: &ResolverConfig,
+    package: &PublishPackageContext,
+    prepublish: &[CommandConfig],
+    publish: &[CommandConfig],
+    working_directory: &std::path::Path,
     dry_run: bool,
 ) -> Result<(), semifold_resolver::error::ResolveError> {
     log::info!(
@@ -163,7 +139,7 @@ fn run_publish_commands(
             package = package.name.cyan()
         )
     );
-    for command in &resolver_config.prepublish {
+    for command in prepublish {
         let display = command_display(command);
         if dry_run && !command.dry_run.unwrap_or(false) {
             log::warn!(
@@ -184,7 +160,7 @@ fn run_publish_commands(
                 package = package.name.cyan()
             )
         );
-        utils::run_command(command, &package.path)?;
+        utils::run_command(command, working_directory)?;
     }
 
     log::info!(
@@ -194,7 +170,7 @@ fn run_publish_commands(
             package = package.name.cyan()
         )
     );
-    for command in &resolver_config.publish {
+    for command in publish {
         let display = command_display(command);
         if dry_run && !command.dry_run.unwrap_or(false) {
             log::warn!(
@@ -215,7 +191,7 @@ fn run_publish_commands(
                 package = package.name.cyan()
             )
         );
-        utils::run_command(command, &package.path)?;
+        utils::run_command(command, working_directory)?;
     }
     Ok(())
 }
@@ -242,64 +218,49 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
     };
 
     let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
-    let project_root = camino::Utf8PathBuf::from_path_buf(root.clone())
-        .map_err(|_| anyhow::anyhow!(t!("cli.publish.non_utf8_project_root")))?;
-    let registry = ResolverRegistry;
-    let publish_order = package_publish_order(&root, config)?;
-    log::debug!("Package publish order: {:?}", publish_order);
+    let mut plan = plan_publish(&root, config)
+        .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
+    log::debug!("Packages to publish: {:?}", plan.packages);
 
-    for package_name in &publish_order {
-        let package = config
+    for package in &mut plan.packages {
+        let package_name = package.context.package.id.as_str();
+        let package_config = config
             .packages
             .get(package_name)
-            .expect("publish order is derived from configured packages");
-        let resolver_config = config
-            .resolver
-            .get(&package.resolver)
-            .ok_or(anyhow::anyhow!(
-                "Config for resolver {} not found",
-                package.resolver
-            ))?;
-        log::debug!("Resolver config: {:?}", resolver_config);
+            .expect("publish plan is derived from configured packages");
+        let working_directory = root.join(package.context.package.path.as_std_path());
+        log::debug!("Planned asset configuration: {:?}", package.assets);
 
-        let inspection = registry
-            .create_adapter(package.resolver)
-            .inspect(&PackageLocation {
-                id: semifold_core::PackageId::new(package_name),
-                project_root: project_root.clone(),
-                path: normalize_package_path(&root, &package.path)?,
-            })?;
-        let resolved_package = PublishPackage {
-            name: inspection.manifest_name,
-            version: inspection.version,
-            path: inspection.path.into_std_path_buf(),
-            private: !inspection.publishable,
-        };
-        log::debug!("Resolved package: {}", resolved_package.name);
-
-        if pre_check(resolver_config, &resolved_package).await? {
+        if pre_check(&package.preflight).await? {
+            package.skip_reason = Some(PublishSkipReason::RegistryVersionExists);
             log::warn!(
                 "{}",
                 t!(
                     "cli.publish.pre_check",
                     package = package_name.cyan(),
-                    version = format!("v{}", resolved_package.version).green()
+                    version = format!("v{}", package.context.package.version).green()
                 )
             );
             continue;
         }
 
-        if !resolved_package.private {
-            run_publish_commands(&resolved_package, resolver_config, ctx.dry_run)?;
-        } else {
+        if package.skip_reason == Some(PublishSkipReason::Private) {
             log::warn!(
                 "{}",
                 t!(
                     "cli.publish.skip_private",
                     package = package_name.cyan(),
-                    version = format!("v{}", resolved_package.version).green()
+                    version = format!("v{}", package.context.package.version).green()
                 )
             );
+        } else {
+            run_publish_commands(
+                &package.context.package,
+                &package.prepublish,
+                &package.publish,
+                &working_directory,
+                ctx.dry_run,
+            )?;
         }
 
         let assets = ctx.get_assets(package_name)?;
@@ -312,12 +273,12 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
 
             if !ctx.dry_run {
                 let Some(release) =
-                    create_github_release(ctx, &octocrab, package_name, package).await?
+                    create_github_release(ctx, &octocrab, package_name, package_config).await?
                 else {
                     log::warn!(
                         "Failed to create GitHub release for {} {}",
                         package_name.cyan(),
-                        format!("v{}", resolved_package.version).green()
+                        format!("v{}", package.context.package.version).green()
                     );
                     continue;
                 };
@@ -349,7 +310,7 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                 log::warn!(
                     "Skipped creating GitHub release for {} {} due to dry run",
                     package_name.cyan(),
-                    format!("v{}", resolved_package.version).green()
+                    format!("v{}", package.context.package.version).green()
                 );
                 log::warn!("Skipped uploading assets: {:?}", assets);
             }
@@ -382,15 +343,9 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use semifold_resolver::{
-        config::{
-            BranchesConfig, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
-            ResolverConfig, StdioType,
-        },
-        resolver::ResolverType,
-    };
+    use semifold_resolver::config::{CommandConfig, PreCheckConfig, ResolverConfig, StdioType};
 
-    use super::{Config, PublishPackage, package_publish_order, run_publish_commands};
+    use super::{PublishPackageContext, run_publish_commands};
 
     fn temporary_root() -> PathBuf {
         let nonce = SystemTime::now()
@@ -403,70 +358,6 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
-    }
-
-    fn package(path: &str) -> PackageConfig {
-        PackageConfig {
-            path: path.into(),
-            resolver: ResolverType::Rust,
-            channel: ReleaseChannel::Stable,
-            channel_bump: None,
-            assets: vec![],
-            depends_on: vec![],
-        }
-    }
-
-    #[test]
-    fn publishes_each_dependency_before_its_transitive_dependents() {
-        let root = temporary_root();
-        fs::write(
-            root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/*\"]\n",
-        )
-        .unwrap();
-        for (name, dependencies) in [
-            ("core", ""),
-            (
-                "resolver",
-                "\n[dependencies]\ncore = { version = \"1\", path = \"../core\" }\n",
-            ),
-            (
-                "changelog",
-                "\n[dependencies]\nresolver = { version = \"1\", path = \"../resolver\" }\n",
-            ),
-            (
-                "semifold",
-                "\n[dependencies]\nchangelog = { version = \"1\", path = \"../changelog\" }\n",
-            ),
-        ] {
-            let package_root = root.join("crates").join(name);
-            fs::create_dir_all(&package_root).unwrap();
-            fs::write(
-                package_root.join("Cargo.toml"),
-                format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n{dependencies}"),
-            )
-            .unwrap();
-        }
-        let config = Config {
-            branches: BranchesConfig {
-                base: "main".to_string(),
-                release: "release".to_string(),
-            },
-            tags: BTreeMap::new(),
-            packages: BTreeMap::from([
-                ("changelog".to_string(), package("crates/changelog")),
-                ("core".to_string(), package("crates/core")),
-                ("resolver".to_string(), package("crates/resolver")),
-                ("semifold".to_string(), package("crates/semifold")),
-            ]),
-            resolver: BTreeMap::new(),
-        };
-
-        assert_eq!(
-            package_publish_order(&root, &config).unwrap(),
-            ["core", "resolver", "changelog", "semifold"]
-        );
-        fs::remove_dir_all(root).unwrap();
     }
 
     fn command(script: &str, dry_run: bool) -> CommandConfig {
@@ -492,28 +383,49 @@ mod tests {
         }
     }
 
+    fn publish_package() -> PublishPackageContext {
+        PublishPackageContext {
+            id: semifold_core::PackageId::new("example"),
+            name: "example".to_string(),
+            ecosystem: semifold_core::Ecosystem::Rust,
+            version: semver::Version::new(1, 0, 0),
+            tag: "example-v1.0.0".to_string(),
+            path: ".".into(),
+            private: false,
+        }
+    }
+
     #[test]
     fn unified_publish_commands_preserve_phase_order_and_dry_run_rules() {
         let root = temporary_root();
-        let package = PublishPackage {
-            name: "example".to_string(),
-            version: semver::Version::new(1, 0, 0),
-            path: root.clone(),
-            private: false,
-        };
+        let package = publish_package();
         let commands = resolver_config(
             command("printf 'prepublish\\n' >> commands.log", false),
             command("printf 'publish\\n' >> commands.log", true),
         );
 
-        run_publish_commands(&package, &commands, false).unwrap();
+        run_publish_commands(
+            &package,
+            &commands.prepublish,
+            &commands.publish,
+            &root,
+            false,
+        )
+        .unwrap();
         assert_eq!(
             fs::read_to_string(root.join("commands.log")).unwrap(),
             "prepublish\npublish\n"
         );
 
         fs::remove_file(root.join("commands.log")).unwrap();
-        run_publish_commands(&package, &commands, true).unwrap();
+        run_publish_commands(
+            &package,
+            &commands.prepublish,
+            &commands.publish,
+            &root,
+            true,
+        )
+        .unwrap();
         assert_eq!(
             fs::read_to_string(root.join("commands.log")).unwrap(),
             "publish\n"
@@ -524,18 +436,20 @@ mod tests {
     #[test]
     fn unified_publish_commands_stop_before_publish_after_prepublish_failure() {
         let root = temporary_root();
-        let package = PublishPackage {
-            name: "example".to_string(),
-            version: semver::Version::new(1, 0, 0),
-            path: root.clone(),
-            private: false,
-        };
+        let package = publish_package();
         let commands = resolver_config(
             command("exit 7", false),
             command("touch publish-marker", false),
         );
 
-        let error = run_publish_commands(&package, &commands, false).unwrap_err();
+        let error = run_publish_commands(
+            &package,
+            &commands.prepublish,
+            &commands.publish,
+            &root,
+            false,
+        )
+        .unwrap_err();
 
         assert!(matches!(
             error,

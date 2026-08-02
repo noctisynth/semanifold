@@ -7,7 +7,8 @@ use colored::Colorize;
 use rust_i18n::t;
 use semifold_changelog::{generate_changelog, utils::render_changelog};
 use semifold_core::{
-    ChangesetId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId, ReleaseReason,
+    ChangesetId, DependencyUpdateContext, EditSource, FileEdit, FileEditExpectation, FileHash,
+    PackageId, ReleaseContext, ReleasePackageContext, ReleaseReason,
 };
 use semifold_resolver::{
     changeset::Changeset,
@@ -20,6 +21,7 @@ use crate::{
     cli::config::consume_channel_bumps,
     file_edit_executor::{FileEditApplyReport, FileEditExecutor, validate_file_edits},
     release::plan_release,
+    workspace::load_workspace_graph,
 };
 
 #[derive(Parser, Debug)]
@@ -150,10 +152,26 @@ pub(crate) async fn version(
         .repo_root
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!(t!("cli.version.no_git_repo")))?;
+    let release_plan = plan_release(root, config, changesets)?;
+    apply_version_plan(ctx, changesets, release_plan).await
+}
+
+pub(crate) async fn apply_version_plan(
+    ctx: &Context,
+    changesets: &[Changeset],
+    release_plan: semifold_core::ReleasePlan,
+) -> anyhow::Result<ApplyReport> {
+    let config = ctx
+        .config
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.not_initialized")))?;
+    let root = ctx
+        .repo_root
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!(t!("cli.version.no_git_repo")))?;
     let Some(repo) = ctx.git_repo.as_ref() else {
         return Err(anyhow::anyhow!(t!("cli.version.no_git_repo")));
     };
-    let release_plan = plan_release(root, config, changesets)?;
     let consumed_channel_bumps = release_plan
         .packages()
         .iter()
@@ -219,6 +237,8 @@ async fn plan_changelog_edits(
 ) -> anyhow::Result<(semifold_core::ReleasePlan, HashMap<String, String>)> {
     let mut file_edits = release_plan.file_edits().to_vec();
     let mut changelogs = HashMap::new();
+    let release_context = ReleaseContext::from_plan(&release_plan);
+    let workspace = load_workspace_graph(root, config)?;
 
     for package_id in release_plan.order() {
         let package_name = package_id.as_str();
@@ -236,17 +256,23 @@ async fn plan_changelog_edits(
                 ReleaseReason::DependencyPropagation { dependency, .. } => release_plan
                     .versions()
                     .get(dependency)
-                    .map(|version| (dependency.as_str().to_string(), version.to_string())),
+                    .map(|version| DependencyUpdateContext {
+                        package: dependency.clone(),
+                        next_version: version.clone(),
+                    }),
                 ReleaseReason::Changeset { .. } => None,
             })
             .collect::<Vec<_>>();
+        let snapshot = workspace
+            .package(package_id)
+            .expect("release plan packages originate from the workspace graph");
+        let package_context = ReleasePackageContext::from_snapshot(&release_context, snapshot)?;
         let changelog = generate_changelog(
             ctx,
             repo,
             changesets,
-            package_name,
-            &package_release.next_version.to_string(),
-            &dependency_updates,
+            package_context,
+            dependency_updates,
             !ctx.dry_run,
         )
         .await?;

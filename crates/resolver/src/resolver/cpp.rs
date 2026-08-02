@@ -6,7 +6,7 @@ use std::{
 use regex::Regex;
 use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
-    PackageSnapshot, VersionMap,
+    PackageSnapshot, VersionMap, VersionSource,
 };
 
 use crate::{
@@ -49,6 +49,7 @@ impl CppResolver {
             id,
             manifest_name: package.name,
             version: package.version,
+            version_source: package.version_source,
             ecosystem: Ecosystem::Cpp,
             path,
             publishable: !package.private,
@@ -416,6 +417,7 @@ impl CppResolver {
         Ok(ParsedPackage {
             name,
             version: semver::Version::parse(&version)?,
+            version_source: VersionSource::PackageManifest,
             path: pkg_config.path.clone(),
             private: false,
         })
@@ -456,7 +458,7 @@ mod tests {
         error::ResolveError,
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::CppResolver;
 
@@ -615,6 +617,7 @@ mod tests {
             id: PackageId::new("demo-library"),
             manifest_name: "demo-library".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Cpp,
             path: "library".into(),
             publishable: true,

@@ -18,6 +18,41 @@ use semver::VersionReq;
 
 use crate::workspace::load_workspace_graph;
 
+pub(crate) struct ReleasePullRequestContext<'a> {
+    pub release: &'a ReleaseContext,
+    pub branch: String,
+    pub changelogs: BTreeMap<PackageId, String>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct RenderedReleasePullRequest {
+    pub title: String,
+    pub body: String,
+}
+
+pub(crate) fn render_release_pull_request(
+    context: &ReleasePullRequestContext<'_>,
+) -> RenderedReleasePullRequest {
+    let changelogs = context
+        .release
+        .plan
+        .packages
+        .keys()
+        .filter_map(|package| {
+            context
+                .changelogs
+                .get(package)
+                .map(|changelog| format!("## {}\n\n{changelog}", package.as_str()))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    RenderedReleasePullRequest {
+        title: "chore(release): bump versions".to_string(),
+        body: format!("# Releases\n\n{changelogs}"),
+    }
+}
+
 pub(crate) fn render_release_branch(
     template: &str,
     release: &ReleaseContext,
@@ -222,8 +257,8 @@ mod tests {
     };
 
     use semifold_core::{
-        ChangesetId, PackageId, PackageRelease, ReleaseContext, ReleasePlan, ReleaseReason,
-        VersionMap,
+        ChangesetId, EditSource, PackageId, PackageRelease, ReleaseContext, ReleasePlan,
+        ReleaseReason, VersionMap,
     };
     use semifold_resolver::{
         changeset::Changeset,
@@ -353,6 +388,33 @@ mod tests {
     }
 
     #[test]
+    fn release_pull_request_uses_the_workspace_context_and_stable_package_order() {
+        let release = context(vec![
+            planned_package("zeta", semver::Version::new(1, 1, 0)),
+            planned_package("alpha", semver::Version::new(1, 1, 0)),
+        ]);
+        let context = ReleasePullRequestContext {
+            release: &release,
+            branch: "release/stable".to_string(),
+            changelogs: BTreeMap::from([
+                (PackageId::new("zeta"), "zeta changes".to_string()),
+                (PackageId::new("alpha"), "alpha changes".to_string()),
+            ]),
+        };
+
+        assert!(std::ptr::eq(context.release, &release));
+        assert_eq!(context.branch, "release/stable");
+        assert_eq!(
+            render_release_pull_request(&context),
+            RenderedReleasePullRequest {
+                title: "chore(release): bump versions".to_string(),
+                body: "# Releases\n\n## alpha\n\nalpha changes\n\n## zeta\n\nzeta changes"
+                    .to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn bridges_resolver_inputs_into_the_core_release_plan() {
         let root = temporary_root();
         for (path, manifest) in [
@@ -411,6 +473,60 @@ mod tests {
                 .contains("version = \"2.0.0\"")
         );
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn plans_workspace_inherited_versions_as_one_release_closure_and_edit() {
+        let root = temporary_root();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.package]\nversion = \"1.2.3\"\n",
+        )
+        .unwrap();
+        for (name, publish) in [("public", ""), ("private", "publish = false\n")] {
+            let package_root = root.join("crates").join(name);
+            fs::create_dir_all(&package_root).unwrap();
+            fs::write(
+                package_root.join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\nversion.workspace = true\n{publish}"),
+            )
+            .unwrap();
+        }
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages: BTreeMap::from([
+                ("private".to_string(), package("crates/private")),
+                ("public".to_string(), package("crates/public")),
+            ]),
+            resolver: BTreeMap::new(),
+        };
+        let mut changeset = Changeset::new("private-feature".to_string(), &root);
+        changeset.add_package("private".to_string(), ResolverBumpLevel::Minor, None);
+
+        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+
+        assert_eq!(
+            plan.order(),
+            [PackageId::new("private"), PackageId::new("public")]
+        );
+        assert!(
+            plan.packages()
+                .iter()
+                .all(|package| { package.next_version == semver::Version::new(1, 3, 0) })
+        );
+        assert_eq!(plan.file_edits().len(), 1);
+        assert_eq!(plan.file_edits()[0].path, "Cargo.toml");
+        assert!(matches!(
+            &plan.file_edits()[0].source,
+            EditSource::WorkspaceManifest { shared_versions, .. }
+                if shared_versions[0].packages
+                    == [PackageId::new("private"), PackageId::new("public")]
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 

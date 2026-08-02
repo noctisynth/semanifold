@@ -18,8 +18,8 @@ pub use config_sync::{
     ConfiguredPackage, DiscoveredPackage, PackageMove, PackageRename,
 };
 pub use dependency::{Dependency, DependencyKind, DependencySource};
-pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash};
-pub use package::{Ecosystem, PackageId, PackageSnapshot};
+pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash, SharedVersionEdit};
+pub use package::{Ecosystem, PackageId, PackageSnapshot, VersionSource, VersionSourceId};
 pub use planner::{
     ChangesetInput, PackageReleasePolicy, ReleasePlanner, ReleasePlannerError, ReleasePolicies,
 };

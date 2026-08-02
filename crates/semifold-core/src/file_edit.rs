@@ -2,7 +2,13 @@ use camino::Utf8PathBuf;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::PackageId;
+use crate::{PackageId, VersionSourceId};
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct SharedVersionEdit {
+    pub source: VersionSourceId,
+    pub packages: Vec<PackageId>,
+}
 
 /// Hash of the source content used while planning an edit.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -33,6 +39,10 @@ pub enum EditSource {
         dependency: PackageId,
     },
     WorkspaceDependencies {
+        dependencies: Vec<PackageId>,
+    },
+    WorkspaceManifest {
+        shared_versions: Vec<SharedVersionEdit>,
         dependencies: Vec<PackageId>,
     },
     Changelog {

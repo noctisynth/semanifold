@@ -211,6 +211,7 @@ impl Error for ConfigEditError {
 mod tests {
     use std::{
         fs,
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -221,6 +222,8 @@ mod tests {
     };
 
     use super::TomlConfigEditor;
+
+    static NEXT_TEMPORARY_CONFIG: AtomicU64 = AtomicU64::new(0);
 
     const CONFIG: &str = r#"# top-level comment
 [branches]
@@ -263,9 +266,11 @@ custom = "preserved"
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("semifold-config-editor-{nonce}.toml")),
-        )
+        Utf8PathBuf::from_path_buf(std::env::temp_dir().join(format!(
+            "semifold-config-editor-{}-{nonce}-{}.toml",
+            std::process::id(),
+            NEXT_TEMPORARY_CONFIG.fetch_add(1, Ordering::Relaxed)
+        )))
         .unwrap()
     }
 

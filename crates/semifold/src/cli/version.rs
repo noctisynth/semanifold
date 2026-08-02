@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::BTreeMap, path::Path};
 
 use anyhow::Context as _;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -14,12 +14,14 @@ use semifold_resolver::{
     changeset::Changeset,
     config::{PackageConfig, ResolverConfig},
     context::Context,
-    resolver, utils,
+    resolver,
 };
 
 use crate::{
     cli::config::consume_channel_bumps,
     file_edit_executor::{FileEditApplyReport, FileEditExecutor, validate_file_edits},
+    publish_plan::{CommandPhase, CommandSpec, StdioPolicy},
+    publisher::{CommandRunner, SystemCommandRunner},
     release::plan_release,
     workspace::load_workspace_graph,
 };
@@ -34,10 +36,13 @@ pub(crate) struct Version {
 pub(crate) struct PostVersionFailure {
     package: String,
     command: String,
-    source: semifold_resolver::error::ResolveError,
+    source: anyhow::Error,
 }
 
-pub(crate) fn post_version(ctx: &Context) -> Result<(), PostVersionFailure> {
+pub(crate) fn post_version<R: CommandRunner>(
+    ctx: &Context,
+    runner: &R,
+) -> Result<(), PostVersionFailure> {
     let packages = ctx.get_packages();
     for (package_name, package_config) in packages {
         let resolver_config = ctx.get_resolver_config(package_config.resolver);
@@ -64,11 +69,33 @@ pub(crate) fn post_version(ctx: &Context) -> Result<(), PostVersionFailure> {
                         package = package_name.cyan()
                     )
                 );
-                if let Err(source) = utils::run_command(command, &package_config.path) {
+                let working_directory = ctx.repo_root.as_ref().map_or_else(
+                    || package_config.path.clone(),
+                    |root| root.join(&package_config.path),
+                );
+                let working_directory =
+                    Utf8PathBuf::from_path_buf(working_directory).map_err(|_| {
+                        PostVersionFailure {
+                            package: package_name.to_string(),
+                            command: format!("{} {}", command.command, args.join(" ")),
+                            source: anyhow::anyhow!(t!("cli.publish.non_utf8_project_root")),
+                        }
+                    })?;
+                let spec = CommandSpec {
+                    executable: command.command.clone(),
+                    args: args.to_vec(),
+                    environment: command.extra_env.clone(),
+                    working_directory,
+                    phase: CommandPhase::PostVersion,
+                    stdout: stdio_policy(command.stdout),
+                    stderr: stdio_policy(command.stderr),
+                    run_in_dry_run: command.dry_run.unwrap_or(false),
+                };
+                if let Err(source) = runner.run(&spec) {
                     return Err(PostVersionFailure {
                         package: package_name.to_string(),
                         command: format!("{} {}", command.command, args.join(" ")),
-                        source,
+                        source: source.into(),
                     });
                 }
             }
@@ -86,9 +113,17 @@ pub(crate) fn post_version(ctx: &Context) -> Result<(), PostVersionFailure> {
     Ok(())
 }
 
+const fn stdio_policy(stdio: semifold_resolver::config::StdioType) -> StdioPolicy {
+    match stdio {
+        semifold_resolver::config::StdioType::Inherit => StdioPolicy::Inherit,
+        semifold_resolver::config::StdioType::Pipe => StdioPolicy::Pipe,
+        semifold_resolver::config::StdioType::Null => StdioPolicy::Null,
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct ApplyReport {
-    pub changelogs: HashMap<String, String>,
+    pub changelogs: BTreeMap<PackageId, String>,
     pub file_edits: Option<FileEditApplyReport>,
     pub unconsumed_changesets: Vec<ChangesetId>,
 }
@@ -136,7 +171,7 @@ impl std::fmt::Display for VersionApplyError {
 
 impl std::error::Error for VersionApplyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.post_version.source)
+        Some(self.post_version.source.as_ref())
     }
 }
 
@@ -191,12 +226,23 @@ pub(crate) async fn apply_version_plan(
     let edit_root = Utf8Path::from_path(root).context(t!("cli.version.edit_non_utf8_root"))?;
     if ctx.dry_run {
         validate_file_edits(edit_root, release_plan.file_edits())?;
+        post_version(ctx, &SystemCommandRunner).map_err(|post_version| VersionApplyError {
+            report: ApplyReport {
+                changelogs: changelogs_map,
+                file_edits: None,
+                unconsumed_changesets: changesets
+                    .iter()
+                    .map(|changeset| ChangesetId::new(&changeset.name))
+                    .collect(),
+            },
+            post_version,
+        })?;
         return Ok(ApplyReport::default());
     }
 
     let file_edits = FileEditExecutor::new(edit_root).apply(release_plan.file_edits())?;
 
-    if let Err(post_version) = post_version(ctx) {
+    if let Err(post_version) = post_version(ctx, &SystemCommandRunner) {
         return Err(VersionApplyError {
             report: ApplyReport {
                 changelogs: changelogs_map,
@@ -234,9 +280,9 @@ async fn plan_changelog_edits(
     config: &semifold_resolver::config::Config,
     changesets: &[Changeset],
     release_plan: semifold_core::ReleasePlan,
-) -> anyhow::Result<(semifold_core::ReleasePlan, HashMap<String, String>)> {
+) -> anyhow::Result<(semifold_core::ReleasePlan, BTreeMap<PackageId, String>)> {
     let mut file_edits = release_plan.file_edits().to_vec();
-    let mut changelogs = HashMap::new();
+    let mut changelogs = BTreeMap::new();
     let release_context = ReleaseContext::from_plan(&release_plan);
     let workspace = load_workspace_graph(root, config)?;
 
@@ -260,7 +306,8 @@ async fn plan_changelog_edits(
                         package: dependency.clone(),
                         next_version: version.clone(),
                     }),
-                ReleaseReason::Changeset { .. } => None,
+                ReleaseReason::Changeset { .. }
+                | ReleaseReason::SharedVersionPropagation { .. } => None,
             })
             .collect::<Vec<_>>();
         let snapshot = workspace
@@ -292,7 +339,7 @@ async fn plan_changelog_edits(
             package_id,
             &changelog,
         )?);
-        changelogs.insert(package_name.to_string(), changelog);
+        changelogs.insert(package_id.clone(), changelog);
     }
 
     Ok((release_plan.with_file_edits(file_edits)?, changelogs))

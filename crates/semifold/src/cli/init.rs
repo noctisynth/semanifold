@@ -76,14 +76,14 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
             ResolverType::Rust => (
                 ResolverType::Rust,
                 ResolverConfig {
-                    pre_check: PreCheckConfig {
+                    pre_check: Some(PreCheckConfig {
                         url:
                             "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
                                 .to_string(),
                         extra_headers: BTreeMap::from_iter([
                             ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
                         ]),
-                    },
+                    }),
                     prepublish: vec![],
                     publish: vec![CommandConfig {
                         command: "cargo".to_string(),
@@ -106,12 +106,12 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
             ResolverType::Nodejs => (
                 ResolverType::Nodejs,
                 ResolverConfig {
-                    pre_check: PreCheckConfig {
+                    pre_check: Some(PreCheckConfig {
                         url:
                             "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
                                 .to_string(),
                         extra_headers: BTreeMap::new(),
-                    },
+                    }),
                     prepublish: vec![],
                     publish: vec![CommandConfig {
                         command: "npm".to_string(),
@@ -127,14 +127,14 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
             ResolverType::Python => (
                 ResolverType::Python,
                 ResolverConfig {
-                    pre_check: PreCheckConfig {
+                    pre_check: Some(PreCheckConfig {
                         url:
                             "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
                                 .to_string(),
                         extra_headers: BTreeMap::from_iter([
                             ("User-Agent".to_string(), format!("Semifold {}", env!("CARGO_PKG_VERSION"))),
                         ]),
-                    },
+                    }),
                     prepublish: vec![],
                     publish: vec![],
                     post_version: vec![],
@@ -143,10 +143,10 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
             ResolverType::Cpp => (
                 ResolverType::Cpp,
                 ResolverConfig {
-                    pre_check: PreCheckConfig {
+                    pre_check: Some(PreCheckConfig {
                         url: String::new(),
                         extra_headers: BTreeMap::new(),
-                    },
+                    }),
                     prepublish: vec![],
                     publish: vec![],
                     post_version: vec![],

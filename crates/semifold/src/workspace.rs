@@ -94,6 +94,7 @@ fn workspace_graph_from_inspections(
                 id: resolved.package.id,
                 manifest_name: resolved.package.manifest_name,
                 version: resolved.package.version,
+                version_source: resolved.package.version_source,
                 ecosystem: resolved.package.ecosystem,
                 path,
                 publishable: resolved.package.publishable,

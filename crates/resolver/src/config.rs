@@ -94,6 +94,7 @@ impl<'de> Deserialize<'de> for ReleaseChannel {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct PackageConfig {
     /// Path to the package root directory.
     pub path: PathBuf,
@@ -103,33 +104,30 @@ pub struct PackageConfig {
     #[serde(default, skip_serializing_if = "ReleaseChannel::is_stable")]
     pub channel: ReleaseChannel,
     /// One-shot stable-base override for the next transition into `channel`.
-    #[serde(
-        default,
-        rename = "channel-bump",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_bump: Option<ChannelBump>,
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
     /// Supplemental internal dependency edges keyed by stable package ID.
-    #[serde(default, rename = "depends-on", skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<PackageId>,
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct PackageConfigInput {
     path: PathBuf,
     resolver: resolver::ResolverType,
     #[serde(default)]
     channel: Option<ReleaseChannel>,
-    #[serde(default, rename = "channel-bump")]
+    #[serde(default)]
     channel_bump: Option<ChannelBump>,
     #[serde(default, rename = "version-mode")]
     legacy_version_mode: Option<VersionMode>,
     #[serde(default)]
     assets: Vec<Asset>,
-    #[serde(default, rename = "depends-on")]
+    #[serde(default)]
     depends_on: Vec<PackageId>,
 }
 
@@ -155,7 +153,7 @@ impl<'de> Deserialize<'de> for PackageConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum StdioType {
     #[default]
     Inherit,
@@ -181,17 +179,14 @@ impl From<StdioType> for std::process::Stdio {
 
 /// Configuration for a command to run.
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct CommandConfig {
     /// Executable command to run.
     pub command: String,
     /// Arguments to pass to the command.
     pub args: Option<Vec<String>>,
     /// Environment variables to set before running the command.
-    #[serde(
-        default,
-        rename = "extra-env",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_env: BTreeMap<String, String>,
     /// Type of standard output to use.
     #[serde(default, skip_serializing_if = "StdioType::is_inherit")]
@@ -205,21 +200,19 @@ pub struct CommandConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct PreCheckConfig {
     pub url: String,
-    #[serde(
-        default,
-        rename = "extra-headers",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra_headers: BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
 pub struct ResolverConfig {
     /// Pre-check configuration.
-    #[serde(rename = "pre-check")]
-    pub pre_check: PreCheckConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_check: Option<PreCheckConfig>,
     /// Commands to run before publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub prepublish: Vec<CommandConfig>,
@@ -227,11 +220,7 @@ pub struct ResolverConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub publish: Vec<CommandConfig>,
     /// Commands to run after versioning.
-    #[serde(
-        default,
-        rename = "post-version",
-        skip_serializing_if = "Vec::is_empty"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post_version: Vec<CommandConfig>,
 }
 
@@ -315,9 +304,11 @@ pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveErr
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use semifold_core::PackageId;
 
-    use super::{ChannelBump, PackageConfig, ReleaseChannel};
+    use super::{ChannelBump, CommandConfig, PackageConfig, ReleaseChannel};
 
     #[test]
     fn missing_and_explicit_stable_channels_are_equivalent() {
@@ -399,5 +390,39 @@ depends-on = ["rust-core", "native-runtime"]
         );
         let rendered = toml_edit::ser::to_string(&config).unwrap();
         assert!(rendered.contains("depends-on = [\"rust-core\", \"native-runtime\"]"));
+    }
+
+    #[test]
+    fn command_fields_use_kebab_case_without_snake_case_aliases() {
+        let command: CommandConfig = toml_edit::de::from_str(
+            r#"
+command = "cargo"
+dry-run = true
+extra-env = { RELEASE = "1" }
+"#,
+        )
+        .unwrap();
+        assert_eq!(command.dry_run, Some(true));
+        assert_eq!(
+            command.extra_env,
+            BTreeMap::from([("RELEASE".to_string(), "1".to_string())])
+        );
+
+        let snake_case: CommandConfig = toml_edit::de::from_str(
+            r#"
+command = "cargo"
+dry_run = true
+extra_env = { RELEASE = "1" }
+"#,
+        )
+        .unwrap();
+        assert_eq!(snake_case.dry_run, None);
+        assert!(snake_case.extra_env.is_empty());
+
+        let rendered = toml_edit::ser::to_string(&command).unwrap();
+        assert!(rendered.contains("dry-run = true"));
+        assert!(rendered.contains("extra-env"));
+        assert!(!rendered.contains("dry_run"));
+        assert!(!rendered.contains("extra_env"));
     }
 }

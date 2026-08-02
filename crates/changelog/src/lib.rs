@@ -320,7 +320,7 @@ mod tests {
     use semifold_core::{
         BumpLevel, ChangesetId, CommitContext, DependencyUpdateContext, Ecosystem, PackageId,
         PackageRelease, PackageSnapshot, PullRequestContext, ReleaseContext, ReleasePackageContext,
-        ReleasePlan, ReleaseReason, VersionMap,
+        ReleasePlan, ReleaseReason, VersionMap, VersionSource,
     };
     use semver::Version;
 
@@ -361,6 +361,7 @@ mod tests {
                 id: PackageId::new("package"),
                 manifest_name: "package".to_string(),
                 version: Version::new(0, 9, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: Ecosystem::Rust,
                 path: "crates/package".into(),
                 publishable: true,

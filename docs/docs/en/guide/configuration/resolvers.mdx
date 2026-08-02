@@ -36,7 +36,7 @@ Resolvers are language-specific components that handle package discovery, versio
 [resolver.rust]
 pre-check.url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 publish = [{ command = "cargo", args = ["publish"] }]
-post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }]
+post-version = [{ command = "cargo", args = ["generate-lockfile", "--offline"], dry-run = true }]
 ```
 
 ### Package Discovery

@@ -9,7 +9,8 @@ use std::{
 
 use insta::assert_snapshot;
 use semifold_core::{
-    Dependency, DependencySource, Ecosystem, PackageId, PackageSnapshot, VersionMap, WorkspaceGraph,
+    Dependency, DependencySource, Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource,
+    WorkspaceGraph,
 };
 use semifold_resolver::{
     adapter::{EcosystemAdapter, PackageInspection, PackageLocation},
@@ -48,6 +49,7 @@ fn snapshot(path: &str, name: &str, ecosystem: Ecosystem) -> PackageSnapshot {
         id: PackageId::new(name),
         manifest_name: name.to_string(),
         version: semver::Version::parse("1.0.0").unwrap(),
+        version_source: VersionSource::PackageManifest,
         ecosystem,
         path: path.into(),
         publishable: true,
@@ -113,6 +115,7 @@ fn adapter_order(
             id: package.id,
             manifest_name: package.manifest_name,
             version: package.version,
+            version_source: package.version_source,
             ecosystem: package.ecosystem,
             path: package.path,
             publishable: package.publishable,

@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::Path};
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext};
-use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig};
+use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType};
 use semver::Version;
 use serde::Serialize;
 
@@ -35,11 +35,16 @@ pub(crate) struct PublishPlan {
 #[derive(Debug)]
 pub(crate) struct PackagePublish {
     pub context: PublishContext,
-    pub preflight: PlannedRegistryCheck,
-    pub prepublish: Vec<CommandConfig>,
-    pub publish: Vec<CommandConfig>,
-    pub assets: Vec<Asset>,
+    pub preflight: Option<PlannedRegistryCheck>,
+    pub commands: Vec<CommandSpec>,
+    pub assets: Vec<ReleaseAsset>,
     pub skip_reason: Option<PublishSkipReason>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ReleaseAsset {
+    pub path: std::path::PathBuf,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,6 +57,32 @@ pub(crate) struct PlannedRegistryCheck {
 pub(crate) enum PublishSkipReason {
     Private,
     RegistryVersionExists,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CommandPhase {
+    Prepublish,
+    Publish,
+    PostVersion,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StdioPolicy {
+    Inherit,
+    Pipe,
+    Null,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CommandSpec {
+    pub executable: String,
+    pub args: Vec<String>,
+    pub environment: BTreeMap<String, String>,
+    pub working_directory: Utf8PathBuf,
+    pub phase: CommandPhase,
+    pub stdout: StdioPolicy,
+    pub stderr: StdioPolicy,
+    pub run_in_dry_run: bool,
 }
 
 pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<PublishPlan> {
@@ -97,20 +128,32 @@ pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<Publi
                 repository: None,
                 ci: None,
             };
+            let working_directory = Utf8PathBuf::from_path_buf(root.join(&context.package.path))
+                .map_err(|_| anyhow::anyhow!("publish working directory is not valid UTF-8"))?;
+            let commands = resolver_config
+                .prepublish
+                .iter()
+                .map(|command| {
+                    render_command(
+                        command,
+                        &context,
+                        &working_directory,
+                        CommandPhase::Prepublish,
+                    )
+                })
+                .chain(resolver_config.publish.iter().map(|command| {
+                    render_command(command, &context, &working_directory, CommandPhase::Publish)
+                }))
+                .collect::<anyhow::Result<Vec<_>>>()?;
 
             Ok(PackagePublish {
-                preflight: render_preflight(&resolver_config.pre_check, &context)?,
-                prepublish: resolver_config
-                    .prepublish
-                    .iter()
-                    .map(|command| render_command(command, &context))
-                    .collect::<anyhow::Result<_>>()?,
-                publish: resolver_config
-                    .publish
-                    .iter()
-                    .map(|command| render_command(command, &context))
-                    .collect::<anyhow::Result<_>>()?,
-                assets: package_config.assets.clone(),
+                preflight: resolver_config
+                    .pre_check
+                    .as_ref()
+                    .map(|preflight| render_preflight(preflight, &context))
+                    .transpose()?,
+                commands,
+                assets: resolve_assets(root, &package_config.assets)?,
                 skip_reason: context
                     .package
                     .private
@@ -121,6 +164,42 @@ pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<Publi
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     Ok(PublishPlan { packages })
+}
+
+fn resolve_assets(root: &Path, configured: &[Asset]) -> anyhow::Result<Vec<ReleaseAsset>> {
+    let mut assets = Vec::new();
+    for asset in configured {
+        match asset {
+            Asset::Asset(asset) => {
+                let path = root.join(&asset.path);
+                if path.is_file() {
+                    assets.push(ReleaseAsset {
+                        path,
+                        name: asset.name.clone(),
+                    });
+                }
+            }
+            Asset::String(pattern) => {
+                let pattern = root.join(pattern).to_string_lossy().to_string();
+                for path in glob::glob(&pattern)?
+                    .flatten()
+                    .filter(|path| path.is_file())
+                {
+                    let name = path.file_name().map_or_else(
+                        || path.to_string_lossy().to_string(),
+                        |name| name.to_string_lossy().to_string(),
+                    );
+                    assets.push(ReleaseAsset { path, name });
+                }
+            }
+        }
+    }
+    assets.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    Ok(assets)
 }
 
 fn render_preflight(
@@ -142,7 +221,9 @@ fn render_preflight(
 fn render_command(
     command: &CommandConfig,
     context: &PublishContext,
-) -> anyhow::Result<CommandConfig> {
+    working_directory: &Utf8PathBuf,
+    phase: CommandPhase,
+) -> anyhow::Result<CommandSpec> {
     let executable = render_template(&command.command, context)?;
     anyhow::ensure!(!executable.is_empty(), "rendered command must not be empty");
     let args = command
@@ -163,14 +244,24 @@ fn render_command(
         "rendered command contains a null byte"
     );
 
-    Ok(CommandConfig {
-        command: executable,
-        args,
-        extra_env: command.extra_env.clone(),
-        stdout: command.stdout,
-        stderr: command.stderr,
-        dry_run: command.dry_run,
+    Ok(CommandSpec {
+        executable,
+        args: args.unwrap_or_default(),
+        environment: command.extra_env.clone(),
+        working_directory: working_directory.clone(),
+        phase,
+        stdout: stdio_policy(command.stdout),
+        stderr: stdio_policy(command.stderr),
+        run_in_dry_run: command.dry_run.unwrap_or(false),
     })
+}
+
+const fn stdio_policy(stdio: StdioType) -> StdioPolicy {
+    match stdio {
+        StdioType::Inherit => StdioPolicy::Inherit,
+        StdioType::Pipe => StdioPolicy::Pipe,
+        StdioType::Null => StdioPolicy::Null,
+    }
 }
 
 fn render_template(template: &str, publish: &PublishContext) -> anyhow::Result<String> {
@@ -224,10 +315,10 @@ mod tests {
 
     fn resolver(pre_check: &str) -> ResolverConfig {
         ResolverConfig {
-            pre_check: PreCheckConfig {
+            pre_check: Some(PreCheckConfig {
                 url: pre_check.to_string(),
                 extra_headers: BTreeMap::new(),
-            },
+            }),
             prepublish: Vec::new(),
             publish: vec![CommandConfig {
                 command: "cargo".to_string(),
@@ -296,13 +387,10 @@ mod tests {
             ["core", "app"]
         );
         assert_eq!(
-            plan.packages[0].preflight.url,
+            plan.packages[0].preflight.as_ref().unwrap().url,
             "https://registry.test/core/1.2.3"
         );
-        assert_eq!(
-            plan.packages[0].publish[0].args.as_ref().unwrap()[1],
-            "--tag=core-v1.2.3"
-        );
+        assert_eq!(plan.packages[0].commands[0].args[1], "--tag=core-v1.2.3");
         fs::remove_dir_all(root).unwrap();
     }
 

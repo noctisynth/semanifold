@@ -5,7 +5,7 @@ use std::{
 
 use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
-    PackageSnapshot, VersionMap,
+    PackageSnapshot, SharedVersionEdit, VersionMap, VersionSource, VersionSourceId,
 };
 use serde::Deserialize;
 
@@ -22,8 +22,20 @@ use crate::{
 #[derive(Deserialize)]
 struct CargoPackage {
     pub name: String,
-    pub version: String,
+    pub version: CargoVersion,
     pub publish: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum CargoVersion {
+    Literal(String),
+    Workspace { workspace: bool },
+}
+
+#[derive(Deserialize)]
+struct CargoWorkspacePackage {
+    pub version: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -31,6 +43,7 @@ struct CargoWorkspace {
     #[serde(default)]
     pub members: Vec<String>,
     pub dependencies: Option<BTreeMap<String, serde_json::Value>>,
+    pub package: Option<CargoWorkspacePackage>,
 }
 
 #[derive(Deserialize)]
@@ -51,6 +64,7 @@ struct PlannedManifest {
     document: toml_edit::DocumentMut,
     package: Option<PackageId>,
     dependencies: BTreeSet<PackageId>,
+    shared_versions: BTreeMap<VersionSourceId, BTreeSet<PackageId>>,
 }
 
 impl RustResolver {
@@ -79,6 +93,7 @@ impl RustResolver {
             id,
             manifest_name: package.name,
             version: package.version,
+            version_source: package.version_source,
             ecosystem: Ecosystem::Rust,
             path,
             publishable: !package.private,
@@ -115,7 +130,6 @@ impl RustResolver {
 
         for package in released_packages {
             let relative_path = Self::manifest_path(package);
-            let manifest = Self::load_manifest(root, &relative_path, &mut manifests)?;
             let next_version =
                 versions
                     .get(&package.id)
@@ -123,31 +137,64 @@ impl RustResolver {
                         path: root.join(&relative_path),
                         reason: format!("missing planned version for {}", package.id),
                     })?;
-            let package_table =
-                manifest.document["package"]
-                    .as_table_mut()
-                    .ok_or(ResolveError::ParseError {
-                        path: root.join(&relative_path),
-                        reason: "package table not found".to_string(),
-                    })?;
-            package_table["version"] =
-                toml_edit::value(RustResolver.encode_version(next_version).map_err(|error| {
-                    ResolveError::InvalidVersion {
-                        version: next_version.to_string(),
-                        reason: error.to_string(),
-                    }
-                })?);
-            manifest.package = Some(package.id.clone());
-
-            for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-                if let Some(dependencies) = manifest.document[dependency_table].as_table_mut() {
-                    manifest
-                        .dependencies
-                        .extend(Self::update_dependency_versions(
-                            dependencies,
-                            &changed_versions,
-                        ));
+            let encoded_version = RustResolver.encode_version(next_version).map_err(|error| {
+                ResolveError::InvalidVersion {
+                    version: next_version.to_string(),
+                    reason: error.to_string(),
                 }
+            })?;
+            {
+                let manifest = Self::load_manifest(root, &relative_path, &mut manifests)?;
+                manifest.package = Some(package.id.clone());
+                if matches!(package.version_source, VersionSource::PackageManifest) {
+                    let package_table = manifest.document["package"].as_table_mut().ok_or(
+                        ResolveError::ParseError {
+                            path: root.join(&relative_path),
+                            reason: "package table not found".to_string(),
+                        },
+                    )?;
+                    package_table["version"] = toml_edit::value(&encoded_version);
+                }
+
+                for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                    if let Some(dependencies) = manifest.document[dependency_table].as_table_mut() {
+                        manifest
+                            .dependencies
+                            .extend(Self::update_dependency_versions(
+                                dependencies,
+                                &changed_versions,
+                            ));
+                    }
+                }
+            }
+            if let VersionSource::Shared { source } = &package.version_source {
+                if source.field != "workspace.package.version" {
+                    return Err(ResolveError::InvalidConfig {
+                        path: root.join(&source.manifest),
+                        reason: format!("unsupported Rust shared version field: {}", source.field),
+                    });
+                }
+                let owner = Self::load_manifest(root, source.manifest.as_str(), &mut manifests)?;
+                let workspace =
+                    owner.document["workspace"]
+                        .as_table_mut()
+                        .ok_or(ResolveError::ParseError {
+                            path: root.join(&source.manifest),
+                            reason: "workspace table not found".to_string(),
+                        })?;
+                let workspace_package =
+                    workspace["package"]
+                        .as_table_mut()
+                        .ok_or(ResolveError::ParseError {
+                            path: root.join(&source.manifest),
+                            reason: "workspace.package table not found".to_string(),
+                        })?;
+                workspace_package["version"] = toml_edit::value(encoded_version);
+                owner
+                    .shared_versions
+                    .entry(source.clone())
+                    .or_default()
+                    .insert(package.id.clone());
             }
         }
 
@@ -178,12 +225,26 @@ impl RustResolver {
                 (new_content != manifest.original).then_some((path, manifest, new_content))
             })
             .map(|(path, manifest, new_content)| {
-                let source = manifest.package.map_or_else(
-                    || EditSource::WorkspaceDependencies {
-                        dependencies: manifest.dependencies.into_iter().collect(),
-                    },
-                    |package| EditSource::PackageVersion { package },
-                );
+                let dependencies = manifest.dependencies.into_iter().collect::<Vec<_>>();
+                let shared_versions = manifest
+                    .shared_versions
+                    .into_iter()
+                    .map(|(source, packages)| SharedVersionEdit {
+                        source,
+                        packages: packages.into_iter().collect(),
+                    })
+                    .collect::<Vec<_>>();
+                let source = if shared_versions.is_empty() {
+                    manifest.package.map_or_else(
+                        || EditSource::WorkspaceDependencies { dependencies },
+                        |package| EditSource::PackageVersion { package },
+                    )
+                } else {
+                    EditSource::WorkspaceManifest {
+                        shared_versions,
+                        dependencies,
+                    }
+                };
                 Ok(FileEdit {
                     path: path.into(),
                     expected: FileEditExpectation::Existing {
@@ -225,6 +286,7 @@ impl RustResolver {
                     document,
                     package: None,
                     dependencies: BTreeSet::new(),
+                    shared_versions: BTreeMap::new(),
                 },
             );
         }
@@ -465,9 +527,47 @@ impl RustResolver {
             reason: "Not found package in Cargo.toml".into(),
         })?;
         let publish = cargo_pkg_config.publish.unwrap_or(true);
+        let (version, version_source) = match cargo_pkg_config.version {
+            CargoVersion::Literal(version) => (version, VersionSource::PackageManifest),
+            CargoVersion::Workspace { workspace: true } => {
+                let workspace_path = root.join("Cargo.toml");
+                let workspace_manifest: CargoToml = toml_edit::de::from_str(
+                    &std::fs::read_to_string(&workspace_path)?,
+                )
+                .map_err(|error| ResolveError::ParseError {
+                    path: workspace_path.clone(),
+                    reason: error.to_string(),
+                })?;
+                let version = workspace_manifest
+                    .workspace
+                    .and_then(|workspace| workspace.package)
+                    .and_then(|package| package.version)
+                    .ok_or_else(|| ResolveError::InvalidConfig {
+                        path: workspace_path,
+                        reason: "workspace package version is required by an inherited package"
+                            .to_string(),
+                    })?;
+                (
+                    version,
+                    VersionSource::Shared {
+                        source: VersionSourceId {
+                            manifest: "Cargo.toml".into(),
+                            field: "workspace.package.version".to_string(),
+                        },
+                    },
+                )
+            }
+            CargoVersion::Workspace { workspace: false } => {
+                return Err(ResolveError::InvalidConfig {
+                    path: toml_path,
+                    reason: "package.version.workspace must be true".to_string(),
+                });
+            }
+        };
         let package = ParsedPackage {
             name: cargo_pkg_config.name,
-            version: semver::Version::parse(&cargo_pkg_config.version)?,
+            version: semver::Version::parse(&version)?,
+            version_source,
             path: pkg_config.path.clone(),
             private: !publish,
         };
@@ -567,11 +667,15 @@ mod tests {
     };
 
     use crate::{
-        adapter::{EcosystemAdapter, EcosystemPlanInput, PackageLocation},
+        adapter::{AdapterError, EcosystemAdapter, EcosystemPlanInput, PackageLocation},
         config::{PackageConfig, ReleaseChannel},
+        error::ResolveError,
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, EditSource, PackageId, PackageSnapshot, VersionMap};
+    use semifold_core::{
+        Ecosystem, EditSource, PackageId, PackageSnapshot, VersionMap, VersionSource,
+        VersionSourceId,
+    };
 
     use super::RustResolver;
 
@@ -624,6 +728,19 @@ mod tests {
         .unwrap();
     }
 
+    fn write_inherited_package(root: &Path, path: &str, name: &str, publish: Option<bool>) {
+        let package_root = root.join(path);
+        fs::create_dir_all(&package_root).unwrap();
+        let publish = publish
+            .map(|value| format!("publish = {value}\n"))
+            .unwrap_or_default();
+        fs::write(
+            package_root.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion.workspace = true\n{publish}"),
+        )
+        .unwrap();
+    }
+
     #[test]
     fn resolves_a_single_package() {
         let root = temp_dir("single-package");
@@ -667,6 +784,76 @@ mod tests {
         assert_eq!(packages[1].name, "internal");
         assert_eq!(packages[1].path, PathBuf::from("crates/internal"));
         assert!(packages[1].private);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn workspace_package_table_without_version_allows_literal_member_versions() {
+        let root = temp_dir("workspace-package-without-version");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.package]\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        write_package(&root, "crates/core", "core", "1.0.0", None, None);
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        let packages = RustResolver.discover(&project_root).unwrap();
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].version, semver::Version::new(1, 0, 0));
+        assert_eq!(packages[0].version_source, VersionSource::PackageManifest);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discovers_workspace_inherited_versions_without_panicking() {
+        let root = temp_dir("workspace-inherited-version");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.package]\nversion = \"1.2.3\"\n",
+        )
+        .unwrap();
+        write_inherited_package(&root, "crates/core", "core", None);
+        write_inherited_package(&root, "crates/internal", "internal", Some(false));
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        let packages = RustResolver.discover(&project_root).unwrap();
+
+        assert_eq!(packages.len(), 2);
+        assert!(packages.iter().all(|package| {
+            package.version == semver::Version::new(1, 2, 3)
+                && matches!(
+                    &package.version_source,
+                    VersionSource::Shared { source }
+                        if source.manifest == "Cargo.toml"
+                            && source.field == "workspace.package.version"
+                )
+        }));
+        assert!(
+            packages
+                .iter()
+                .find(|package| package.manifest_name == "internal")
+                .is_some_and(|package| !package.publishable)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn inherited_version_requires_a_workspace_package_version() {
+        let root = temp_dir("workspace-inherited-version-missing-source");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        write_inherited_package(&root, "crates/core", "core", None);
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap();
+
+        assert!(matches!(
+            RustResolver.discover(&project_root),
+            Err(AdapterError::Manifest(ResolveError::InvalidConfig { .. }))
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -728,6 +915,7 @@ mod tests {
             id: PackageId::new("app"),
             manifest_name: "app".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/app".into(),
             publishable: true,
@@ -739,6 +927,7 @@ mod tests {
                 id: PackageId::new("core-id"),
                 manifest_name: "core".to_string(),
                 version: semver::Version::new(1, 0, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: Ecosystem::Rust,
                 path: "crates/core".into(),
                 publishable: true,
@@ -748,6 +937,7 @@ mod tests {
                 id: PackageId::new("renamed-id"),
                 manifest_name: "renamed".to_string(),
                 version: semver::Version::new(2, 0, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: Ecosystem::Rust,
                 path: "crates/renamed".into(),
                 publishable: true,
@@ -757,6 +947,7 @@ mod tests {
                 id: PackageId::new("dev-id"),
                 manifest_name: "dev".to_string(),
                 version: semver::Version::new(3, 0, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: Ecosystem::Rust,
                 path: "crates/dev".into(),
                 publishable: true,
@@ -766,6 +957,7 @@ mod tests {
                 id: PackageId::new("build-id"),
                 manifest_name: "build".to_string(),
                 version: semver::Version::new(4, 0, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: Ecosystem::Rust,
                 path: "crates/build".into(),
                 publishable: true,
@@ -835,6 +1027,7 @@ mod tests {
             id: PackageId::new("app-id"),
             manifest_name: "app".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/app".into(),
             publishable: true,
@@ -844,6 +1037,7 @@ mod tests {
             id: PackageId::new("core-id"),
             manifest_name: "core".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/core".into(),
             publishable: true,
@@ -853,6 +1047,7 @@ mod tests {
             id: PackageId::new("helper-id"),
             manifest_name: "helper".to_string(),
             version: semver::Version::new(2, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/helper".into(),
             publishable: true,
@@ -910,6 +1105,63 @@ mod tests {
             fs::read_to_string(root.join("Cargo.toml"))
                 .unwrap()
                 .contains("version = \"1.0.0\"")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn edits_an_inherited_workspace_version_once_without_rewriting_members() {
+        let root = temp_dir("inherited-workspace-version-edit");
+        let workspace_manifest =
+            "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.package]\nversion = \"1.2.3\"\n";
+        fs::write(root.join("Cargo.toml"), workspace_manifest).unwrap();
+        write_inherited_package(&root, "crates/a", "a", None);
+        write_inherited_package(&root, "crates/b", "b", Some(false));
+        let source = VersionSource::Shared {
+            source: VersionSourceId {
+                manifest: "Cargo.toml".into(),
+                field: "workspace.package.version".to_string(),
+            },
+        };
+        let package = |id: &str, publishable: bool| PackageSnapshot {
+            id: PackageId::new(id),
+            manifest_name: id.to_string(),
+            version: semver::Version::new(1, 2, 3),
+            version_source: source.clone(),
+            ecosystem: Ecosystem::Rust,
+            path: format!("crates/{id}").into(),
+            publishable,
+            dependencies: Vec::new(),
+        };
+        let a = package("a", true);
+        let b = package("b", false);
+        let versions = VersionMap::from([
+            (a.id.clone(), semver::Version::new(1, 3, 0)),
+            (b.id.clone(), semver::Version::new(1, 3, 0)),
+        ]);
+
+        let edits = RustResolver::plan_file_edits(&root, &[&b, &a], &[&a, &b], &versions).unwrap();
+
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].path, "Cargo.toml");
+        assert!(edits[0].new_content.contains("version = \"1.3.0\""));
+        assert!(matches!(
+            &edits[0].source,
+            EditSource::WorkspaceManifest {
+                shared_versions,
+                dependencies,
+            } if dependencies.is_empty()
+                && shared_versions.len() == 1
+                && shared_versions[0].packages == [PackageId::new("a"), PackageId::new("b")]
+        ));
+        assert!(
+            fs::read_to_string(root.join("crates/a/Cargo.toml"))
+                .unwrap()
+                .contains("version.workspace = true")
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("Cargo.toml")).unwrap(),
+            workspace_manifest
         );
         fs::remove_dir_all(root).unwrap();
     }

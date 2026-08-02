@@ -39,12 +39,27 @@ pub enum Ecosystem {
     Cpp,
 }
 
+/// Physical manifest location that owns a package's version value.
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum VersionSource {
+    PackageManifest,
+    Shared { source: VersionSourceId },
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct VersionSourceId {
+    pub manifest: Utf8PathBuf,
+    pub field: String,
+}
+
 /// Immutable package data collected from an ecosystem manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackageSnapshot {
     pub id: PackageId,
     pub manifest_name: String,
     pub version: Version,
+    pub version_source: VersionSource,
     pub ecosystem: Ecosystem,
     pub path: Utf8PathBuf,
     pub publishable: bool,

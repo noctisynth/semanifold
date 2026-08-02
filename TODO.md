@@ -5,11 +5,11 @@
 ## 总体目标
 
 - [ ] 以跨生态 `WorkspaceGraph` 和不可变 `ReleasePlan` 取代以 `Resolver` 为中心的设计
-- [ ] 以 workspace 级 `ReleaseContext` 统一 version/release PR 事实，并以 package 级 `PublishContext` 统一发布事实
+- [x] 以 workspace 级 `ReleaseContext` 统一 version/release PR 事实，并以 package 级 `PublishContext` 统一发布事实
 - [ ] 让 `status`、`version`、`publish` 和 CI 使用同一套应用服务
 - [ ] 将领域计算与文件系统、Git、HTTP、GitHub 和子进程副作用分离
 - [x] 使用 `smif config sync` 增量同步 `.changes/config.toml`，不再依赖重复执行 `init`
-- [ ] 保持现有 CLI 和配置格式的向后兼容
+- [x] 保持现有 CLI 主要用法稳定；配置字段统一为 kebab-case，不兼容 snake_case
 
 ## 阶段 0：建立重构安全网
 
@@ -211,7 +211,8 @@
 - [x] 移除旧 Rust 专属版本规划路径；混合 Rust + Node.js changeset 必须与 `status` 使用同一 `ReleasePlan` 且不 panic
 - [x] `smif version` 消费与 `status` 相同的 `ReleasePlan`
 - [x] Rust 与 Node.js manifest 由 `ReleasePlan.file_edits` 统一规划、校验并原子应用
-- [x] `smif version --dry-run` 只渲染计划，不调用写入器或命令运行器
+- [x] `smif version --dry-run` 不调用写入器，仅运行显式配置 `dry-run = true` 的
+  post-version 命令，其余命令跳过
 - [x] 删除 `version` 内逐包填充可变版本 map 的逻辑
 - [x] 返回结构化 `ApplyReport`
 
@@ -259,6 +260,11 @@
 
 ## 阶段 5：统一发布引擎
 
+### 配置字段规范化
+
+- [x] 将 TOML/JSON 配置字段统一为 kebab-case，更新仓库配置、初始化模板、示例和 fixture；
+  不为 snake_case 字段提供 serde alias
+
 ### Workspace release context
 
 - [x] 定义可序列化的 `ReleasePlanContext`、`ReleaseContext`、`RepositoryContext` 和 `CiContext`
@@ -268,15 +274,17 @@
 - [x] 以规范化 package 版本与 changeset ID 生成确定性 SHA-256 plan fingerprint，对外使用前 12 位小写十六进制
 - [x] 首版不引入没有明确消费者的 `ProjectContext`，也不向模板暴露项目绝对路径或完整配置
 - [x] 为单包、多包同版本、多包不同版本、空计划和输入顺序无关性建立上下文测试
-- [ ] 决定并实现 Rust `workspace.package.version` / `package.version.workspace = true` 的版本来源、bump、channel、发布闭包、private crate 和单点编辑语义；不从 `ReleaseContext` 反向推导
-- [ ] 为 workspace 继承版本建立 discovery、status 和 version 不 panic 回归测试
+- [x] 实现已确认的 Rust 共享 `VersionSource`：组内最高 bump、channel / `channel-bump` 一致性、全成员版本闭包、private publish skip 和 `[workspace.package].version` 单点编辑
+- [x] 为 workspace 继承版本建立 discovery、status 和 version 不 panic 回归测试
 
 ### Publish plan
 
 - [x] 定义可从当前 workspace 重建的 `PublishContext`、`PublishPlan` 和 `PackagePublish`
 - [x] publish 不依赖或持久化 version 阶段的 `ReleaseContext`，也不从已消费 changeset 反推发布集合
 - [x] 依据 `ReleasePlan` 构造唯一 workspace `ReleaseContext`
-- [ ] 从 `ReleaseContext` 渲染 release branch / release PR，不隐式选择主 package
+- [x] 从同一个 `ReleaseContext` 渲染 release branch，并构造一次性
+  `ReleasePullRequestContext` 供固定兼容 renderer 生成 release PR；不隐式选择主 package，
+  不将 changelog 写回 `ReleaseContext`
 - [x] 明确 package-level Git tag 与 workspace release branch / PR 的区别
 - [x] 将 preflight、commands 和 assets 纳入计划
 - [x] 基于 `WorkspaceGraph` 生成确定性发布顺序
@@ -284,34 +292,36 @@
 
 ### 外部能力
 
-- [ ] 抽取 `CommandRunner`
-- [ ] 抽取 `RegistryClient`
-- [ ] 抽取 `ForgeClient`
-- [ ] 将 GitHub release 创建移到 Forge adapter
-- [ ] 将 asset upload 移到 Forge adapter
-- [ ] 删除四个生态中重复的 publish 命令执行代码
+- [x] 抽取 `CommandRunner`
+- [x] 抽取 `RegistryClient`
+- [x] 抽取 `ForgeClient`
+- [x] 将 GitHub release 创建移到 Forge adapter
+- [x] 将 asset upload 移到 Forge adapter
+- [x] 删除四个生态中重复的 publish 命令执行代码
+- [x] 将 `CommandSpec` 的 `dry-run` 作为全局 dry-run 下执行该命令的显式许可；registry
+  preflight 保持只读执行，Forge release 与 asset upload 必须跳过
 
 ### 执行与报告
 
-- [ ] 在执行发布前完成所有可执行的 preflight
-- [ ] 定义 `ReleasePackageContext`、`PublishContext`、`ChangelogContext` 和按场景构造的只读 `TemplateContext`
+- [x] 在执行发布前完成所有可执行的 preflight
+- [x] 定义 `ReleasePackageContext`、`PublishContext`、`ChangelogContext` 和按场景构造的只读模板视图
 - [x] 定义 changelog 专用 `ChangesetContext`、`PackageChangesetContext` 和 `DependencyUpdateContext`
 - [x] `ChangelogContext` 按 package 聚合 changesets 和依赖更新；tag 在收集层解析为 section，不进入 `ChangesetContext`
 - [x] 分支模板只暴露 `release.*`
-- [ ] changelog 与 version 包级模板暴露 `release.*`、`package.*`；publish 模板只暴露可从当前 package 重建的 `package.*`
+- [x] changelog 与 version 包级模板暴露 `release.*`、`package.*`；publish 模板只暴露可从当前 package 重建的 `package.*`
 - [x] 使用 MiniJinja 严格未定义变量模式
 - [x] 在渲染后校验 branch ref、Git tag 和命令参数
 - [x] workspace 模板中不暴露 `release.tag` 或 `release.version`；`common_version = None` 时引用它必须返回配置错误
 - [x] 以 `ReleaseContext` 渲染 `branches.release`，并保持无模板语法的现有字面量配置
-- [ ] 支持 dry-run 发布计划
-- [ ] 返回结构化 `PublishReport`
-- [ ] 报告 succeeded、skipped、failed 和 not-started package
-- [ ] 明确部分发布失败后的退出码和恢复指引
+- [x] 支持 dry-run 发布计划
+- [x] 返回结构化 `PublishReport`
+- [x] 报告 succeeded、skipped、failed 和 not-started package
+- [x] 明确部分发布失败后的退出码和恢复指引
 
 ### 阶段完成条件
 
-- [ ] Ecosystem adapter 不再执行任何外部命令
-- [ ] `publish` 与 CI 使用相同 `PublishPlan` 和 publisher
+- [x] Ecosystem adapter 不再执行任何外部命令
+- [x] `publish` 与 CI 使用相同 `PublishPlan` 和 publisher
 
 ## 阶段 6：拆分 `Context` 并收敛入口层
 
@@ -360,23 +370,24 @@
 
 - [ ] CLI 模块中不再包含版本计算或 manifest 文件操作
 - [ ] CLI、CI 和 MCP 不复制业务编排
-- [ ] 发布计算中不存在 `RefCell` 或隐式全局可变 map
+- [x] 发布计算中不存在 `RefCell` 或隐式全局可变 map
 
 ## 最终验收
 
-- [ ] `cargo fmt --all --check` 通过
-- [ ] `cargo clippy --workspace --all-targets --all-features` 通过
-- [ ] `cargo test --workspace --all-features` 通过
+- [x] `cargo fmt --all --check` 通过
+- [x] `cargo clippy --workspace --all-targets --all-features` 通过
+- [x] `cargo test --workspace --all-features` 通过
 - [ ] `status` 与 `version` 的计划结果完全一致
 - [ ] 跨生态依赖图支持确定性拓扑排序和环检测
 - [ ] 所有文件修改在写入前完成计划和验证
-- [ ] `--dry-run` 不产生文件、命令、网络或发布副作用
+- [x] `--dry-run` 不应用 Semifold 文件修改、不创建 Forge release 或上传 asset；只执行 registry
+  preflight 与显式配置 `dry-run = true` 的命令，并在报告中区分实际执行和跳过
 - [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
 - [x] `config sync --check` 可稳定用于 CI
 - [ ] 连续执行配置同步和版本规划均具有幂等性
-- [ ] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
+- [x] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
 - [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
-- [ ] 现有 CLI 主要用法和配置文件保持兼容
+- [x] 现有 CLI 主要用法保持稳定；所有 TOML/JSON 配置字段使用 kebab-case，snake_case 不兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 
@@ -391,7 +402,7 @@
 - [ ] 是否长期支持 JSON 配置更新
 - [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`
 - [ ] 是否提供 `--rewrite-changesets` 辅助包重命名
-- [ ] Rust workspace 继承版本的共享版本来源、bump 合并、channel 与发布闭包规则
+- [x] Rust workspace 继承版本的共享版本来源、bump 合并、channel 与发布闭包规则
 
 ## 低优先级优化
 

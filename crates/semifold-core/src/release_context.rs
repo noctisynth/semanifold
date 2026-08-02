@@ -104,6 +104,9 @@ pub enum ReleaseReasonContext {
         dependency: PackageId,
         next_version: Version,
     },
+    SharedVersionPropagation {
+        source: crate::VersionSourceId,
+    },
 }
 
 impl From<&ReleaseReason> for ReleaseReasonContext {
@@ -118,6 +121,9 @@ impl From<&ReleaseReason> for ReleaseReasonContext {
             } => Self::DependencyPropagation {
                 dependency: dependency.clone(),
                 next_version: next_version.clone(),
+            },
+            ReleaseReason::SharedVersionPropagation { source } => Self::SharedVersionPropagation {
+                source: source.clone(),
             },
         }
     }
@@ -318,7 +324,7 @@ fn hash_field(hasher: &mut Sha256, kind: &[u8], value: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PackageRelease, VersionMap};
+    use crate::{PackageRelease, VersionMap, VersionSource};
 
     fn package(id: &str, next: Version) -> PackageRelease {
         PackageRelease {
@@ -458,6 +464,7 @@ mod tests {
             id: PackageId::new("configured-id"),
             manifest_name: "manifest-name".to_string(),
             version: Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/package".into(),
             publishable: false,
@@ -486,6 +493,7 @@ mod tests {
             id: PackageId::new("missing"),
             manifest_name: "missing".to_string(),
             version: Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: "crates/missing".into(),
             publishable: true,

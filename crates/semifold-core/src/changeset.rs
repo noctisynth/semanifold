@@ -3,7 +3,7 @@ use std::fmt;
 use semver::Version;
 use serde::Serialize;
 
-use crate::PackageId;
+use crate::{PackageId, VersionSourceId};
 
 /// Stable identity of one changeset file without its storage location.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -59,6 +59,9 @@ pub enum ReleaseReason {
     DependencyPropagation {
         dependency: PackageId,
         next_version: Version,
+    },
+    SharedVersionPropagation {
+        source: VersionSourceId,
     },
 }
 

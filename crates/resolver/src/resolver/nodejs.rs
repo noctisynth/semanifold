@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::Path};
 use saphyr::LoadableYamlNode;
 use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
-    PackageSnapshot, VersionMap,
+    PackageSnapshot, VersionMap, VersionSource,
 };
 use serde::Deserialize;
 
@@ -66,6 +66,7 @@ impl NodejsResolver {
             id,
             manifest_name: package.name,
             version: package.version,
+            version_source: package.version_source,
             ecosystem: Ecosystem::Node,
             path,
             publishable: !package.private,
@@ -364,6 +365,7 @@ impl NodejsResolver {
         let package = ParsedPackage {
             name: package_json.name,
             version: semver::Version::parse(&package_json.version)?,
+            version_source: VersionSource::PackageManifest,
             path: pkg_config.path.clone(),
             private: package_json.private.unwrap_or(false),
         };
@@ -494,7 +496,7 @@ mod tests {
         config::{PackageConfig, ReleaseChannel},
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::NodejsResolver;
 
@@ -678,6 +680,7 @@ mod tests {
             id: PackageId::new("app-id"),
             manifest_name: "app".to_string(),
             version: semver::Version::new(0, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Node,
             path: "packages/app".into(),
             publishable: true,
@@ -687,6 +690,7 @@ mod tests {
             id: PackageId::new("core-id"),
             manifest_name: "core".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Node,
             path: "packages/core".into(),
             publishable: true,
@@ -696,6 +700,7 @@ mod tests {
             id: PackageId::new(id),
             manifest_name: id.to_string(),
             version,
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Node,
             path: format!("packages/{id}").into(),
             publishable: true,

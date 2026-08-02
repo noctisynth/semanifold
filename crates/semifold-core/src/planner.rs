@@ -4,8 +4,8 @@ use semver::VersionReq;
 
 use crate::{
     BumpLevel, ChangesetId, PackageId, PackageRelease, PlanWarning, ReleaseChannel, ReleasePlan,
-    ReleasePlanError, ReleaseReason, VersionMap, VersioningError, WorkspaceGraph,
-    WorkspaceGraphError, bump_version,
+    ReleasePlanError, ReleaseReason, VersionMap, VersionSource, VersionSourceId, VersioningError,
+    WorkspaceGraph, WorkspaceGraphError, bump_version,
 };
 
 /// Parsed changeset facts required by release planning.
@@ -36,6 +36,8 @@ impl ReleasePlanner {
         policies: &ReleasePolicies,
     ) -> Result<ReleasePlan, ReleasePlannerError> {
         Self::validate_policies(graph, policies)?;
+        let shared_version_groups = Self::shared_version_groups(graph);
+        Self::validate_shared_version_groups(graph, policies, &shared_version_groups)?;
 
         let mut levels = graph
             .packages()
@@ -61,6 +63,8 @@ impl ReleasePlanner {
                 }
             }
         }
+
+        Self::propagate_shared_versions(&shared_version_groups, &mut levels, &mut reasons);
 
         let dependents = Self::dependents(policies);
         let mut pending = levels
@@ -102,6 +106,11 @@ impl ReleasePlanner {
                 if *level == BumpLevel::Unchanged {
                     *level = BumpLevel::Patch;
                     pending.insert(dependent.clone());
+                    pending.extend(Self::propagate_shared_versions(
+                        &shared_version_groups,
+                        &mut levels,
+                        &mut reasons,
+                    ));
                 }
             }
         }
@@ -216,6 +225,98 @@ impl ReleasePlanner {
         }
         dependents
     }
+
+    fn shared_version_groups(graph: &WorkspaceGraph) -> BTreeMap<VersionSourceId, Vec<PackageId>> {
+        let mut groups = BTreeMap::<VersionSourceId, Vec<PackageId>>::new();
+        for package in graph.packages() {
+            if let VersionSource::Shared { source } = &package.version_source {
+                groups
+                    .entry(source.clone())
+                    .or_default()
+                    .push(package.id.clone());
+            }
+        }
+        groups
+    }
+
+    fn validate_shared_version_groups(
+        graph: &WorkspaceGraph,
+        policies: &ReleasePolicies,
+        groups: &BTreeMap<VersionSourceId, Vec<PackageId>>,
+    ) -> Result<(), ReleasePlannerError> {
+        for (source, packages) in groups {
+            let Some(first_id) = packages.first() else {
+                continue;
+            };
+            let first = graph
+                .package(first_id)
+                .expect("shared version groups are derived from workspace packages");
+            let first_policy = &policies[first_id];
+            for package_id in packages.iter().skip(1) {
+                let package = graph
+                    .package(package_id)
+                    .expect("shared version groups are derived from workspace packages");
+                if package.version != first.version {
+                    return Err(ReleasePlannerError::SharedVersionMismatch {
+                        version_source: source.clone(),
+                        first_package: first.id.clone(),
+                        first_version: Box::new(first.version.clone()),
+                        package: package.id.clone(),
+                        version: Box::new(package.version.clone()),
+                    });
+                }
+                let policy = &policies[package_id];
+                if policy.channel != first_policy.channel {
+                    return Err(ReleasePlannerError::SharedVersionChannelMismatch {
+                        version_source: source.clone(),
+                        first_package: first.id.clone(),
+                        package: package.id.clone(),
+                    });
+                }
+                if policy.channel_bump != first_policy.channel_bump {
+                    return Err(ReleasePlannerError::SharedVersionChannelBumpMismatch {
+                        version_source: source.clone(),
+                        first_package: first.id.clone(),
+                        package: package.id.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn propagate_shared_versions(
+        groups: &BTreeMap<VersionSourceId, Vec<PackageId>>,
+        levels: &mut BTreeMap<PackageId, BumpLevel>,
+        reasons: &mut BTreeMap<PackageId, BTreeSet<ReleaseReason>>,
+    ) -> BTreeSet<PackageId> {
+        let mut changed = BTreeSet::new();
+        for (source, packages) in groups {
+            let bump = packages
+                .iter()
+                .map(|package| levels[package])
+                .max()
+                .unwrap_or(BumpLevel::Unchanged);
+            if bump == BumpLevel::Unchanged {
+                continue;
+            }
+            for package in packages {
+                let level = levels
+                    .get_mut(package)
+                    .expect("shared version groups only contain planned packages");
+                if *level < bump {
+                    *level = bump;
+                    reasons.entry(package.clone()).or_default().insert(
+                        ReleaseReason::SharedVersionPropagation {
+                            source: source.clone(),
+                        },
+                    );
+                    changed.insert(package.clone());
+                }
+            }
+        }
+        changed
+    }
 }
 
 fn bump_with_policy(
@@ -269,6 +370,32 @@ pub enum ReleasePlannerError {
         package: PackageId,
         source: VersioningError,
     },
+    #[error(
+        "shared version source {version_source:?} resolves to {first_version} for {first_package}, but {version} for {package}"
+    )]
+    SharedVersionMismatch {
+        version_source: VersionSourceId,
+        first_package: PackageId,
+        first_version: Box<semver::Version>,
+        package: PackageId,
+        version: Box<semver::Version>,
+    },
+    #[error(
+        "packages {first_package} and {package} use shared version source {version_source:?} but different release channels"
+    )]
+    SharedVersionChannelMismatch {
+        version_source: VersionSourceId,
+        first_package: PackageId,
+        package: PackageId,
+    },
+    #[error(
+        "packages {first_package} and {package} use shared version source {version_source:?} but different channel bump overrides"
+    )]
+    SharedVersionChannelBumpMismatch {
+        version_source: VersionSourceId,
+        first_package: PackageId,
+        package: PackageId,
+    },
     #[error(transparent)]
     Workspace(#[from] WorkspaceGraphError),
     #[error("invalid release plan: {0}")]
@@ -281,13 +408,16 @@ mod tests {
     use semver::{Version, VersionReq};
 
     use super::*;
-    use crate::{Dependency, DependencyKind, DependencySource, Ecosystem, PackageSnapshot};
+    use crate::{
+        Dependency, DependencyKind, DependencySource, Ecosystem, PackageSnapshot, VersionSource,
+    };
 
     fn package(id: &str, version: &str, dependencies: &[&str]) -> PackageSnapshot {
         PackageSnapshot {
             id: PackageId::new(id),
             manifest_name: id.to_string(),
             version: Version::parse(version).unwrap(),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: Utf8PathBuf::from(format!("crates/{id}")),
             publishable: true,
@@ -301,6 +431,18 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    fn shared_package(id: &str, version: &str, publishable: bool) -> PackageSnapshot {
+        let mut package = package(id, version, &[]);
+        package.version_source = VersionSource::Shared {
+            source: VersionSourceId {
+                manifest: "Cargo.toml".into(),
+                field: "workspace.package.version".to_string(),
+            },
+        };
+        package.publishable = publishable;
+        package
     }
 
     fn policies(packages: &[(&str, ReleaseChannel)]) -> ReleasePolicies {
@@ -363,6 +505,78 @@ mod tests {
             plan.consumed_changesets(),
             [ChangesetId::new("feature"), ChangesetId::new("patch")]
         );
+    }
+
+    #[test]
+    fn shared_version_groups_take_the_highest_bump_and_release_every_member() {
+        let graph = WorkspaceGraph::new(vec![
+            shared_package("public", "1.2.3", true),
+            shared_package("private", "1.2.3", false),
+        ])
+        .unwrap();
+        let policies = policies(&[
+            ("public", ReleaseChannel::Stable),
+            ("private", ReleaseChannel::Stable),
+        ]);
+
+        let plan = ReleasePlanner::plan(
+            &graph,
+            &[
+                changeset("public-fix", &[("public", BumpLevel::Patch)]),
+                changeset("private-feature", &[("private", BumpLevel::Minor)]),
+            ],
+            &policies,
+        )
+        .unwrap();
+
+        assert_eq!(plan.packages().len(), 2);
+        for package in ["public", "private"] {
+            let release = plan.package(&PackageId::new(package)).unwrap();
+            assert_eq!(release.bump, BumpLevel::Minor);
+            assert_eq!(release.next_version, Version::new(1, 3, 0));
+        }
+        assert!(
+            plan.package(&PackageId::new("public"))
+                .unwrap()
+                .reasons
+                .iter()
+                .any(|reason| matches!(reason, ReleaseReason::SharedVersionPropagation { .. }))
+        );
+    }
+
+    #[test]
+    fn shared_version_groups_reject_inconsistent_channels_and_overrides() {
+        let graph = WorkspaceGraph::new(vec![
+            shared_package("a", "1.2.3", true),
+            shared_package("b", "1.2.3", true),
+        ])
+        .unwrap();
+        let channels = policies(&[
+            ("a", ReleaseChannel::Stable),
+            ("b", ReleaseChannel::Named("alpha".to_string())),
+        ]);
+
+        assert!(matches!(
+            ReleasePlanner::plan(&graph, &[], &channels),
+            Err(ReleasePlannerError::SharedVersionChannelMismatch { .. })
+        ));
+
+        let mut overrides = policies(&[
+            ("a", ReleaseChannel::Named("alpha".to_string())),
+            ("b", ReleaseChannel::Named("alpha".to_string())),
+        ]);
+        overrides
+            .get_mut(&PackageId::new("a"))
+            .unwrap()
+            .channel_bump = Some(BumpLevel::Unchanged);
+        overrides
+            .get_mut(&PackageId::new("b"))
+            .unwrap()
+            .channel_bump = Some(BumpLevel::Minor);
+        assert!(matches!(
+            ReleasePlanner::plan(&graph, &[], &overrides),
+            Err(ReleasePlannerError::SharedVersionChannelBumpMismatch { .. })
+        ));
     }
 
     #[test]

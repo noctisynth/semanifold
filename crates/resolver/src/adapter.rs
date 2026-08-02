@@ -1,5 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use semifold_core::{DependencyKind, Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap};
+use semifold_core::{
+    DependencyKind, Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap, VersionSource,
+};
 use semver::Version;
 use std::path::PathBuf;
 
@@ -26,6 +28,7 @@ pub struct ManifestDependency {
 pub(crate) struct ParsedPackage {
     pub name: String,
     pub version: Version,
+    pub version_source: VersionSource,
     pub path: PathBuf,
     pub private: bool,
 }
@@ -36,6 +39,7 @@ pub struct PackageInspection {
     pub id: PackageId,
     pub manifest_name: String,
     pub version: Version,
+    pub version_source: VersionSource,
     pub ecosystem: Ecosystem,
     pub path: Utf8PathBuf,
     pub publishable: bool,
@@ -108,6 +112,7 @@ mod tests {
                 id: package.id.clone(),
                 manifest_name: "example".to_string(),
                 version: Version::new(1, 0, 0),
+                version_source: VersionSource::PackageManifest,
                 ecosystem: self.ecosystem(),
                 path: package.path.clone(),
                 publishable: true,
@@ -143,6 +148,7 @@ mod tests {
             id: inspection.id.clone(),
             manifest_name: inspection.manifest_name.clone(),
             version: inspection.version.clone(),
+            version_source: inspection.version_source.clone(),
             ecosystem: inspection.ecosystem,
             path: inspection.path.clone(),
             publishable: inspection.publishable,

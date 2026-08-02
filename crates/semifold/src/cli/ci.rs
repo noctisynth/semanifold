@@ -11,7 +11,9 @@ use semifold_resolver::{context::Context, resolver};
 
 use crate::{
     cli::{publish, version},
-    release::{plan_release, render_release_branch},
+    release::{
+        ReleasePullRequestContext, plan_release, render_release_branch, render_release_pull_request,
+    },
 };
 
 #[derive(Debug, Parser)]
@@ -84,7 +86,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     let changesets = resolver::get_changesets(ctx)?;
     if changesets.is_empty() {
         log::info!("{}", t!("cli.ci.no_changesets_publish"));
-        return publish::publish(ctx, true).await;
+        return publish::publish(ctx, true).await.map(|_| ());
     }
 
     let root = ctx
@@ -102,13 +104,19 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         unconsumed_changesets: _,
     } = version::apply_version_plan(ctx, &changesets, release_plan).await?;
     let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
+    let pull_request_context = ReleasePullRequestContext {
+        release: &release_context,
+        branch: release_branch,
+        changelogs: changelogs_map,
+    };
+    let pull_request = render_release_pull_request(&pull_request_context);
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;
 
     let base_branch = &config.branches.base;
-    repo.branch(&release_branch, &commit, true)?;
-    repo.set_head(&format!("refs/heads/{}", release_branch))?;
+    repo.branch(&pull_request_context.branch, &commit, true)?;
+    repo.set_head(&format!("refs/heads/{}", pull_request_context.branch))?;
     repo.checkout_head(None)?;
 
     let mut index = repo.index()?;
@@ -129,9 +137,9 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         &[&parent_commit],
     )?;
 
-    force_push_release(repo, &github_token, &release_branch)?;
+    force_push_release(repo, &github_token, &pull_request_context.branch)?;
 
-    let head = format!("{}:{}", owner, release_branch);
+    let head = format!("{}:{}", owner, pull_request_context.branch);
     let pulls = octocrab.pulls(owner, repo_name);
     let existing_prs = pulls
         .list()
@@ -142,21 +150,15 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         .await?
         .take_items();
 
-    let pr_title = "chore(release): bump versions";
-    let pr_body = format!(
-        "# Releases\n\n{}",
-        changelogs_map
-            .into_iter()
-            .map(|(name, changelog)| { format!("## {name}\n\n{changelog}") })
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    );
-
     if existing_prs.is_empty() {
         log::info!("{}", t!("cli.ci.no_existing_pr"));
         pulls
-            .create(pr_title, &release_branch, base_branch)
-            .body(pr_body)
+            .create(
+                &pull_request.title,
+                &pull_request_context.branch,
+                base_branch,
+            )
+            .body(&pull_request.body)
             .send()
             .await?;
     } else {
@@ -166,8 +168,8 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         log::info!("{}", t!("cli.ci.existing_pr_found", number = pr.number));
         pulls
             .update(pr.number)
-            .title(pr_title)
-            .body(pr_body)
+            .title(&pull_request.title)
+            .body(&pull_request.body)
             .send()
             .await?;
     }

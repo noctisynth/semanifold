@@ -2103,6 +2103,7 @@ dependencies = [
  "colored",
  "fern",
  "git2",
+ "glob",
  "inquire",
  "log",
  "minijinja",

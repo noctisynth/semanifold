@@ -72,7 +72,7 @@ smif version --allow-dirty
 ```toml
 [resolver.rust]
 post-version = [
-  { command = "cargo", args = ["generate-lockfile", "--offline"], dry_run = true }
+  { command = "cargo", args = ["generate-lockfile", "--offline"], dry-run = true }
 ]
 ```
 

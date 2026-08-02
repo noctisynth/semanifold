@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use semifold_core::{
     DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
-    PackageSnapshot, VersionMap,
+    PackageSnapshot, VersionMap, VersionSource,
 };
 use semver::{Prerelease, Version};
 use serde::{Deserialize, Serialize};
@@ -173,6 +173,7 @@ impl PythonResolver {
             id,
             manifest_name: package.name,
             version: package.version,
+            version_source: package.version_source,
             ecosystem: Ecosystem::Python,
             path,
             publishable: !package.private,
@@ -503,6 +504,7 @@ impl PythonResolver {
         Ok(ParsedPackage {
             name,
             version: parse_python_version(&version)?,
+            version_source: VersionSource::PackageManifest,
             path: pkg_path.to_path_buf(),
             private: false,
         })
@@ -558,6 +560,7 @@ impl PythonResolver {
         Ok(ParsedPackage {
             name,
             version: parse_python_version(&version)?,
+            version_source: VersionSource::PackageManifest,
             path: pkg_path.to_path_buf(),
             private: false,
         })
@@ -869,7 +872,7 @@ mod tests {
         error::ResolveError,
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap};
+    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::{PythonResolver, parse_python_version};
 
@@ -964,6 +967,7 @@ mod tests {
             id: PackageId::new("example"),
             manifest_name: "example".to_string(),
             version: semver::Version::new(1, 2, 3),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Python,
             path: ".".into(),
             publishable: true,
@@ -1216,6 +1220,7 @@ mod tests {
             id: PackageId::new("example"),
             manifest_name: "example".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Python,
             path: "packages/example".into(),
             publishable: true,
@@ -1267,6 +1272,7 @@ mod tests {
             id: PackageId::new("cfg-example"),
             manifest_name: "cfg-example".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Python,
             path: ".".into(),
             publishable: true,
@@ -1308,6 +1314,7 @@ mod tests {
             id: PackageId::new("hatch-example"),
             manifest_name: "hatch-example".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Python,
             path: ".".into(),
             publishable: true,
@@ -1351,6 +1358,7 @@ mod tests {
             id: PackageId::new("native-example"),
             manifest_name: "native-example".to_string(),
             version: semver::Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Python,
             path: ".".into(),
             publishable: true,

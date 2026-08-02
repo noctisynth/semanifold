@@ -206,10 +206,10 @@ mod tests {
 
     fn resolver_config() -> ResolverConfig {
         ResolverConfig {
-            pre_check: PreCheckConfig {
+            pre_check: Some(PreCheckConfig {
                 url: String::new(),
                 extra_headers: BTreeMap::new(),
-            },
+            }),
             prepublish: vec![],
             publish: vec![],
             post_version: vec![],

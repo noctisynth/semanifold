@@ -5,7 +5,7 @@
 - 状态：Draft
 - 范围：Semifold Rust workspace 的领域模型、crate 边界、生态适配器、版本规划和发布执行流程
 - 不包含：文档站、官网视觉、品牌和营销内容
-- 原则：优先替换内部模型，第一阶段不改变 CLI 用法和现有配置格式
+- 原则：优先替换内部模型；CLI 主要用法保持稳定，配置字段在本轮显式统一为 kebab-case
 
 ### 1.1 文档与变更治理
 
@@ -123,12 +123,12 @@ A → B → C
 4. 使生态适配器可以通过 fixture 独立测试。
 5. 使 dry-run 成为执行器策略，而非遍布代码的条件分支。
 6. 为依赖环、重复包名、manifest 不一致和文件修改冲突提供明确错误。
-7. 保持现有 CLI 和配置向后兼容，允许渐进迁移。
+7. 保持现有 CLI 主要用法稳定；配置字段统一为 kebab-case，不兼容旧 snake_case 字段。
 
 ### 4.2 非目标
 
 - 不在第一阶段重新设计 CLI。
-- 不立即替换 TOML/JSON 配置格式。
+- 不替换 TOML/JSON 容器格式；字段命名统一为 kebab-case。
 - 不为每个小模块创建独立 crate。
 - 不在第一阶段引入动态插件或 WASM resolver。
 - 不尝试回滚已经完成的外部 registry 发布。
@@ -367,8 +367,9 @@ Adapter 生成内容修改，但不直接写文件。`expected_hash` 用于确�
 第一版由应用层的 `FileEditExecutor` 接收项目根目录与 edit 列表。它只接受项目根目录内的相对路径，拒绝绝对路径和包含 `..` 的路径；先验证全部路径、重复目标和 `expected_hash`，随后把所有新内容写入同目录临时文件，最后逐个 `rename` 替换目标文件。任一前置验证或临时文件写入失败时不得替换任何目标文件，并应尽力清理已创建的临时文件；替换阶段发生 I/O 失败时返回已替换与未替换文件的结构化报告，恢复策略留待后续 `ApplyReport` 统一定义。
 
 只读目标验证必须暴露为独立于 `FileEditExecutor` 的入口，并由 executor 与
-`version --dry-run` 复用；dry-run 不得构造临时文件、调用命令运行器或收集远程
-changelog 元数据。验证列表中任一较晚目标失败时，先前目标也不得被替换；临时文件准备
+`version --dry-run` 复用；dry-run 不得构造临时文件或收集远程 changelog 元数据。
+配置中显式声明 `dry-run = true` 的命令是例外：它表示用户授权该命令在全局 dry-run
+下仍由 `CommandRunner` 执行；未声明或为 `false` 的命令跳过。验证列表中任一较晚目标失败时，先前目标也不得被替换；临时文件准备
 阶段失败时同样不得开始替换，并应清理已准备的临时文件。最终文件内容由已验证且目标唯一
 的完整 edit 集合决定，不依赖 edit 或 package 的输入顺序。
 
@@ -414,10 +415,44 @@ repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中
 和 registry 中已存在的版本通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan`
 推断本次发布集合。
 
+publisher 在执行任何 package 命令前先完成所有非 private、未跳过 package 的 registry
+preflight。preflight 失败时不启动任何命令；版本已存在则以
+`PublishSkipReason::RegistryVersionExists` 跳过。随后按 `PublishPlan.packages` 的拓扑顺序逐包
+执行命令、创建 package release 并上传 asset，任一阶段失败即停止后续 package。所有 asset
+glob 在计划阶段解析为稳定排序的 `ReleaseAsset`，执行器只读取计划中的确定路径。
+
+执行结果始终表示为结构化报告：
+
+```rust
+pub struct PublishReport {
+    pub packages: Vec<PackagePublishReport>,
+}
+
+pub struct PackagePublishReport {
+    pub package: PackageId,
+    pub status: PublishStatus,
+    pub commands: Vec<CommandReport>,
+    pub forge: ForgeDisposition,
+    pub error: Option<String>,
+}
+
+pub enum PublishStatus {
+    Succeeded,
+    Skipped(PublishSkipReason),
+    Failed(PublishFailureStage),
+    NotStarted,
+}
+```
+
+命令、registry 与 Forge 错误通过 `PublishExecutionError` 携带当时的完整报告返回；CLI 返回非零
+退出码，并提示修复后重试。重试依赖 registry preflight 跳过已成功发布的版本，不尝试回滚外部
+registry。dry-run 仍执行全部 registry preflight；命令报告区分实际执行与因未配置
+`dry-run = true` 而跳过，Forge disposition 明确为 dry-run skip。
+
 在完整 `PublishPlan` 落地前，阶段 4 使用 application 层的统一发布命令执行桥接：按 package 的
 拓扑顺序依次执行全部 `prepublish`，成功后再执行全部 `publish`；命令工作目录为 package path，任一
 命令失败立即停止该 package 和后续发布。全局 dry-run 时，仅执行配置中
-`dry_run = true` 的命令，其余命令明确报告跳过。private package、registry pre-check、GitHub Release
+`dry-run = true` 的命令，其余命令明确报告跳过。private package、registry pre-check、GitHub Release
 与 assets 仍由同一 application 流程编排，不回到 adapter。四个旧 resolver 不再暴露 `publish()`，
 也不接收 dry-run；该桥接后续由 `PublishPlan` 与注入的 `CommandRunner` 取代。
 
@@ -483,6 +518,30 @@ Git SHA、远程元数据或 changeset 文本。
 `RepositoryContext` 和 `CiContext` 只保存收集完成的可序列化事实，不持有
 `git2::Repository`、Forge client、token、完整环境变量或命令执行器。非必需远程
 元数据收集失败时保留诊断并使用 `None`，不得回滚或重新计算 `ReleasePlan`。
+
+release PR 在 version 文件 edit 与 changelog 内容完成规划后，由 application 层构造
+一次性的只读视图；changelog 不写回 `ReleaseContext`，也不扩张 workspace release
+事实模型：
+
+```rust
+pub struct ReleasePullRequestContext<'a> {
+    pub release: &'a ReleaseContext,
+    pub branch: String,
+    pub changelogs: BTreeMap<PackageId, String>,
+}
+
+pub struct RenderedReleasePullRequest {
+    pub title: String,
+    pub body: String,
+}
+```
+
+首版 release PR 不新增配置项或用户模板。纯 renderer 保持现有兼容输出：标题为
+`chore(release): bump versions`，正文以 `# Releases` 开始，并按 `PackageId` 稳定排序追加
+各 package changelog。`branch` 是已经由同一个 `ReleaseContext` 渲染并校验的 release
+branch，供后续 Forge 边界创建或更新 PR；renderer 不从 package 集合中推断主 package。
+未来如需用户可配置的 PR 模板，必须作为独立设计定义作用域、兼容规则与校验，不得将
+changelog 塞回 `ReleaseContext` 或恢复全局万能模板 map。
 
 当前没有已证明的项目级模板字段，因此首版不引入 `ProjectContext`。应用层的
 `Project` 仍负责 root、changeset directory、config path 和强类型配置的加载；这些
@@ -553,7 +612,9 @@ commit 和 pull request 与其来源 changeset 保持在同一个 `ChangesetCont
 产生的条目使用独立 `DependencyUpdateContext`。远程 PR 查询失败时收集层记录诊断并设置
 `pull_request = None`，纯 formatter 不感知查询失败原因。
 
-- release branch 和 release PR 只暴露 `release.*`。
+- release branch 模板只暴露 `release.*`；固定 release PR renderer 接收显式
+  `ReleasePullRequestContext`，其中 `release` 与 branch 模板引用同一个 workspace
+  `ReleaseContext`，changelog 是 version 规划后的应用层产物。
 - version 与 changelog 中的包级视图同时暴露 `release.*` 与 `package.*`；
   `package.next_version` 和 `package.tag` 始终是该次版本计划的 package 事实。
 - publish 的 pre-check、prepublish、publish、asset 和 GitHub Release 使用独立
@@ -707,11 +768,36 @@ release package 的遍历顺序。只有目标 package 的计划版本相对当�
 `PackageId` 稳定记录所有被更新的内部依赖。
 
 Rust package 还可以通过 `package.version.workspace = true` 继承
-`workspace.package.version`。当前实现尚未支持这种 manifest，并可能在发现或版本规划时
-panic；这是已知缺口，不得被视为不支持该 Cargo 语义的长期决策。正式支持前必须先明确共享
-workspace 版本的来源表示、bump 合并、channel 一致性、发布闭包、private crate
-以及 manifest 编辑所有权。该问题属于 `ReleasePlan` 与 Rust adapter 的版本来源设计，
-不从 `ReleaseContext`、分支或模板配置推导共享版本关系。
+`workspace.package.version`。该关系建模为 manifest 派生的共享 `VersionSource`，不是用户
+配置的 `ReleaseUnit`，也不承载 branch、PR、tag 或 registry identity：
+
+```rust
+pub enum VersionSource {
+    PackageManifest,
+    Shared(VersionSourceId),
+}
+
+pub struct VersionSourceId {
+    pub manifest: Utf8PathBuf,
+    pub field: String,
+}
+```
+
+同一个 `VersionSourceId` 的 package 形成隐式版本组。组内显式 changeset bump 取最高值；
+任意成员触发版本变化时，所有成员进入 `ReleasePlan` 并获得同一个 `next_version`。原本没有
+显式 bump 的成员记录共享版本传播原因，随后继续参与内部依赖传播。publishable package
+正常发布；private package 同样参与版本计算和 manifest 事实更新，但在 `PublishPlan` 中以
+private skip reason 跳过外部发布。只有 private 成员发生 changeset 也会推动共享版本，因而
+可能使同组 publishable package 进入发布闭包。
+
+同组 package 必须具有完全相同的 release channel 和一次性 `channel-bump`；不一致时规划
+失败，不按 package 顺序选择配置。成员 manifest 中的 `version.workspace = true` 保持不变，
+Rust adapter 仅对版本来源拥有者生成一次根 `Cargo.toml` 修改，将
+`[workspace.package].version` 更新为组内统一目标版本。该 edit 必须稳定记录全部受影响
+`PackageId`，并与根 manifest 中的 `workspace.dependencies` 修改合并为同一个 `FileEdit`。
+缺少或无法解析 `workspace.package.version`、无法确定 workspace root、或同一来源得到不一致
+当前版本时返回可处理错误，不得 panic。共享版本关系由 `PackageSnapshot.version_source` 提供给
+`ReleasePlanner`，不从 `ReleaseContext`、分支或模板配置反向推导。
 
 Node adapter 解析 `package.json` 时，缺失 `version` 必须视为 `0.0.0`，以支持未声明版本的模板项目；显式但无效的 `version` 仍必须报告解析错误。版本写入和 `FileEdit` 规划必须在缺失时插入目标 `version` 字段。
 
@@ -906,6 +992,17 @@ pub trait CommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput, CommandError>;
 }
 
+pub struct CommandSpec {
+    pub executable: String,
+    pub args: Vec<String>,
+    pub environment: BTreeMap<String, String>,
+    pub working_directory: Utf8PathBuf,
+    pub phase: CommandPhase,
+    pub stdout: StdioPolicy,
+    pub stderr: StdioPolicy,
+    pub run_in_dry_run: bool,
+}
+
 #[async_trait]
 pub trait RegistryClient {
     async fn version_exists(&self, check: &RegistryCheck) -> Result<bool, RegistryError>;
@@ -922,8 +1019,26 @@ pub trait ForgeClient {
         &self,
         commit: &CommitId,
     ) -> Result<Option<PullRequestInfo>, ForgeError>;
+
+    async fn create_release(
+        &self,
+        release: &ForgeRelease,
+    ) -> Result<ForgeReleaseOutcome, ForgeError>;
+
+    async fn upload_asset(
+        &self,
+        release: &ForgeReleaseId,
+        name: &str,
+        content: Vec<u8>,
+    ) -> Result<(), ForgeError>;
 }
 ```
+
+`ForgeRelease` 包含 repository、package tag、标题、changelog body 与 prerelease 标记；
+`ForgeReleaseOutcome` 显式区分已创建和已存在，并在可上传 asset 时返回稳定的
+`ForgeReleaseId`。engine 通过 `FileSystem` 读取 asset bytes，Forge adapter 不读取本地路径。
+`CommandSpec.run_in_dry_run` 来自配置字段 `dry-run`；它不是命令自身的模拟参数，而是全局
+dry-run 下调用 `CommandRunner` 的显式许可。
 
 不需要在第一次迁移中抽象所有 IO。优先抽出 `FileSystem`、`CommandRunner` 和 `RegistryClient`，因为它们直接决定 plan/apply 的可测试性。
 
@@ -946,7 +1061,10 @@ Post-version 子进程不可能真正纳入跨进程事务。在执行前应尽�
 
 生产代码不得使用会 panic 的 `unwrap()` 处理外部输入、文件系统、配置或领域查询结果；这些失败必须通过类型化错误或可传播错误返回。只有已由类型、构造器或同一函数内穷尽分支证明的内部不变量可以使用 `expect()`，且消息必须说明该不变量；不得把可恢复失败标记为不变量。测试代码中的断言性使用不属于运行时失败路径。
 
-`--dry-run` 只执行规划和验证并渲染结果，不调用写入器或命令运行器。
+`--dry-run` 不调用 Semifold 文件写入器，不创建外部 package release，也不上传 asset；
+它仍执行只读 registry preflight，并仅对 `run_in_dry_run = true` 的命令调用
+`CommandRunner`。这类命令可能具有用户定义的副作用，因此结构化报告必须明确列出实际执行
+与跳过的命令；该行为是配置的显式授权，不得由 engine 猜测命令是否安全。
 
 ## 12. Changelog 设计
 
@@ -982,6 +1100,12 @@ Changelog 生成应分为两部分：
 ## 13. `config` 指令设计
 
 ### 13.1 目标
+
+Semifold 的 TOML 与 JSON 配置字段统一使用 kebab-case。所有 Rust 字段名中包含下划线的
+配置键必须映射为连字符形式，例如 `dry-run`、`extra-env`、`extra-headers`、`pre-check`、
+`post-version`、`channel-bump` 与 `depends-on`。本次格式切换不为 snake_case 字段提供 alias
+或迁移兼容；仓库自带配置、初始化模板、文档示例和测试 fixture 必须同时切换。Rust 内部字段名
+不受影响，模板变量与 locale key 也不属于配置字段，不随此规则改名。
 
 `init` 只负责首次创建 Semifold 配置。工作区在后续开发中新增、删除、移动或重命名包时，不应要求用户重复执行 `init`，也不应覆盖已经手工维护的发布命令、assets、version mode 和跨生态依赖。
 
@@ -1655,6 +1779,8 @@ adapter 暴露旧 `ResolvedPackage`。
   `PublishContext` 和按场景构造的只读模板视图；
 - 从已验证 `ReleasePlan` 确定性派生 `common_version` 与 plan fingerprint；
 - 将 `branches.release` 作为严格 MiniJinja 模板渲染并校验，保持现有字面量配置兼容；
+- 以同一个 `ReleaseContext` 构造一次性 `ReleasePullRequestContext`，并通过固定兼容 renderer
+  生成稳定排序的 release PR 标题与正文；
 - 引入 `PublishPlan`；
 - 抽出 `CommandRunner` 和 `RegistryClient`；
 - 将重复 publish 实现替换为统一 publisher；
@@ -1684,11 +1810,12 @@ adapter 暴露旧 `ResolvedPackage`。
 3. 包顺序由统一跨生态依赖图拓扑计算。
 4. 依赖环返回包含完整环路的错误。
 5. 所有文件修改在写入前已完整计划和验证。
-6. `--dry-run` 不调用写入器、命令运行器或发布客户端。
+6. `--dry-run` 不调用 Semifold 文件写入器或 Forge 发布客户端；registry preflight 仍执行，
+   且只有配置为 `dry-run = true` 的命令可以调用命令运行器。
 7. 各生态至少有单包、workspace、内部依赖和版本重写 fixture。
 8. CLI、CI 和 MCP 使用同一 application service，不复制发布计算。
 9. 无任何发布计算依赖 `RefCell` 或处理顺序中逐步填充的全局 map。
-10. 保持现有 CLI 主要用法和配置文件兼容，新的跨生态依赖配置为可选扩展。
+10. 保持现有 CLI 主要用法；TOML/JSON 配置字段统一为 kebab-case，不兼容 snake_case 字段。
 11. `smif config sync` 能增量同步工作区包，并保留 TOML 注释、顺序、未知字段和手工配置。
 12. 缺失包默认不删除，只有完整扫描成功且显式指定 `--prune` 时才允许删除。
 13. `smif config sync --check` 可用于 CI 检测配置漂移。
@@ -1715,10 +1842,10 @@ adapter 暴露旧 `ResolvedPackage`。
 7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。
 8. 未启用 resolver 但发现对应生态 manifest 时，是提示用户启用，还是允许 `--resolver` 自动创建默认 resolver 配置。
 9. rename 后是否提供独立 `--rewrite-changesets` 选项更新尚未消费的 changeset，默认行为仍是不修改。
-10. Rust `package.version.workspace = true` 应如何表示多个 package 共享同一
-    manifest 版本位置；决策必须同时定义 bump 合并、channel 一致性、发布闭包、
-    private crate 以及 `[workspace.package].version` 单点编辑规则，且不从
-    `ReleaseContext` 反向推导该关系。
+10. [已决定] Rust `package.version.workspace = true` 以 manifest 派生的共享
+    `VersionSourceId` 表示；组内取最高 bump，要求 channel 与 `channel-bump` 一致，全部成员进入
+    版本闭包，private 成员参与计算但跳过 publish，并只编辑一次
+    `[workspace.package].version`。该关系不从 `ReleaseContext` 推导。
 
 ### 19.1 低优先级优化：首次发布状态
 

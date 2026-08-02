@@ -171,13 +171,14 @@ mod tests {
     use semver::Version;
 
     use super::*;
-    use crate::{Dependency, DependencyKind, DependencySource, Ecosystem};
+    use crate::{Dependency, DependencyKind, DependencySource, Ecosystem, VersionSource};
 
     fn package(id: &str, dependencies: &[&str]) -> PackageSnapshot {
         PackageSnapshot {
             id: PackageId::new(id),
             manifest_name: id.to_owned(),
             version: Version::new(1, 0, 0),
+            version_source: VersionSource::PackageManifest,
             ecosystem: Ecosystem::Rust,
             path: Utf8PathBuf::from(format!("crates/{id}")),
             publishable: true,

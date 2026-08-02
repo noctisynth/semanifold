@@ -4,6 +4,7 @@
 pub mod changeset;
 pub mod config_sync;
 pub mod dependency;
+pub mod error;
 pub mod file_edit;
 pub mod package;
 pub mod planner;
@@ -18,6 +19,7 @@ pub use config_sync::{
     ConfiguredPackage, DiscoveredPackage, PackageMove, PackageRename,
 };
 pub use dependency::{Dependency, DependencyKind, DependencySource};
+pub use error::DomainError;
 pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash, SharedVersionEdit};
 pub use package::{Ecosystem, PackageId, PackageSnapshot, VersionSource, VersionSourceId};
 pub use planner::{

@@ -64,7 +64,7 @@ impl ReleasePlanner {
             }
         }
 
-        Self::propagate_shared_versions(&shared_version_groups, &mut levels, &mut reasons);
+        Self::propagate_shared_versions(&shared_version_groups, &mut levels, &mut reasons)?;
 
         let dependents = Self::dependents(policies);
         let mut pending = levels
@@ -74,18 +74,28 @@ impl ReleasePlanner {
             })
             .collect::<BTreeSet<_>>();
         while let Some(dependency) = pending.pop_first() {
-            let snapshot = graph
-                .package(&dependency)
-                .expect("release package ids are derived from the workspace graph");
-            let dependency_next = bump_with_policy(
-                &snapshot.version,
-                levels[&dependency],
-                &policies[&dependency],
-            )
-            .map_err(|source| ReleasePlannerError::InvalidVersionTransition {
-                package: dependency.clone(),
-                source,
+            let snapshot = graph.package(&dependency).ok_or_else(|| {
+                ReleasePlannerError::WorkspacePackageMissing {
+                    package: dependency.clone(),
+                }
             })?;
+            let level = levels.get(&dependency).copied().ok_or_else(|| {
+                ReleasePlannerError::ReleaseLevelMissing {
+                    package: dependency.clone(),
+                }
+            })?;
+            let policy = policies.get(&dependency).ok_or_else(|| {
+                ReleasePlannerError::MissingPackagePolicy {
+                    package: dependency.clone(),
+                }
+            })?;
+            let dependency_next =
+                bump_with_policy(&snapshot.version, level, policy).map_err(|source| {
+                    ReleasePlannerError::InvalidVersionTransition {
+                        package: dependency.clone(),
+                        source,
+                    }
+                })?;
 
             for (dependent, requirement) in dependents.get(&dependency).into_iter().flatten() {
                 if requirement
@@ -100,9 +110,11 @@ impl ReleasePlanner {
                         next_version: dependency_next.clone(),
                     },
                 );
-                let level = levels
-                    .get_mut(dependent)
-                    .expect("validated policy dependents must have release levels");
+                let level = levels.get_mut(dependent).ok_or_else(|| {
+                    ReleasePlannerError::ReleaseLevelMissing {
+                        package: dependent.clone(),
+                    }
+                })?;
                 if *level == BumpLevel::Unchanged {
                     *level = BumpLevel::Patch;
                     pending.insert(dependent.clone());
@@ -110,7 +122,7 @@ impl ReleasePlanner {
                         &shared_version_groups,
                         &mut levels,
                         &mut reasons,
-                    ));
+                    )?);
                 }
             }
         }
@@ -119,17 +131,28 @@ impl ReleasePlanner {
         let mut packages = Vec::new();
         let mut warnings = Vec::new();
         for snapshot in graph.packages() {
-            let bump = levels[&snapshot.id];
-            let next_version = bump_with_policy(&snapshot.version, bump, &policies[&snapshot.id])
-                .map_err(|source| ReleasePlannerError::InvalidVersionTransition {
-                package: snapshot.id.clone(),
-                source,
+            let bump = levels.get(&snapshot.id).copied().ok_or_else(|| {
+                ReleasePlannerError::ReleaseLevelMissing {
+                    package: snapshot.id.clone(),
+                }
             })?;
+            let policy = policies.get(&snapshot.id).ok_or_else(|| {
+                ReleasePlannerError::MissingPackagePolicy {
+                    package: snapshot.id.clone(),
+                }
+            })?;
+            let next_version =
+                bump_with_policy(&snapshot.version, bump, policy).map_err(|source| {
+                    ReleasePlannerError::InvalidVersionTransition {
+                        package: snapshot.id.clone(),
+                        source,
+                    }
+                })?;
             versions.insert(snapshot.id.clone(), next_version.clone());
             if bump == BumpLevel::Unchanged {
                 continue;
             }
-            if matches!(policies[&snapshot.id].channel, ReleaseChannel::Stable)
+            if matches!(policy.channel, ReleaseChannel::Stable)
                 && !snapshot.version.pre.is_empty()
                 && !matches!(bump, BumpLevel::Patch)
             {
@@ -155,7 +178,11 @@ impl ReleasePlanner {
         let order = graph
             .topological_order()?
             .into_iter()
-            .filter(|package| levels[package] != BumpLevel::Unchanged)
+            .filter(|package| {
+                levels
+                    .get(package)
+                    .is_some_and(|level| *level != BumpLevel::Unchanged)
+            })
             .collect();
         ReleasePlan::new(
             packages,
@@ -248,14 +275,22 @@ impl ReleasePlanner {
             let Some(first_id) = packages.first() else {
                 continue;
             };
-            let first = graph
-                .package(first_id)
-                .expect("shared version groups are derived from workspace packages");
-            let first_policy = &policies[first_id];
+            let first = graph.package(first_id).ok_or_else(|| {
+                ReleasePlannerError::WorkspacePackageMissing {
+                    package: first_id.clone(),
+                }
+            })?;
+            let first_policy = policies.get(first_id).ok_or_else(|| {
+                ReleasePlannerError::MissingPackagePolicy {
+                    package: first_id.clone(),
+                }
+            })?;
             for package_id in packages.iter().skip(1) {
-                let package = graph
-                    .package(package_id)
-                    .expect("shared version groups are derived from workspace packages");
+                let package = graph.package(package_id).ok_or_else(|| {
+                    ReleasePlannerError::WorkspacePackageMissing {
+                        package: package_id.clone(),
+                    }
+                })?;
                 if package.version != first.version {
                     return Err(ReleasePlannerError::SharedVersionMismatch {
                         version_source: source.clone(),
@@ -265,7 +300,11 @@ impl ReleasePlanner {
                         version: Box::new(package.version.clone()),
                     });
                 }
-                let policy = &policies[package_id];
+                let policy = policies.get(package_id).ok_or_else(|| {
+                    ReleasePlannerError::MissingPackagePolicy {
+                        package: package_id.clone(),
+                    }
+                })?;
                 if policy.channel != first_policy.channel {
                     return Err(ReleasePlannerError::SharedVersionChannelMismatch {
                         version_source: source.clone(),
@@ -289,21 +328,29 @@ impl ReleasePlanner {
         groups: &BTreeMap<VersionSourceId, Vec<PackageId>>,
         levels: &mut BTreeMap<PackageId, BumpLevel>,
         reasons: &mut BTreeMap<PackageId, BTreeSet<ReleaseReason>>,
-    ) -> BTreeSet<PackageId> {
+    ) -> Result<BTreeSet<PackageId>, ReleasePlannerError> {
         let mut changed = BTreeSet::new();
         for (source, packages) in groups {
             let bump = packages
                 .iter()
-                .map(|package| levels[package])
-                .max()
-                .unwrap_or(BumpLevel::Unchanged);
+                .try_fold(BumpLevel::Unchanged, |highest, package| {
+                    levels
+                        .get(package)
+                        .copied()
+                        .map(|level| highest.max(level))
+                        .ok_or_else(|| ReleasePlannerError::ReleaseLevelMissing {
+                            package: package.clone(),
+                        })
+                })?;
             if bump == BumpLevel::Unchanged {
                 continue;
             }
             for package in packages {
-                let level = levels
-                    .get_mut(package)
-                    .expect("shared version groups only contain planned packages");
+                let level = levels.get_mut(package).ok_or_else(|| {
+                    ReleasePlannerError::ReleaseLevelMissing {
+                        package: package.clone(),
+                    }
+                })?;
                 if *level < bump {
                     *level = bump;
                     reasons.entry(package.clone()).or_default().insert(
@@ -315,7 +362,7 @@ impl ReleasePlanner {
                 }
             }
         }
-        changed
+        Ok(changed)
     }
 }
 
@@ -346,6 +393,10 @@ fn bump_with_policy(
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ReleasePlannerError {
+    #[error("workspace package disappeared during release planning: {package}")]
+    WorkspacePackageMissing { package: PackageId },
+    #[error("release level is missing for package: {package}")]
+    ReleaseLevelMissing { package: PackageId },
     #[error("missing release policy for package: {package}")]
     MissingPackagePolicy { package: PackageId },
     #[error("release policy references unknown package: {package}")]

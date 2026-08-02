@@ -2134,7 +2134,6 @@ dependencies = [
  "git2",
  "octocrab",
  "pathdiff",
- "regex",
  "semifold-core",
  "semifold-resolver",
  "semver",
@@ -2156,7 +2155,6 @@ dependencies = [
 name = "semifold-engine"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bytes",
  "camino",
  "git2",

@@ -1,13 +1,16 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_core::{
     BumpLevel, ChangesetId, ChangesetInput, DependencyKind, DependencySource, Ecosystem, PackageId,
-    PackageReleasePolicy, ReleaseChannel, ReleaseContext, ReleasePlan, ReleasePlanner,
-    ReleasePolicies, WorkspaceGraph,
+    PackageReleasePolicy, ReleaseChannel, ReleaseContext, ReleasePlan, ReleasePlanError,
+    ReleasePlanner, ReleasePlannerError, ReleasePolicies, WorkspaceGraph,
 };
 use semifold_resolver::{
-    adapter::{EcosystemAdapter, EcosystemPlanInput},
+    adapter::{AdapterError, EcosystemAdapter, EcosystemPlanInput},
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{ChannelBump, Config, ReleaseChannel as ResolverReleaseChannel},
     resolver::{
@@ -15,8 +18,9 @@ use semifold_resolver::{
     },
 };
 use semver::VersionReq;
+use thiserror::Error;
 
-use crate::workspace::load_workspace_graph;
+use crate::workspace::{WorkspaceLoadError, load_workspace_graph};
 
 pub struct ReleasePullRequestContext<'a> {
     pub release: &'a ReleaseContext,
@@ -53,7 +57,10 @@ pub fn render_release_pull_request(
     }
 }
 
-pub fn render_release_branch(template: &str, release: &ReleaseContext) -> anyhow::Result<String> {
+pub fn render_release_branch(
+    template: &str,
+    release: &ReleaseContext,
+) -> Result<String, ReleaseBranchRenderError> {
     let mut release_value = serde_json::to_value(release)?;
     if release.plan.common_version.is_none()
         && let Some(plan) = release_value
@@ -69,7 +76,7 @@ pub fn render_release_branch(template: &str, release: &ReleaseContext) -> anyhow
     let branch = environment.render_str(template, context!(release => release_value))?;
     let reference = format!("refs/heads/{branch}");
     if !git2::Reference::is_valid_name(&reference) {
-        anyhow::bail!("rendered release branch is not a valid Git branch: {branch}");
+        return Err(ReleaseBranchRenderError::InvalidGitBranch { branch });
     }
     Ok(branch)
 }
@@ -79,7 +86,7 @@ pub fn plan_release(
     root: &Path,
     config: &Config,
     changesets: &[Changeset],
-) -> anyhow::Result<ReleasePlan> {
+) -> Result<ReleasePlan, ReleasePlanningError> {
     let graph = load_workspace_graph(root, config)?;
     let changesets = changeset_inputs(changesets);
     let policies = release_policies(&graph, config)?;
@@ -95,8 +102,11 @@ pub fn plan_release(
         .filter(|release| release.ecosystem == Ecosystem::Rust)
         .map(|release| release.id.clone())
         .collect::<Vec<_>>();
-    let project_root = camino::Utf8Path::from_path(root)
-        .ok_or_else(|| anyhow::anyhow!("project root is not valid UTF-8"))?;
+    let project_root = camino::Utf8Path::from_path(root).ok_or_else(|| {
+        ReleasePlanningError::NonUtf8ProjectRoot {
+            path: root.to_path_buf(),
+        }
+    })?;
     let mut file_edits = RustResolver.plan_edits(EcosystemPlanInput {
         project_root,
         workspace_packages: &rust_workspace_packages,
@@ -177,11 +187,18 @@ fn changeset_inputs(changesets: &[Changeset]) -> Vec<ChangesetInput> {
         .collect()
 }
 
-fn release_policies(graph: &WorkspaceGraph, config: &Config) -> anyhow::Result<ReleasePolicies> {
+fn release_policies(
+    graph: &WorkspaceGraph,
+    config: &Config,
+) -> Result<ReleasePolicies, ReleasePlanningError> {
     graph
         .packages()
         .map(|package| {
-            let package_config = &config.packages[package.id.as_str()];
+            let package_config = config.packages.get(package.id.as_str()).ok_or_else(|| {
+                ReleasePlanningError::ConfiguredPackageMissing {
+                    package: package.id.clone(),
+                }
+            })?;
             let mut propagating_dependencies = BTreeMap::new();
             for dependency in &package.dependencies {
                 let manifest_runtime = dependency.source == DependencySource::Manifest
@@ -197,7 +214,14 @@ fn release_policies(graph: &WorkspaceGraph, config: &Config) -> anyhow::Result<R
                         .requirement
                         .as_deref()
                         .map(VersionReq::parse)
-                        .transpose()?
+                        .transpose()
+                        .map_err(
+                            |source| ReleasePlanningError::InvalidDependencyRequirement {
+                                package: package.id.clone(),
+                                dependency: dependency.package.clone(),
+                                source,
+                            },
+                        )?
                 };
                 if dependency.source == DependencySource::Config {
                     propagating_dependencies.insert(dependency.package.clone(), None);
@@ -217,6 +241,39 @@ fn release_policies(graph: &WorkspaceGraph, config: &Config) -> anyhow::Result<R
             ))
         })
         .collect()
+}
+
+#[derive(Debug, Error)]
+pub enum ReleaseBranchRenderError {
+    #[error("failed to serialize release branch context")]
+    Serialize(#[from] serde_json::Error),
+    #[error("failed to render release branch template")]
+    Template(#[from] minijinja::Error),
+    #[error("rendered release branch is not a valid Git branch: {branch}")]
+    InvalidGitBranch { branch: String },
+}
+
+#[derive(Debug, Error)]
+pub enum ReleasePlanningError {
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceLoadError),
+    #[error("configured release package is missing: {package}")]
+    ConfiguredPackageMissing { package: PackageId },
+    #[error("project root is not valid UTF-8: {path:?}")]
+    NonUtf8ProjectRoot { path: PathBuf },
+    #[error("invalid dependency requirement from {package} to {dependency}")]
+    InvalidDependencyRequirement {
+        package: PackageId,
+        dependency: PackageId,
+        #[source]
+        source: semver::Error,
+    },
+    #[error(transparent)]
+    Domain(#[from] ReleasePlannerError),
+    #[error(transparent)]
+    Adapter(#[from] AdapterError),
+    #[error("invalid release plan")]
+    ReleasePlan(#[from] ReleasePlanError),
 }
 
 const fn bump_level(level: ResolverBumpLevel) -> BumpLevel {

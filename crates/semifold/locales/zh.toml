@@ -39,6 +39,7 @@ level = "要提升的版本级别"
 summary = "变更摘要"
 
 [cli.init]
+asset_missing = "内置初始化资源 %{name} 不可用"
 already_initialized = "Semifold 已经初始化。工作区包变更请使用 `smif config sync`；仅在重新初始化时使用 `init --force`。"
 not_repo_root = "当前目录不是仓库根目录。"
 continue = "是否继续？"

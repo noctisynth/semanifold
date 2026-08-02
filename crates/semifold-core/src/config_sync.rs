@@ -127,9 +127,9 @@ impl ConfigSyncPlanner {
             }
             let mut ecosystems = BTreeMap::<Ecosystem, usize>::new();
             for discovered_index in discovered_indexes {
-                *ecosystems
-                    .entry(discovered[*discovered_index].ecosystem)
-                    .or_default() += 1;
+                if let Some(package) = discovered.get(*discovered_index) {
+                    *ecosystems.entry(package.ecosystem).or_default() += 1;
+                }
             }
             if ecosystems.values().all(|count| *count == 1) {
                 continue;
@@ -140,8 +140,9 @@ impl ConfigSyncPlanner {
                 .filter_map(|(index, package)| {
                     (package.id == *id
                         || discovered_indexes.iter().any(|discovered_index| {
-                            let found = &discovered[*discovered_index];
-                            package.ecosystem == found.ecosystem && package.path == found.path
+                            discovered.get(*discovered_index).is_some_and(|found| {
+                                package.ecosystem == found.ecosystem && package.path == found.path
+                            })
                         }))
                     .then_some(index)
                 })
@@ -178,11 +179,13 @@ impl ConfigSyncPlanner {
             let Some(discovered_indexes) = discovered_by_location.get(&location) else {
                 continue;
             };
-            if configured_indexes.len() == 1 && discovered_indexes.len() == 1 {
-                let configured_index = configured_indexes[0];
-                let discovered_index = discovered_indexes[0];
-                let current = &configured[configured_index];
-                let found = &discovered[discovered_index];
+            if let ([configured_index], [discovered_index]) =
+                (configured_indexes.as_slice(), discovered_indexes.as_slice())
+                && let (Some(current), Some(found)) = (
+                    configured.get(*configured_index),
+                    discovered.get(*discovered_index),
+                )
+            {
                 if current.id != found.id && !colliding_discovered_ids.contains(&found.id) {
                     renamed.push(PackageRename {
                         from: current.id.clone(),
@@ -191,8 +194,8 @@ impl ConfigSyncPlanner {
                         path: found.path.clone(),
                     });
                 }
-                matches.configured.insert(configured_index);
-                matches.discovered.insert(discovered_index);
+                matches.configured.insert(*configured_index);
+                matches.discovered.insert(*discovered_index);
             } else {
                 matches.push_ambiguous(
                     &configured_indexes,
@@ -255,11 +258,13 @@ impl ConfigSyncPlanner {
             let Some(discovered_indexes) = discovered_by_id.get(&id) else {
                 continue;
             };
-            if configured_indexes.len() == 1 && discovered_indexes.len() == 1 {
-                let configured_index = configured_indexes[0];
-                let discovered_index = discovered_indexes[0];
-                let current = &configured[configured_index];
-                let found = &discovered[discovered_index];
+            if let ([configured_index], [discovered_index]) =
+                (configured_indexes.as_slice(), discovered_indexes.as_slice())
+                && let (Some(current), Some(found)) = (
+                    configured.get(*configured_index),
+                    discovered.get(*discovered_index),
+                )
+            {
                 if current.ecosystem == found.ecosystem {
                     moved.push(PackageMove {
                         package: found.id.clone(),
@@ -273,8 +278,8 @@ impl ConfigSyncPlanner {
                         discovered: found.clone(),
                     });
                 }
-                matches.configured.insert(configured_index);
-                matches.discovered.insert(discovered_index);
+                matches.configured.insert(*configured_index);
+                matches.discovered.insert(*discovered_index);
             } else {
                 matches.push_ambiguous(
                     &configured_indexes,
@@ -307,15 +312,19 @@ impl ConfigSyncPlanner {
             let Some(discovered_indexes) = discovered_by_path.get(&path) else {
                 continue;
             };
-            if configured_indexes.len() == 1 && discovered_indexes.len() == 1 {
-                let configured_index = configured_indexes[0];
-                let discovered_index = discovered_indexes[0];
+            if let ([configured_index], [discovered_index]) =
+                (configured_indexes.as_slice(), discovered_indexes.as_slice())
+                && let (Some(configured_package), Some(discovered_package)) = (
+                    configured.get(*configured_index),
+                    discovered.get(*discovered_index),
+                )
+            {
                 matches.conflicts.push(ConfigConflict::ResolverChanged {
-                    configured: configured[configured_index].clone(),
-                    discovered: discovered[discovered_index].clone(),
+                    configured: configured_package.clone(),
+                    discovered: discovered_package.clone(),
                 });
-                matches.configured.insert(configured_index);
-                matches.discovered.insert(discovered_index);
+                matches.configured.insert(*configured_index);
+                matches.discovered.insert(*discovered_index);
             } else {
                 matches.push_ambiguous(
                     &configured_indexes,
@@ -392,11 +401,11 @@ impl MatchTracker {
         self.conflicts.push(ConfigConflict::AmbiguousMatch {
             configured: configured_indexes
                 .iter()
-                .map(|index| configured[*index].clone())
+                .filter_map(|index| configured.get(*index).cloned())
                 .collect(),
             discovered: discovered_indexes
                 .iter()
-                .map(|index| discovered[*index].clone())
+                .filter_map(|index| discovered.get(*index).cloned())
                 .collect(),
         });
         self.configured.extend(configured_indexes);

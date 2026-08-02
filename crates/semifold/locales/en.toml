@@ -39,6 +39,7 @@ level = "Level of version bump"
 summary = "Summary of changes"
 
 [cli.init]
+asset_missing = "Embedded initialization asset %{name} is unavailable"
 already_initialized = "Semifold is already initialized. Use `smif config sync` for workspace package changes; use `init --force` only to re-initialize."
 not_repo_root = "Current directory is not the root of the repository."
 continue = "Continue?"

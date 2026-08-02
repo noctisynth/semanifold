@@ -74,7 +74,7 @@ impl WorkspaceGraph {
             Ok(order)
         } else {
             Err(WorkspaceGraphError::DependencyCycle {
-                cycle: self.find_cycle(&remaining_dependencies),
+                cycle: self.find_cycle(&remaining_dependencies)?,
             })
         }
     }
@@ -82,7 +82,7 @@ impl WorkspaceGraph {
     fn find_cycle(
         &self,
         remaining_dependencies: &BTreeMap<PackageId, BTreeSet<PackageId>>,
-    ) -> Vec<PackageId> {
+    ) -> Result<Vec<PackageId>, WorkspaceGraphError> {
         let mut visited = BTreeSet::new();
         let mut stack = Vec::new();
         let mut visiting = BTreeSet::new();
@@ -95,11 +95,11 @@ impl WorkspaceGraph {
                 &mut visiting,
                 &mut stack,
             ) {
-                return cycle;
+                return Ok(cycle);
             }
         }
 
-        unreachable!("a non-empty graph with no topological order contains a cycle")
+        Err(WorkspaceGraphError::CycleDetectionFailed)
     }
 
     fn visit(
@@ -110,7 +110,7 @@ impl WorkspaceGraph {
         stack: &mut Vec<PackageId>,
     ) -> Option<Vec<PackageId>> {
         if let Some(cycle_start) = stack.iter().position(|package| package == id) {
-            let mut cycle = stack[cycle_start..].to_vec();
+            let mut cycle = stack.iter().skip(cycle_start).cloned().collect::<Vec<_>>();
             cycle.push(id.clone());
             return Some(cycle);
         }
@@ -120,7 +120,8 @@ impl WorkspaceGraph {
 
         visiting.insert(id.clone());
         stack.push(id.clone());
-        for dependency in &remaining_dependencies[id] {
+        let dependencies = remaining_dependencies.get(id)?;
+        for dependency in dependencies {
             if let Some(cycle) =
                 Self::visit(dependency, remaining_dependencies, visited, visiting, stack)
             {
@@ -145,6 +146,8 @@ pub enum WorkspaceGraphError {
     },
     #[error("dependency cycle: {}", display_cycle(.cycle))]
     DependencyCycle { cycle: Vec<PackageId> },
+    #[error("failed to identify a dependency cycle in the remaining graph")]
+    CycleDetectionFailed,
 }
 
 fn display_cycle(cycle: &[PackageId]) -> DependencyCycleDisplay<'_> {

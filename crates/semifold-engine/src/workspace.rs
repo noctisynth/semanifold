@@ -1,15 +1,22 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
-use anyhow::Context as _;
 use semifold_core::{
-    Dependency, DependencyKind, DependencySource, PackageId, PackageSnapshot, WorkspaceGraph,
+    Dependency, DependencyKind, DependencySource, Ecosystem, PackageId, PackageSnapshot,
+    WorkspaceGraph, WorkspaceGraphError,
 };
 use semifold_resolver::{
-    adapter::{PackageInspection, PackageLocation},
+    adapter::{AdapterError, PackageInspection, PackageLocation},
     config::Config,
 };
+use thiserror::Error;
 
-use crate::{discovery::ResolverRegistry, package_path::normalize_package_path};
+use crate::{
+    discovery::ResolverRegistry,
+    package_path::{PackagePathError, normalize_package_path},
+};
 
 #[derive(Debug)]
 struct ConfiguredInspection {
@@ -17,14 +24,15 @@ struct ConfiguredInspection {
     explicit_dependencies: Vec<PackageId>,
 }
 
-pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<WorkspaceGraph> {
+pub fn load_workspace_graph(
+    root: &Path,
+    config: &Config,
+) -> Result<WorkspaceGraph, WorkspaceLoadError> {
     let mut resolved = Vec::with_capacity(config.packages.len());
     let registry = ResolverRegistry;
     for (id, package_config) in &config.packages {
-        let project_root =
-            camino::Utf8PathBuf::from_path_buf(root.to_path_buf()).map_err(|path| {
-                anyhow::anyhow!("project root is not valid UTF-8: {}", path.display())
-            })?;
+        let project_root = camino::Utf8PathBuf::from_path_buf(root.to_path_buf())
+            .map_err(|path| WorkspaceLoadError::NonUtf8Path { path })?;
         let path = normalize_package_path(root, &package_config.path)?;
         let inspection =
             registry
@@ -45,21 +53,22 @@ pub fn load_workspace_graph(root: &Path, config: &Config) -> anyhow::Result<Work
 fn workspace_graph_from_inspections(
     root: &Path,
     resolved: Vec<ConfiguredInspection>,
-) -> anyhow::Result<WorkspaceGraph> {
+) -> Result<WorkspaceGraph, WorkspaceLoadError> {
     let mut package_ids = BTreeMap::new();
     for package in &resolved {
         let key = (
             package.package.ecosystem,
             package.package.manifest_name.clone(),
         );
-        anyhow::ensure!(
-            package_ids
-                .insert(key, package.package.id.clone())
-                .is_none(),
-            "duplicate manifest package name {} in {:?}",
-            package.package.manifest_name,
-            package.package.ecosystem
-        );
+        if package_ids
+            .insert(key, package.package.id.clone())
+            .is_some()
+        {
+            return Err(WorkspaceLoadError::DuplicateManifestName {
+                name: package.package.manifest_name.clone(),
+                ecosystem: package.package.ecosystem,
+            });
+        }
     }
 
     let snapshots = resolved
@@ -101,9 +110,23 @@ fn workspace_graph_from_inspections(
                 dependencies,
             })
         })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, WorkspaceLoadError>>()?;
 
-    WorkspaceGraph::new(snapshots).context("failed to build workspace graph")
+    WorkspaceGraph::new(snapshots).map_err(WorkspaceLoadError::Domain)
+}
+
+#[derive(Debug, Error)]
+pub enum WorkspaceLoadError {
+    #[error("workspace path is not valid UTF-8: {path:?}")]
+    NonUtf8Path { path: PathBuf },
+    #[error("duplicate manifest package name {name} in {ecosystem:?}")]
+    DuplicateManifestName { name: String, ecosystem: Ecosystem },
+    #[error(transparent)]
+    PackagePath(#[from] PackagePathError),
+    #[error(transparent)]
+    Adapter(#[from] AdapterError),
+    #[error(transparent)]
+    Domain(#[from] WorkspaceGraphError),
 }
 
 #[cfg(test)]
@@ -360,13 +383,15 @@ mod tests {
 
         let error = load_workspace_graph(&root.0, &config).unwrap_err();
 
-        assert_eq!(
-            error.downcast_ref::<WorkspaceGraphError>(),
-            Some(&WorkspaceGraphError::UnknownDependency {
-                package: PackageId::new("node-binding"),
-                dependency: PackageId::new("missing-core"),
-            })
-        );
+        let WorkspaceLoadError::Domain(WorkspaceGraphError::UnknownDependency {
+            package,
+            dependency,
+        }) = error
+        else {
+            panic!("expected an unknown dependency error");
+        };
+        assert_eq!(package, PackageId::new("node-binding"));
+        assert_eq!(dependency, PackageId::new("missing-core"));
     }
 
     #[test]

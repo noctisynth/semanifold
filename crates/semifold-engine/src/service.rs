@@ -9,15 +9,16 @@ use crate::{
     config_editor::{ConfigEditError, TomlConfigEditor},
     config_sync::{ConfigSyncPlanningError, config_sync_scope, plan_config_sync},
     project::Project,
-    publish_plan::{PublishOptions, PublishPlan},
+    publish_plan::{PublishOptions, PublishPlan, PublishPlanError},
     publisher::{CommandRunner, SystemCommandRunner},
     publisher::{
         ForgeExecution, GithubForgeClient, HttpRegistryClient, PublishExecutionError,
         PublishReport, SystemAssetResolver, SystemFileSystem, execute_publish_plan,
     },
-    release,
+    release::{self, ReleasePlanningError},
     release_apply::{
         ApplyReport, ExecutionMode, ReleaseApplyError, ReleaseApplyPlan, ReleaseExecutionOptions,
+        ReleasePrepareError,
     },
 };
 
@@ -162,7 +163,8 @@ where
         plan: ReleaseApplyPlan,
         mode: ExecutionMode,
     ) -> Result<ApplyReport, AppError> {
-        crate::release_apply::apply_release(&self.deps, plan, mode).map_err(AppError::ReleaseApply)
+        crate::release_apply::apply_release(&self.deps, plan, mode)
+            .map_err(|error| AppError::ReleaseApply(Box::new(error)))
     }
 }
 
@@ -187,7 +189,7 @@ impl SemifoldService<SystemDependencies> {
                 octocrab::Octocrab::builder()
                     .personal_token(token)
                     .build()
-                    .map_err(|error| AppError::PublishSetup(anyhow::Error::from(error)))?
+                    .map_err(AppError::PublishSetup)?
             } else {
                 octocrab::Octocrab::default()
             };
@@ -212,7 +214,7 @@ impl SemifoldService<SystemDependencies> {
             mode == ExecutionMode::DryRun,
         )
         .await
-        .map_err(AppError::PublishExecution)
+        .map_err(|error| AppError::PublishExecution(Box::new(error)))
     }
 }
 
@@ -233,15 +235,15 @@ pub enum AppError {
         source: std::io::Error,
     },
     #[error("failed to plan release: {0}")]
-    ReleasePlan(#[source] anyhow::Error),
+    ReleasePlan(#[source] ReleasePlanningError),
     #[error("failed to prepare release: {0}")]
-    ReleasePrepare(#[source] anyhow::Error),
+    ReleasePrepare(#[source] ReleasePrepareError),
     #[error("failed to apply release: {0}")]
-    ReleaseApply(#[source] ReleaseApplyError),
+    ReleaseApply(#[source] Box<ReleaseApplyError>),
     #[error("failed to plan publish: {0}")]
-    PublishPlan(#[source] anyhow::Error),
+    PublishPlan(#[source] PublishPlanError),
     #[error("failed to initialize publish dependencies: {0}")]
-    PublishSetup(#[source] anyhow::Error),
+    PublishSetup(#[source] octocrab::Error),
     #[error("failed to execute publish plan: {0}")]
-    PublishExecution(#[source] PublishExecutionError),
+    PublishExecution(#[source] Box<PublishExecutionError>),
 }

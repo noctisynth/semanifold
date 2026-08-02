@@ -346,8 +346,9 @@ fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
     let mut document = content.parse::<toml_edit::DocumentMut>()?;
     let mut migrated = BTreeSet::new();
     migrate_snake_case_fields(document.as_table_mut(), &mut migrated)?;
-    let packages = document["packages"]
-        .as_table_mut()
+    let packages = document
+        .get_mut("packages")
+        .and_then(toml_edit::Item::as_table_mut)
         .context(t!("cli.config.missing_packages_table"))?;
 
     for (name, package) in packages.iter_mut() {
@@ -536,8 +537,9 @@ fn plan_channel_update(
     all: bool,
 ) -> anyhow::Result<MigrationPlan> {
     let mut document = content.parse::<toml_edit::DocumentMut>()?;
-    let packages = document["packages"]
-        .as_table_mut()
+    let packages = document
+        .get_mut("packages")
+        .and_then(toml_edit::Item::as_table_mut)
         .context(t!("cli.config.missing_packages_table"))?;
     let targets = if all {
         packages.iter().map(|(name, _)| name.to_string()).collect()

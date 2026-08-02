@@ -307,8 +307,9 @@ fn plan_fingerprint(
         hash_field(&mut hasher, b"changeset", changeset.as_str());
     }
     let digest = hasher.finalize();
-    digest[..6]
+    digest
         .iter()
+        .take(6)
         .map(|byte| format!("{byte:02x}"))
         .collect()
 }

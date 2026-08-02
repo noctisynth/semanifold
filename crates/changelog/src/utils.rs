@@ -3,7 +3,6 @@ use std::path::Path;
 use git2::{DiffOptions, Oid, Repository};
 use octocrab::Octocrab;
 
-use regex::Regex;
 use semifold_resolver::error::ResolveError;
 
 #[derive(Debug)]
@@ -44,10 +43,7 @@ pub async fn query_pr_for_commit(
         }));
     }
 
-    let re = Regex::new(r"\(#(\d+)\)").expect("static pull request regex must compile");
-    if let Some(caps) = re.captures(&commit_info.message)
-        && let Ok(pr_number) = caps[1].parse::<u64>()
-    {
+    if let Some(pr_number) = pull_request_number(&commit_info.message) {
         let pr = octocrab.pulls(owner, repo).get(pr_number).await?;
         return Ok(Some(PrInfo {
             number: pr.number,
@@ -57,6 +53,24 @@ pub async fn query_pr_for_commit(
     }
 
     Ok(None)
+}
+
+fn pull_request_number(message: &str) -> Option<u64> {
+    message.match_indices("(#").find_map(|(start, _)| {
+        let remainder = message.get(start + 2..)?;
+        let digits = remainder
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>();
+        if digits.is_empty()
+            || !remainder
+                .get(digits.len()..)
+                .is_some_and(|suffix| suffix.starts_with(')'))
+        {
+            return None;
+        }
+        digits.parse().ok()
+    })
 }
 
 pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<CommitInfo> {

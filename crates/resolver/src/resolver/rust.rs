@@ -147,17 +147,23 @@ impl RustResolver {
                 let manifest = Self::load_manifest(root, &relative_path, &mut manifests)?;
                 manifest.package = Some(package.id.clone());
                 if matches!(package.version_source, VersionSource::PackageManifest) {
-                    let package_table = manifest.document["package"].as_table_mut().ok_or(
-                        ResolveError::ParseError {
+                    let package_table = manifest
+                        .document
+                        .get_mut("package")
+                        .and_then(toml_edit::Item::as_table_mut)
+                        .ok_or(ResolveError::ParseError {
                             path: root.join(&relative_path),
                             reason: "package table not found".to_string(),
-                        },
-                    )?;
-                    package_table["version"] = toml_edit::value(&encoded_version);
+                        })?;
+                    package_table.insert("version", toml_edit::value(&encoded_version));
                 }
 
                 for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-                    if let Some(dependencies) = manifest.document[dependency_table].as_table_mut() {
+                    if let Some(dependencies) = manifest
+                        .document
+                        .get_mut(dependency_table)
+                        .and_then(toml_edit::Item::as_table_mut)
+                    {
                         manifest
                             .dependencies
                             .extend(Self::update_dependency_versions(
@@ -175,21 +181,22 @@ impl RustResolver {
                     });
                 }
                 let owner = Self::load_manifest(root, source.manifest.as_str(), &mut manifests)?;
-                let workspace =
-                    owner.document["workspace"]
-                        .as_table_mut()
-                        .ok_or(ResolveError::ParseError {
-                            path: root.join(&source.manifest),
-                            reason: "workspace table not found".to_string(),
-                        })?;
-                let workspace_package =
-                    workspace["package"]
-                        .as_table_mut()
-                        .ok_or(ResolveError::ParseError {
-                            path: root.join(&source.manifest),
-                            reason: "workspace.package table not found".to_string(),
-                        })?;
-                workspace_package["version"] = toml_edit::value(encoded_version);
+                let workspace = owner
+                    .document
+                    .get_mut("workspace")
+                    .and_then(toml_edit::Item::as_table_mut)
+                    .ok_or(ResolveError::ParseError {
+                        path: root.join(&source.manifest),
+                        reason: "workspace table not found".to_string(),
+                    })?;
+                let workspace_package = workspace
+                    .get_mut("package")
+                    .and_then(toml_edit::Item::as_table_mut)
+                    .ok_or(ResolveError::ParseError {
+                        path: root.join(&source.manifest),
+                        reason: "workspace.package table not found".to_string(),
+                    })?;
+                workspace_package.insert("version", toml_edit::value(encoded_version));
                 owner
                     .shared_versions
                     .entry(source.clone())
@@ -270,29 +277,28 @@ impl RustResolver {
         relative_path: &str,
         manifests: &'manifests mut BTreeMap<String, PlannedManifest>,
     ) -> Result<&'manifests mut PlannedManifest, ResolveError> {
-        if !manifests.contains_key(relative_path) {
-            let absolute_path = root.join(relative_path);
-            let original = std::fs::read_to_string(&absolute_path)?;
-            let document = original
-                .parse::<toml_edit::DocumentMut>()
-                .map_err(|error| ResolveError::ParseError {
-                    path: absolute_path,
-                    reason: error.to_string(),
-                })?;
-            manifests.insert(
-                relative_path.to_string(),
-                PlannedManifest {
+        use std::collections::btree_map::Entry;
+
+        match manifests.entry(relative_path.to_string()) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => {
+                let absolute_path = root.join(relative_path);
+                let original = std::fs::read_to_string(&absolute_path)?;
+                let document = original
+                    .parse::<toml_edit::DocumentMut>()
+                    .map_err(|error| ResolveError::ParseError {
+                        path: absolute_path,
+                        reason: error.to_string(),
+                    })?;
+                Ok(entry.insert(PlannedManifest {
                     original,
                     document,
                     package: None,
                     dependencies: BTreeSet::new(),
                     shared_versions: BTreeMap::new(),
-                },
-            );
+                }))
+            }
         }
-        Ok(manifests
-            .get_mut(relative_path)
-            .expect("the Rust manifest is inserted immediately before this lookup"))
     }
 
     fn update_dependency_versions(
@@ -610,9 +616,12 @@ impl RustResolver {
             return Ok(vec![package]);
         }
 
-        let workspace = cargo_toml
-            .workspace
-            .expect("workspace presence was checked above");
+        let Some(workspace) = cargo_toml.workspace else {
+            return Err(ResolveError::InvalidConfig {
+                path: cargo_toml_path,
+                reason: "workspace disappeared after manifest parsing".to_string(),
+            });
+        };
         let members = workspace
             .members
             .iter()

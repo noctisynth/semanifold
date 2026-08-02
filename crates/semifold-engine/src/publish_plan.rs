@@ -3,12 +3,17 @@ use std::{collections::BTreeMap, path::Path};
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_changelog::read_latest_changelog;
-use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext};
-use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType};
+use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext, WorkspaceGraphError};
+use semifold_resolver::{
+    config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType},
+    error::ResolveError,
+    resolver::ResolverType,
+};
 use semver::Version;
 use serde::Serialize;
+use thiserror::Error;
 
-use crate::workspace::load_workspace_graph;
+use crate::workspace::{WorkspaceLoadError, load_workspace_graph};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PublishContext {
@@ -119,27 +124,30 @@ pub async fn plan_publish(
     root: &Path,
     config: &Config,
     options: &PublishOptions,
-) -> anyhow::Result<PublishPlan> {
+) -> Result<PublishPlan, PublishPlanError> {
     if options.create_forge_release && options.repository.is_none() {
-        anyhow::bail!("repository context is required to create Forge releases");
+        return Err(PublishPlanError::RepositoryRequired);
     }
     let graph = load_workspace_graph(root, config)?;
     let order = graph.topological_order()?;
     let mut packages = Vec::with_capacity(order.len());
     for id in order {
-        let snapshot = graph
-            .package(&id)
-            .ok_or_else(|| anyhow::anyhow!("workspace graph package {id} is missing"))?;
-        let package_config = config
-            .packages
-            .get(id.as_str())
-            .ok_or_else(|| anyhow::anyhow!("configured package {id} is missing"))?;
-        let resolver_config = config
-            .resolver
-            .get(&package_config.resolver)
-            .ok_or_else(|| {
-                anyhow::anyhow!("resolver config is missing for {}", package_config.resolver)
-            })?;
+        let snapshot =
+            graph
+                .package(&id)
+                .ok_or_else(|| PublishPlanError::WorkspacePackageMissing {
+                    package: id.clone(),
+                })?;
+        let package_config = config.packages.get(id.as_str()).ok_or_else(|| {
+            PublishPlanError::ConfiguredPackageMissing {
+                package: id.clone(),
+            }
+        })?;
+        let resolver_config = config.resolver.get(&package_config.resolver).ok_or(
+            PublishPlanError::ResolverConfigMissing {
+                resolver: package_config.resolver,
+            },
+        )?;
         let package = PublishPackageContext {
             id: id.clone(),
             name: snapshot.manifest_name.clone(),
@@ -150,18 +158,18 @@ pub async fn plan_publish(
             private: !snapshot.publishable,
         };
         let tag_reference = format!("refs/tags/{}", package.tag);
-        anyhow::ensure!(
-            git2::Reference::is_valid_name(&tag_reference),
-            "planned package tag is not a valid Git reference: {}",
-            package.tag
-        );
+        if !git2::Reference::is_valid_name(&tag_reference) {
+            return Err(PublishPlanError::InvalidTag {
+                tag: package.tag.clone(),
+            });
+        }
         let context = PublishContext {
             package,
             repository: options.repository.clone(),
             ci: None,
         };
         let working_directory = Utf8PathBuf::from_path_buf(root.join(&context.package.path))
-            .map_err(|_| anyhow::anyhow!("publish working directory is not valid UTF-8"))?;
+            .map_err(|path| PublishPlanError::NonUtf8Path { path })?;
         let commands = resolver_config
             .prepublish
             .iter()
@@ -176,7 +184,7 @@ pub async fn plan_publish(
             .chain(resolver_config.publish.iter().map(|command| {
                 render_command(command, &context, &working_directory, CommandPhase::Publish)
             }))
-            .collect::<anyhow::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, PublishPlanError>>()?;
 
         let skip_reason = if context.package.private {
             Some(PublishSkipReason::Private)
@@ -190,9 +198,10 @@ pub async fn plan_publish(
             None
         };
         let forge = if options.create_forge_release && skip_reason.is_none() {
-            let repository = options.repository.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("repository context is required to plan a Forge release")
-            })?;
+            let repository = options
+                .repository
+                .as_ref()
+                .ok_or(PublishPlanError::RepositoryRequired)?;
             let changelog_path = root
                 .join(context.package.path.as_std_path())
                 .join("CHANGELOG.md");
@@ -226,23 +235,22 @@ pub async fn plan_publish(
     }
 
     let project_root = Utf8PathBuf::from_path_buf(root.to_path_buf())
-        .map_err(|_| anyhow::anyhow!("project root is not valid UTF-8"))?;
+        .map_err(|path| PublishPlanError::NonUtf8Path { path })?;
     Ok(PublishPlan {
         project_root,
         packages,
     })
 }
 
-fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
+fn plan_assets(configured: &[Asset]) -> Result<Vec<AssetDeclaration>, PublishPlanError> {
     let mut assets = Vec::new();
     for asset in configured {
         match asset {
             Asset::Asset(asset) => {
                 validate_asset_path(&asset.path)?;
-                anyhow::ensure!(
-                    !asset.name.is_empty(),
-                    "release asset name must not be empty"
-                );
+                if asset.name.is_empty() {
+                    return Err(PublishPlanError::EmptyAssetName);
+                }
                 assets.push(AssetDeclaration::Path {
                     path: asset.path.clone(),
                     name: asset.name.clone(),
@@ -250,8 +258,11 @@ fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
             }
             Asset::String(pattern) => {
                 validate_asset_path(Path::new(pattern))?;
-                glob::Pattern::new(pattern).map_err(|error| {
-                    anyhow::anyhow!("invalid release asset glob {pattern}: {error}")
+                glob::Pattern::new(pattern).map_err(|source| {
+                    PublishPlanError::InvalidAssetGlob {
+                        pattern: pattern.clone(),
+                        source,
+                    }
                 })?;
                 assets.push(AssetDeclaration::Glob {
                     pattern: pattern.clone(),
@@ -262,7 +273,7 @@ fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
     Ok(assets)
 }
 
-fn validate_asset_path(path: &Path) -> anyhow::Result<()> {
+fn validate_asset_path(path: &Path) -> Result<(), PublishPlanError> {
     let valid = !path.as_os_str().is_empty()
         && path.components().all(|component| {
             matches!(
@@ -270,24 +281,30 @@ fn validate_asset_path(path: &Path) -> anyhow::Result<()> {
                 std::path::Component::Normal(_) | std::path::Component::CurDir
             )
         });
-    anyhow::ensure!(
-        valid,
-        "release asset path must stay within the project: {}",
-        path.display()
-    );
-    Ok(())
+    if valid {
+        Ok(())
+    } else {
+        Err(PublishPlanError::InvalidAssetPath {
+            path: path.to_path_buf(),
+        })
+    }
 }
 
 fn render_preflight(
     preflight: &PreCheckConfig,
     context: &PublishContext,
-) -> anyhow::Result<PlannedRegistryCheck> {
+) -> Result<PlannedRegistryCheck, PublishPlanError> {
     let url = render_template(&preflight.url, context)?;
-    let parsed = reqwest::Url::parse(&url)?;
-    anyhow::ensure!(
-        matches!(parsed.scheme(), "http" | "https"),
-        "registry preflight URL must use HTTP or HTTPS"
-    );
+    let parsed =
+        reqwest::Url::parse(&url).map_err(|error| PublishPlanError::InvalidPreflightUrl {
+            url: url.clone(),
+            reason: error.to_string(),
+        })?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err(PublishPlanError::UnsupportedPreflightScheme {
+            scheme: parsed.scheme().to_string(),
+        });
+    }
     Ok(PlannedRegistryCheck {
         url,
         extra_headers: preflight.extra_headers.clone(),
@@ -299,26 +316,28 @@ fn render_command(
     context: &PublishContext,
     working_directory: &Utf8PathBuf,
     phase: CommandPhase,
-) -> anyhow::Result<CommandSpec> {
+) -> Result<CommandSpec, PublishPlanError> {
     let executable = render_template(&command.command, context)?;
-    anyhow::ensure!(!executable.is_empty(), "rendered command must not be empty");
+    if executable.is_empty() {
+        return Err(PublishPlanError::EmptyCommand);
+    }
     let args = command
         .args
         .as_ref()
         .map(|args| {
             args.iter()
                 .map(|argument| render_template(argument, context))
-                .collect::<anyhow::Result<Vec<_>>>()
+                .collect::<Result<Vec<_>, PublishPlanError>>()
         })
         .transpose()?;
-    anyhow::ensure!(
-        !executable.contains('\0')
-            && args
-                .iter()
-                .flatten()
-                .all(|argument| !argument.contains('\0')),
-        "rendered command contains a null byte"
-    );
+    if executable.contains('\0')
+        || args
+            .iter()
+            .flatten()
+            .any(|argument| argument.contains('\0'))
+    {
+        return Err(PublishPlanError::CommandContainsNull);
+    }
 
     Ok(CommandSpec {
         executable,
@@ -340,10 +359,54 @@ const fn stdio_policy(stdio: StdioType) -> StdioPolicy {
     }
 }
 
-fn render_template(template: &str, publish: &PublishContext) -> anyhow::Result<String> {
+fn render_template(template: &str, publish: &PublishContext) -> Result<String, PublishPlanError> {
     let mut environment = Environment::new();
     environment.set_undefined_behavior(UndefinedBehavior::Strict);
-    Ok(environment.render_str(template, context!(package => &publish.package))?)
+    environment
+        .render_str(template, context!(package => &publish.package))
+        .map_err(PublishPlanError::Template)
+}
+
+#[derive(Debug, Error)]
+pub enum PublishPlanError {
+    #[error("repository context is required to create Forge releases")]
+    RepositoryRequired,
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceLoadError),
+    #[error(transparent)]
+    Domain(#[from] WorkspaceGraphError),
+    #[error("workspace package disappeared during publish planning: {package}")]
+    WorkspacePackageMissing { package: PackageId },
+    #[error("configured publish package is missing: {package}")]
+    ConfiguredPackageMissing { package: PackageId },
+    #[error("resolver configuration is missing for {resolver}")]
+    ResolverConfigMissing { resolver: ResolverType },
+    #[error("planned package tag is not a valid Git reference: {tag}")]
+    InvalidTag { tag: String },
+    #[error("publish path is not valid UTF-8: {path:?}")]
+    NonUtf8Path { path: std::path::PathBuf },
+    #[error("release asset name must not be empty")]
+    EmptyAssetName,
+    #[error("release asset path must stay within the project: {path:?}")]
+    InvalidAssetPath { path: std::path::PathBuf },
+    #[error("invalid release asset glob {pattern}")]
+    InvalidAssetGlob {
+        pattern: String,
+        #[source]
+        source: glob::PatternError,
+    },
+    #[error("invalid registry preflight URL {url}: {reason}")]
+    InvalidPreflightUrl { url: String, reason: String },
+    #[error("registry preflight URL uses unsupported scheme {scheme}")]
+    UnsupportedPreflightScheme { scheme: String },
+    #[error("rendered command must not be empty")]
+    EmptyCommand,
+    #[error("rendered command contains a null byte")]
+    CommandContainsNull,
+    #[error("failed to render publish template")]
+    Template(#[source] minijinja::Error),
+    #[error("failed to load package changelog")]
+    Changelog(#[from] ResolveError),
 }
 
 #[cfg(test)]

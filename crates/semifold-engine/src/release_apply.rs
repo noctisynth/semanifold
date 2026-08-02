@@ -4,12 +4,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use semifold_changelog::{ChangelogSource, generate_changelog, utils::render_changelog};
 use semifold_core::{
     ChangesetId, DependencyUpdateContext, EditSource, FileEdit, FileEditExpectation, FileHash,
-    PackageId, ReleaseContext, ReleasePackageContext, ReleasePlan, ReleaseReason,
-    RepositoryContext,
+    PackageId, ReleaseContext, ReleasePackageContext, ReleasePackageContextError, ReleasePlan,
+    ReleasePlanError, ReleaseReason, RepositoryContext,
 };
 use semifold_resolver::{
     changeset::Changeset,
     config::{PackageConfig, StdioType},
+    error::ResolveError,
 };
 use thiserror::Error;
 
@@ -20,7 +21,7 @@ use crate::{
     project::Project,
     publish_plan::{CommandPhase, CommandSpec, StdioPolicy},
     publisher::{CommandError, CommandRunner},
-    workspace::load_workspace_graph,
+    workspace::{WorkspaceLoadError, load_workspace_graph},
 };
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -75,11 +76,11 @@ pub enum ReleaseApplyError {
     FileApply(#[source] FileEditApplyError),
     #[error("post-version command failed for {failure_package}", failure_package = .failure.package)]
     PostVersion {
-        report: ApplyReport,
-        failure: PostVersionFailure,
+        report: Box<ApplyReport>,
+        failure: Box<PostVersionFailure>,
     },
     #[error("failed to update one-shot channel bumps")]
-    ChannelBump(#[source] anyhow::Error),
+    ChannelBump(#[source] ChannelBumpError),
     #[error("failed to remove consumed changeset {path}")]
     RemoveChangeset {
         path: Utf8PathBuf,
@@ -93,8 +94,12 @@ pub async fn prepare_release(
     changesets: &[Changeset],
     release: ReleasePlan,
     options: &ReleaseExecutionOptions,
-) -> anyhow::Result<ReleaseApplyPlan> {
-    let repository = git2::Repository::open(&project.root)?;
+) -> Result<ReleaseApplyPlan, ReleasePrepareError> {
+    let repository =
+        git2::Repository::open(&project.root).map_err(|source| ReleasePrepareError::GitOpen {
+            path: project.root.clone(),
+            source,
+        })?;
     let workspace = load_workspace_graph(project.root.as_std_path(), &project.config)?;
     let release_context = ReleaseContext::from_plan(&release);
     let mut file_edits = release.file_edits().to_vec();
@@ -103,13 +108,16 @@ pub async fn prepare_release(
 
     for package_id in release.order() {
         let package_name = package_id.as_str();
-        let package_config =
-            project.config.packages.get(package_name).ok_or_else(|| {
-                anyhow::anyhow!("release package {package_name} is not configured")
-            })?;
-        let package_release = release
-            .package(package_id)
-            .ok_or_else(|| anyhow::anyhow!("release package {package_name} is not planned"))?;
+        let package_config = project.config.packages.get(package_name).ok_or_else(|| {
+            ReleasePrepareError::ConfiguredPackageMissing {
+                package: package_id.clone(),
+            }
+        })?;
+        let package_release = release.package(package_id).ok_or_else(|| {
+            ReleasePrepareError::PlannedPackageMissing {
+                package: package_id.clone(),
+            }
+        })?;
         let dependency_updates = package_release
             .reasons
             .iter()
@@ -126,7 +134,9 @@ pub async fn prepare_release(
             })
             .collect::<Vec<_>>();
         let snapshot = workspace.package(package_id).ok_or_else(|| {
-            anyhow::anyhow!("release package {package_name} is missing from workspace")
+            ReleasePrepareError::WorkspacePackageMissing {
+                package: package_id.clone(),
+            }
         })?;
         let package_context = ReleasePackageContext::from_snapshot(&release_context, snapshot)?;
         let changelog = generate_changelog(
@@ -155,7 +165,8 @@ pub async fn prepare_release(
     }
 
     let release = release.with_file_edits(file_edits)?;
-    validate_file_edits(&project.root, release.file_edits())?;
+    validate_file_edits(&project.root, release.file_edits())
+        .map_err(ReleasePrepareError::FileValidation)?;
     let changesets_to_remove = consumed_changeset_paths(changesets, release.consumed_changesets())?;
     let channel_bumps_to_consume = release
         .packages()
@@ -249,16 +260,16 @@ where
         }
         if let Err(source) = deps.run(&planned.command) {
             return Err(ReleaseApplyError::PostVersion {
-                report: ApplyReport {
+                report: Box::new(ApplyReport {
                     changelogs: plan.changelogs.clone(),
                     file_edits,
                     unconsumed_changesets: plan.release.consumed_changesets().to_vec(),
-                },
-                failure: PostVersionFailure {
+                }),
+                failure: Box::new(PostVersionFailure {
                     package: planned.package.clone(),
                     command: planned.command.clone(),
                     source,
-                },
+                }),
             });
         }
     }
@@ -268,33 +279,40 @@ where
 fn consumed_changeset_paths(
     changesets: &[Changeset],
     consumed: &[ChangesetId],
-) -> anyhow::Result<Vec<Utf8PathBuf>> {
+) -> Result<Vec<Utf8PathBuf>, ReleasePrepareError> {
     consumed
         .iter()
         .map(|id| {
             let changeset = changesets
                 .iter()
                 .find(|changeset| changeset.name == id.as_str())
-                .ok_or_else(|| anyhow::anyhow!("planned changeset {} is missing", id.as_str()))?;
-            let path = changeset.path.as_ref().ok_or_else(|| {
-                anyhow::anyhow!("planned changeset {} has no source path", id.as_str())
-            })?;
+                .ok_or_else(|| ReleasePrepareError::ChangesetMissing { id: id.clone() })?;
+            let path = changeset
+                .path
+                .as_ref()
+                .ok_or_else(|| ReleasePrepareError::ChangesetSourceMissing { id: id.clone() })?;
             Utf8PathBuf::from_path_buf(path.clone())
-                .map_err(|path| anyhow::anyhow!("changeset path is not valid UTF-8: {path:?}"))
+                .map_err(|path| ReleasePrepareError::NonUtf8Path { path })
         })
         .collect()
 }
 
-fn plan_post_version_commands(project: &Project) -> anyhow::Result<Vec<PostVersionCommand>> {
+fn plan_post_version_commands(
+    project: &Project,
+) -> Result<Vec<PostVersionCommand>, ReleasePrepareError> {
     let mut commands = Vec::new();
     for (package_name, package_config) in &project.config.packages {
         let Some(resolver_config) = project.config.resolver.get(&package_config.resolver) else {
             continue;
         };
-        let working_directory = project.root.join(
-            Utf8Path::from_path(&package_config.path)
-                .ok_or_else(|| anyhow::anyhow!("package path is not valid UTF-8"))?,
-        );
+        let working_directory =
+            project
+                .root
+                .join(Utf8Path::from_path(&package_config.path).ok_or_else(|| {
+                    ReleasePrepareError::NonUtf8Path {
+                        path: package_config.path.clone(),
+                    }
+                })?);
         for command in &resolver_config.post_version {
             commands.push(PostVersionCommand {
                 package: PackageId::new(package_name),
@@ -319,14 +337,19 @@ fn plan_changelog_edit(
     package_config: &PackageConfig,
     package: &PackageId,
     entry: &str,
-) -> anyhow::Result<FileEdit> {
+) -> Result<FileEdit, ReleasePrepareError> {
     let relative_path = Utf8PathBuf::from_path_buf(package_config.path.join("CHANGELOG.md"))
-        .map_err(|path| anyhow::anyhow!("changelog path is not valid UTF-8: {path:?}"))?;
+        .map_err(|path| ReleasePrepareError::NonUtf8Path { path })?;
     let absolute_path = root.join(&relative_path);
     let content = match std::fs::read_to_string(&absolute_path) {
         Ok(content) => Some(content),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error.into()),
+        Err(source) => {
+            return Err(ReleasePrepareError::ReadChangelog {
+                path: absolute_path,
+                source,
+            });
+        }
     };
     let expected = content
         .as_ref()
@@ -347,31 +370,117 @@ fn plan_changelog_edit(
     })
 }
 
-fn consume_channel_bumps<D>(deps: &D, path: &Utf8Path, packages: &[PackageId]) -> anyhow::Result<()>
+fn consume_channel_bumps<D>(
+    deps: &D,
+    path: &Utf8Path,
+    packages: &[PackageId],
+) -> Result<(), ChannelBumpError>
 where
     D: crate::service::EngineDependencies,
 {
     if packages.is_empty() {
         return Ok(());
     }
-    let original = std::fs::read_to_string(path)?;
-    let mut document = original.parse::<toml_edit::DocumentMut>()?;
-    let configured = document["packages"]
-        .as_table_mut()
-        .ok_or_else(|| anyhow::anyhow!("configuration is missing the packages table"))?;
+    let original = std::fs::read_to_string(path).map_err(|source| ChannelBumpError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut document = original
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|source| ChannelBumpError::Parse {
+            path: path.to_owned(),
+            source,
+        })?;
+    let configured = document
+        .get_mut("packages")
+        .and_then(toml_edit::Item::as_table_mut)
+        .ok_or(ChannelBumpError::MissingPackagesTable)?;
     for package in packages {
         let table = configured
             .get_mut(package.as_str())
             .and_then(toml_edit::Item::as_table_like_mut)
-            .ok_or_else(|| anyhow::anyhow!("configured package {package} is not a table"))?;
+            .ok_or_else(|| ChannelBumpError::PackageNotTable {
+                package: package.clone(),
+            })?;
         table.remove("channel-bump");
     }
     let content = document.to_string();
     if content != original {
-        semifold_resolver::config::load_config_from_str(path.as_std_path(), &content)?;
-        deps.write_atomic(path, &content)?;
+        semifold_resolver::config::load_config_from_str(path.as_std_path(), &content)
+            .map_err(ChannelBumpError::InvalidConfig)?;
+        deps.write_atomic(path, &content)
+            .map_err(|source| ChannelBumpError::Write {
+                path: path.to_owned(),
+                source,
+            })?;
     }
     Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum ReleasePrepareError {
+    #[error("failed to open Git repository at {path}")]
+    GitOpen {
+        path: Utf8PathBuf,
+        #[source]
+        source: git2::Error,
+    },
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceLoadError),
+    #[error("configured release package is missing: {package}")]
+    ConfiguredPackageMissing { package: PackageId },
+    #[error("planned release package is missing: {package}")]
+    PlannedPackageMissing { package: PackageId },
+    #[error("workspace release package is missing: {package}")]
+    WorkspacePackageMissing { package: PackageId },
+    #[error(transparent)]
+    ReleaseContext(#[from] ReleasePackageContextError),
+    #[error("failed to generate changelog")]
+    Changelog(#[from] ResolveError),
+    #[error("failed to read changelog {path}")]
+    ReadChangelog {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("release path is not valid UTF-8: {path:?}")]
+    NonUtf8Path { path: std::path::PathBuf },
+    #[error("invalid prepared release plan")]
+    ReleasePlan(#[from] ReleasePlanError),
+    #[error("release file validation failed")]
+    FileValidation(#[source] FileEditApplyError),
+    #[error("planned changeset is missing: {id}")]
+    ChangesetMissing { id: ChangesetId },
+    #[error("planned changeset has no source path: {id}")]
+    ChangesetSourceMissing { id: ChangesetId },
+}
+
+#[derive(Debug, Error)]
+pub enum ChannelBumpError {
+    #[error("failed to read configuration {path}")]
+    Read {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to parse configuration {path}")]
+    Parse {
+        path: Utf8PathBuf,
+        #[source]
+        source: toml_edit::TomlError,
+    },
+    #[error("configuration is missing the packages table")]
+    MissingPackagesTable,
+    #[error("configured package {package} is not a table")]
+    PackageNotTable { package: PackageId },
+    #[error("configuration is invalid after consuming channel bumps")]
+    InvalidConfig(#[source] ResolveError),
+    #[error("failed to write configuration {path}")]
+    Write {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 const fn stdio_policy(stdio: StdioType) -> StdioPolicy {

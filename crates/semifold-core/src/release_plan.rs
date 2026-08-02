@@ -62,7 +62,7 @@ impl ReleasePlan {
             if package
                 .reasons
                 .windows(2)
-                .any(|reasons| reasons[0] == reasons[1])
+                .any(|reasons| matches!(reasons, [left, right] if left == right))
             {
                 return Err(ReleasePlanError::DuplicateReason {
                     package: package.id.clone(),
@@ -86,19 +86,17 @@ impl ReleasePlan {
         consumed_changesets.sort();
         if consumed_changesets
             .windows(2)
-            .any(|changesets| changesets[0] == changesets[1])
+            .any(|changesets| matches!(changesets, [left, right] if left == right))
         {
             return Err(ReleasePlanError::DuplicateChangeset);
         }
         warnings.sort();
         file_edits.sort_by(|left, right| left.path.cmp(&right.path));
-        if let Some(edits) = file_edits
-            .windows(2)
-            .find(|edits| edits[0].path == edits[1].path)
-        {
-            return Err(ReleasePlanError::DuplicateFileEdit {
-                path: edits[0].path.clone(),
-            });
+        if let Some(path) = file_edits.windows(2).find_map(|edits| match edits {
+            [left, right] if left.path == right.path => Some(left.path.clone()),
+            _ => None,
+        }) {
+            return Err(ReleasePlanError::DuplicateFileEdit { path });
         }
 
         Ok(Self {

@@ -94,8 +94,9 @@ impl TomlConfigEditor {
     }
 
     fn packages_mut(&mut self) -> Result<&mut Table, ConfigEditError> {
-        self.document["packages"]
-            .as_table_mut()
+        self.document
+            .get_mut("packages")
+            .and_then(Item::as_table_mut)
             .ok_or(ConfigEditError::MissingPackagesTable)
     }
 }

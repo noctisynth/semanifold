@@ -83,8 +83,12 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool) {
 }
 
 fn render_apply_error(error: AppError) -> anyhow::Error {
-    let AppError::ReleaseApply(ReleaseApplyError::PostVersion { report, failure }) = error else {
-        return error.into();
+    let (report, failure) = match error {
+        AppError::ReleaseApply(error) => match *error {
+            ReleaseApplyError::PostVersion { report, failure } => (report, failure),
+            error => return AppError::ReleaseApply(Box::new(error)).into(),
+        },
+        error => return error.into(),
     };
     let files = report.file_edits.as_ref().map_or_else(
         || "-".to_string(),

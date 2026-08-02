@@ -1,6 +1,6 @@
 [package]
 name = "semifold-resolver"
-version = "0.4.0-beta.3"
+version = "0.4.0-rc.0"
 edition.workspace = true
 description.workspace = true
 license.workspace = true
@@ -22,7 +22,7 @@ log = "0.4.27"
 pathdiff = "0.2.3"
 regex = "1.11.1"
 saphyr = "0.0.6"
-semifold-core = { version = "0.1.0-beta.2", path = "../semifold-core" }
+semifold-core = { version = "0.1.0-rc.0", path = "../semifold-core" }
 semver = { version = "1.0.26", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.142", features = ["preserve_order"] }

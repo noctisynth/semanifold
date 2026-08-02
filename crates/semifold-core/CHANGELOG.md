@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.0-rc.0
+
+### New Features
+
+- [`6838d72`](https://github.com/noctisynth/semifold/commit/6838d72730fc38e389885322637621bba0d2aadd): Introduce explicit domain and application error boundaries and remove `anyhow` from the engine.
+
+    All production targets now reject panic-prone unwraps, expects, indexing, and slicing under strict
+    Clippy validation, including workspace planning, Rust manifest edits, changelog metadata parsing,
+    configuration editing, and embedded initialization assets.
+
+
+### Refactors
+
+- [`d50a156`](https://github.com/noctisynth/semifold/commit/d50a156035a6520442c0bbd44923d5ac2b36f6b1): Move project loading, configuration synchronization, release planning, changelog preparation, and
+    release application behind `SemifoldService` and the new `semifold-engine` boundary.
+
+    CLI and CI now share an immutable `ReleasePlan` followed by a complete `ReleaseApplyPlan`, MCP no
+    longer changes the process working directory, and the legacy global mutable `Context` is removed.
+
 ## v0.1.0-beta.2
 
 ### New Features

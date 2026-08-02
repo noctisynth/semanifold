@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.3.0-beta.4"
+version = "0.3.0-rc.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-changelog"
-version = "0.3.0-beta.2"
+version = "0.3.0-rc.0"
 dependencies = [
  "anyhow",
  "git2",
@@ -2140,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-core"
-version = "0.1.0-beta.2"
+version = "0.1.0-rc.0"
 dependencies = [
  "camino",
  "semver",
@@ -2152,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-engine"
-version = "0.1.0"
+version = "0.2.0-rc.0"
 dependencies = [
  "bytes",
  "camino",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.4.0-beta.3"
+version = "0.4.0-rc.0"
 dependencies = [
  "camino",
  "clap",

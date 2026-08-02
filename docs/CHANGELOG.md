@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.1.0-beta.0
+
+### New Features
+
+- [`2d89016`](https://github.com/noctisynth/semifold/commit/2d89016d63d7e4cd0ea670bac09d8896eb024968): Allow the installation scripts to install Semifold into a custom directory
+
+    Unix users can pass `--install-dir`, while Windows users can pass `-InstallDir`. Both scripts keep
+    using the user-local binary directory by default and allow a custom directory to be combined with
+    a specific version.
+
+- [`2d89016`](https://github.com/noctisynth/semifold/commit/2d89016d63d7e4cd0ea670bac09d8896eb024968): Allow the Unix and Windows installation scripts to install a specific Semifold version
+
+    Passing a version now downloads assets from the matching `semifold-{version}` GitHub release,
+    while invoking either script without an argument continues to install the latest release.
+
 ## v1.0.6
 
 ### Chores

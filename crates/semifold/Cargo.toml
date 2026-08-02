@@ -45,6 +45,7 @@ saphyr = "0.0.6"
 schemars = "1.0"
 semifold-changelog = { path = "../changelog", version = "0.3.0-beta.2" }
 semifold-core = { version = "0.1.0-beta.2", path = "../semifold-core" }
+semifold-engine = { version = "0.1.0", path = "../semifold-engine" }
 semifold-resolver = { path = "../resolver", version = "0.4.0-beta.3", features = [
   "clap",
 ] }

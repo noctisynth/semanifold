@@ -18,13 +18,13 @@ use semifold_resolver::{
 use crate::package_path::{PackagePathError, normalize_package_path};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PackageDiscovery {
+pub struct PackageDiscovery {
     pub resolvers: Vec<ResolverType>,
     pub packages: Vec<DiscoveredPackage>,
 }
 
 impl PackageDiscovery {
-    pub(crate) fn default_package_configs(
+    pub fn default_package_configs(
         &self,
     ) -> Result<BTreeMap<String, PackageConfig>, PackageDiscoveryError> {
         let mut configs = BTreeMap::new();
@@ -48,17 +48,17 @@ impl PackageDiscovery {
 }
 
 #[derive(Default)]
-pub(crate) struct ResolverRegistry;
+pub struct ResolverRegistry;
 
 impl ResolverRegistry {
-    pub(crate) fn normalize_selection(resolvers: &[ResolverType]) -> Vec<ResolverType> {
+    pub fn normalize_selection(resolvers: &[ResolverType]) -> Vec<ResolverType> {
         let mut resolvers = resolvers.to_vec();
         resolvers.sort();
         resolvers.dedup();
         resolvers
     }
 
-    pub(crate) const fn ecosystem(resolver: ResolverType) -> Ecosystem {
+    pub const fn ecosystem(resolver: ResolverType) -> Ecosystem {
         match resolver {
             ResolverType::Rust => Ecosystem::Rust,
             ResolverType::Nodejs => Ecosystem::Node,
@@ -76,7 +76,7 @@ impl ResolverRegistry {
         }
     }
 
-    pub(crate) fn create_adapter(&self, resolver: ResolverType) -> Box<dyn EcosystemAdapter> {
+    pub fn create_adapter(&self, resolver: ResolverType) -> Box<dyn EcosystemAdapter> {
         match resolver {
             ResolverType::Rust => Box::new(RustResolver),
             ResolverType::Nodejs => Box::new(NodejsResolver),
@@ -87,12 +87,12 @@ impl ResolverRegistry {
 }
 
 #[derive(Default)]
-pub(crate) struct PackageDiscoveryService {
+pub struct PackageDiscoveryService {
     registry: ResolverRegistry,
 }
 
 impl PackageDiscoveryService {
-    pub(crate) fn discover(
+    pub fn discover(
         &self,
         project_root: &Path,
         resolvers: &[ResolverType],
@@ -140,7 +140,7 @@ impl PackageDiscoveryService {
 }
 
 #[derive(Debug)]
-pub(crate) enum PackageDiscoveryError {
+pub enum PackageDiscoveryError {
     Adapter {
         resolver: ResolverType,
         source: AdapterError,

@@ -7,7 +7,6 @@ use std::{
 };
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use rust_i18n::t;
 use semifold_core::PackageId;
 
 use crate::publish_plan::{
@@ -15,15 +14,15 @@ use crate::publish_plan::{
     PublishSkipReason, StdioPolicy,
 };
 
-pub(crate) type ExternalFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub type ExternalFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct CommandOutput {
+pub struct CommandOutput {
     pub exit_code: Option<i32>,
 }
 
 #[derive(Debug)]
-pub(crate) struct CommandError {
+pub struct CommandError {
     message: String,
 }
 
@@ -35,11 +34,11 @@ impl std::fmt::Display for CommandError {
 
 impl std::error::Error for CommandError {}
 
-pub(crate) trait CommandRunner {
+pub trait CommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput, CommandError>;
 }
 
-pub(crate) struct SystemCommandRunner;
+pub struct SystemCommandRunner;
 
 impl CommandRunner for SystemCommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput, CommandError> {
@@ -51,21 +50,15 @@ impl CommandRunner for SystemCommandRunner {
             .stderr(stdio(command.stderr))
             .status()
             .map_err(|error| CommandError {
-                message: t!(
-                    "cli.publish.command_spawn_failed",
-                    command = command.executable,
-                    error = error
-                )
-                .to_string(),
+                message: format!("failed to run command {}: {error}", command.executable),
             })?;
         if !status.success() {
             return Err(CommandError {
-                message: t!(
-                    "cli.publish.command_failed",
-                    command = command.executable,
-                    status = format!("{:?}", status.code())
-                )
-                .to_string(),
+                message: format!(
+                    "command {} exited with status {:?}",
+                    command.executable,
+                    status.code()
+                ),
             });
         }
         Ok(CommandOutput {
@@ -83,7 +76,7 @@ fn stdio(policy: StdioPolicy) -> Stdio {
 }
 
 #[derive(Debug)]
-pub(crate) struct RegistryError {
+pub struct RegistryError {
     message: String,
 }
 
@@ -95,7 +88,7 @@ impl std::fmt::Display for RegistryError {
 
 impl std::error::Error for RegistryError {}
 
-pub(crate) trait RegistryClient {
+pub trait RegistryClient {
     fn version_exists<'a>(
         &'a self,
         check: &'a PlannedRegistryCheck,
@@ -103,10 +96,10 @@ pub(crate) trait RegistryClient {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ForgeReleaseId(pub u64);
+pub struct ForgeReleaseId(pub u64);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ForgeRelease {
+pub struct ForgeRelease {
     pub owner: String,
     pub repository: String,
     pub tag: String,
@@ -116,13 +109,13 @@ pub(crate) struct ForgeRelease {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum ForgeReleaseOutcome {
+pub enum ForgeReleaseOutcome {
     Created(ForgeReleaseId),
     AlreadyExists,
 }
 
 #[derive(Debug)]
-pub(crate) struct ForgeError {
+pub struct ForgeError {
     message: String,
 }
 
@@ -134,7 +127,7 @@ impl std::fmt::Display for ForgeError {
 
 impl std::error::Error for ForgeError {}
 
-pub(crate) trait ForgeClient {
+pub trait ForgeClient {
     fn create_release<'a>(
         &'a self,
         release: &'a ForgeRelease,
@@ -149,7 +142,7 @@ pub(crate) trait ForgeClient {
     ) -> ExternalFuture<'a, Result<(), ForgeError>>;
 }
 
-pub(crate) struct GithubForgeClient {
+pub struct GithubForgeClient {
     client: octocrab::Octocrab,
 }
 
@@ -184,7 +177,7 @@ impl ForgeClient for GithubForgeClient {
                     Ok(ForgeReleaseOutcome::AlreadyExists)
                 }
                 Err(error) => Err(ForgeError {
-                    message: t!("cli.publish.forge_release_failed", error = error).to_string(),
+                    message: format!("failed to create package release: {error}"),
                 }),
             }
         })
@@ -205,7 +198,7 @@ impl ForgeClient for GithubForgeClient {
                 .send()
                 .await
                 .map_err(|error| ForgeError {
-                    message: t!("cli.publish.asset_upload_failed", error = error).to_string(),
+                    message: format!("failed to upload package release asset: {error}"),
                 })?;
             Ok(())
         })
@@ -222,18 +215,18 @@ fn release_already_exists(errors: &[serde_json::Value]) -> bool {
     })
 }
 
-pub(crate) trait FileSystem {
+pub trait FileSystem {
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ReleaseAsset {
+pub struct ReleaseAsset {
     pub path: std::path::PathBuf,
     pub name: String,
 }
 
 #[derive(Debug)]
-pub(crate) struct AssetResolveError {
+pub struct AssetResolveError {
     message: String,
 }
 
@@ -245,7 +238,7 @@ impl std::fmt::Display for AssetResolveError {
 
 impl std::error::Error for AssetResolveError {}
 
-pub(crate) trait AssetResolver {
+pub trait AssetResolver {
     fn resolve(
         &self,
         root: &Path,
@@ -253,7 +246,7 @@ pub(crate) trait AssetResolver {
     ) -> Result<Vec<ReleaseAsset>, AssetResolveError>;
 }
 
-pub(crate) struct SystemAssetResolver;
+pub struct SystemAssetResolver;
 
 impl AssetResolver for SystemAssetResolver {
     fn resolve(
@@ -268,8 +261,10 @@ impl AssetResolver for SystemAssetResolver {
                     let path = root.join(path);
                     if !path.is_file() {
                         return Err(AssetResolveError {
-                            message: t!("cli.publish.asset_not_found", path = path.display())
-                                .to_string(),
+                            message: format!(
+                                "configured release asset does not exist: {}",
+                                path.display()
+                            ),
                         });
                     }
                     assets.push(ReleaseAsset {
@@ -282,21 +277,13 @@ impl AssetResolver for SystemAssetResolver {
                     let mut matched = Vec::new();
                     for entry in
                         glob::glob(&absolute_pattern).map_err(|error| AssetResolveError {
-                            message: t!(
-                                "cli.publish.asset_pattern_invalid",
-                                pattern = pattern,
-                                error = error
-                            )
-                            .to_string(),
+                            message: format!("invalid release asset glob {pattern}: {error}"),
                         })?
                     {
                         let path = entry.map_err(|error| AssetResolveError {
-                            message: t!(
-                                "cli.publish.asset_glob_failed",
-                                pattern = pattern,
-                                error = error
-                            )
-                            .to_string(),
+                            message: format!(
+                                "failed to resolve release asset glob {pattern}: {error}"
+                            ),
                         })?;
                         if path.is_file() {
                             let name = path.file_name().map_or_else(
@@ -308,8 +295,7 @@ impl AssetResolver for SystemAssetResolver {
                     }
                     if matched.is_empty() {
                         return Err(AssetResolveError {
-                            message: t!("cli.publish.asset_pattern_unmatched", pattern = pattern)
-                                .to_string(),
+                            message: format!("release asset glob matched no files: {pattern}"),
                         });
                     }
                     assets.extend(matched);
@@ -325,7 +311,7 @@ impl AssetResolver for SystemAssetResolver {
     }
 }
 
-pub(crate) struct SystemFileSystem;
+pub struct SystemFileSystem;
 
 impl FileSystem for SystemFileSystem {
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>> {
@@ -334,11 +320,11 @@ impl FileSystem for SystemFileSystem {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PackageForgePlan {
+pub struct PackageForgePlan {
     pub release: ForgeRelease,
 }
 
-pub(crate) struct ForgeExecution<'a> {
+pub struct ForgeExecution<'a> {
     pub client: &'a dyn ForgeClient,
     pub file_system: &'a dyn FileSystem,
     pub asset_resolver: &'a dyn AssetResolver,
@@ -347,7 +333,7 @@ pub(crate) struct ForgeExecution<'a> {
 }
 
 #[derive(Default)]
-pub(crate) struct HttpRegistryClient {
+pub struct HttpRegistryClient {
     client: reqwest::Client,
 }
 
@@ -362,12 +348,10 @@ impl RegistryClient for HttpRegistryClient {
                 |mut headers, (name, value)| {
                     let name =
                         HeaderName::from_bytes(name.as_bytes()).map_err(|error| RegistryError {
-                            message: t!("cli.publish.registry_header_name_invalid", error = error)
-                                .to_string(),
+                            message: format!("invalid registry header name: {error}"),
                         })?;
                     let value = HeaderValue::from_str(value).map_err(|error| RegistryError {
-                        message: t!("cli.publish.registry_header_value_invalid", error = error)
-                            .to_string(),
+                        message: format!("invalid registry header value: {error}"),
                     })?;
                     headers.insert(name, value);
                     Ok::<_, RegistryError>(headers)
@@ -380,7 +364,7 @@ impl RegistryClient for HttpRegistryClient {
                 .send()
                 .await
                 .map_err(|error| RegistryError {
-                    message: t!("cli.publish.registry_preflight_failed", error = error).to_string(),
+                    message: format!("registry preflight failed: {error}"),
                 })?;
             Ok(response.status() == reqwest::StatusCode::OK)
         })
@@ -388,7 +372,7 @@ impl RegistryClient for HttpRegistryClient {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum PublishStatus {
+pub enum PublishStatus {
     Succeeded,
     Skipped(PublishSkipReason),
     Failed(PublishFailureStage),
@@ -396,7 +380,7 @@ pub(crate) enum PublishStatus {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum PublishFailureStage {
+pub enum PublishFailureStage {
     Preflight,
     Command(CommandPhase),
     ForgeRelease,
@@ -404,20 +388,20 @@ pub(crate) enum PublishFailureStage {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CommandDisposition {
+pub enum CommandDisposition {
     Executed,
     SkippedDryRun,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct CommandReport {
+pub struct CommandReport {
     pub phase: CommandPhase,
     pub executable: String,
     pub disposition: CommandDisposition,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PackagePublishReport {
+pub struct PackagePublishReport {
     pub package: PackageId,
     pub status: PublishStatus,
     pub commands: Vec<CommandReport>,
@@ -426,7 +410,7 @@ pub(crate) struct PackagePublishReport {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ForgeDisposition {
+pub enum ForgeDisposition {
     NotRequested,
     SkippedDryRun,
     Created,
@@ -434,12 +418,12 @@ pub(crate) enum ForgeDisposition {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PublishReport {
+pub struct PublishReport {
     pub packages: Vec<PackagePublishReport>,
 }
 
 #[derive(Debug)]
-pub(crate) struct PublishExecutionError {
+pub struct PublishExecutionError {
     pub report: PublishReport,
 }
 
@@ -457,7 +441,7 @@ impl std::fmt::Display for PublishExecutionError {
                 )
             });
         let Some((package, error)) = failed else {
-            return formatter.write_str(&t!("cli.publish.execution_failed"));
+            return formatter.write_str("publish execution failed");
         };
         let not_started = self
             .report
@@ -465,18 +449,16 @@ impl std::fmt::Display for PublishExecutionError {
             .iter()
             .filter(|package| package.status == PublishStatus::NotStarted)
             .count();
-        formatter.write_str(&t!(
-            "cli.publish.recovery",
-            package = package,
-            error = error,
-            not_started = not_started
-        ))
+        write!(
+            formatter,
+            "publishing failed for {package}: {error}; {not_started} package(s) were not started"
+        )
     }
 }
 
 impl std::error::Error for PublishExecutionError {}
 
-pub(crate) async fn execute_publish_plan<C, R>(
+pub async fn execute_publish_plan<C, R>(
     plan: &mut PublishPlan,
     command_runner: &C,
     registry_client: &R,

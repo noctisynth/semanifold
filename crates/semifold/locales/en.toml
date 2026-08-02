@@ -1,4 +1,5 @@
 [cli]
+project_load_failed = "Failed to load Semifold project: %{error}"
 not_initialized = "Semifold is not initialized. Please run `semifold init` first."
 dirty_repo = "Git repository is dirty. Please commit or stash your changes first, or use `--allow-dirty` option."
 
@@ -68,6 +69,8 @@ plan_failed = "Failed to build release plan: %{error}"
 comment = "Create GitHub pull request comments, only available in CI environment"
 
 [cli.version]
+git_open_failed = "Failed to open Git repository: %{error}"
+git_status_failed = "Failed to inspect Git repository status: %{error}"
 channel_bump_config_missing = "Configuration path is unavailable while consuming channel transition state"
 channel_bump_cleanup_failed = "Failed to consume channel transition state"
 no_git_repo = "No Git repository found"
@@ -96,6 +99,7 @@ allow_dirty = "Allow versioning packages with dirty Git working tree"
 non_utf8_project_root = "Publishing requires a UTF-8 project root"
 plan_failed = "Failed to build publish plan: %{error}"
 repo_info_missing = "Repository information is unavailable for package release creation"
+changelog_missing_after_validation = "Validated changelog is unavailable for package %{package}"
 command_spawn_failed = "Failed to run command %{command}: %{error}"
 command_failed = "Command %{command} exited with status %{status}"
 registry_header_name_invalid = "Invalid registry header name: %{error}"
@@ -125,6 +129,7 @@ github_release = "Create GitHub releases for published packages, only available 
 allow_dirty = "Allow publishing packages with dirty Git working tree"
 
 [cli.ci]
+existing_pr_missing = "GitHub returned an inconsistent empty pull request result"
 not_ci_environment = "Not running in CI environment"
 git_repo_not_initialized = "Git repository is not initialized"
 github_repo_invalid_format = "GITHUB_REPOSITORY is not in the format owner/repo"

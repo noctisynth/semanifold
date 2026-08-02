@@ -6,14 +6,11 @@ use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
 
+use crate::cli::{publish, version};
 use semifold_core::ReleaseContext;
-use semifold_resolver::{context::Context, resolver};
-
-use crate::{
-    cli::{publish, version},
-    release::{
-        ReleasePullRequestContext, plan_release, render_release_branch, render_release_pull_request,
-    },
+use semifold_engine::{
+    Project, SemifoldService, SystemDependencies,
+    release::{ReleasePullRequestContext, render_release_branch, render_release_pull_request},
 };
 
 #[derive(Debug, Parser)]
@@ -45,16 +42,9 @@ fn force_push_release(repo: &Repository, token: &str, branch: &str) -> anyhow::R
     Ok(())
 }
 
-pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
-    let Context {
-        config: Some(config),
-        ..
-    } = ctx
-    else {
-        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
-    };
-
-    if !ctx.is_ci() {
+pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let config = &project.config;
+    if std::env::var("GITHUB_ACTIONS").is_err() {
         return Err(anyhow::anyhow!(t!("cli.ci.not_ci_environment")));
     }
 
@@ -63,9 +53,8 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
 
     log::debug!("GITHUB_REF_NAME: {}", ref_name);
 
-    let Some(repo) = ctx.git_repo.as_ref() else {
-        return Err(anyhow::anyhow!(t!("cli.ci.git_repo_not_initialized")));
-    };
+    let repo = Repository::open(project.root.as_std_path())
+        .map_err(|_| anyhow::anyhow!(t!("cli.ci.git_repo_not_initialized")))?;
     let mut git_config = repo.config()?;
     git_config.set_str("user.name", "github-actions[bot]")?;
     git_config.set_str("user.email", "github-actions[bot]@users.noreply.github.com")?;
@@ -83,26 +72,21 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let changesets = resolver::get_changesets(ctx)?;
-    if changesets.is_empty() {
+    let release_plan = SemifoldService::new(SystemDependencies).plan_release(project)?;
+    if release_plan.consumed_changesets().is_empty() {
         log::info!("{}", t!("cli.ci.no_changesets_publish"));
-        return publish::publish(ctx, true).await.map(|_| ());
+        return publish::publish(project, dry_run, true).await.map(|_| ());
     }
 
-    let root = ctx
-        .repo_root
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!(t!("cli.ci.git_repo_not_initialized")))?;
-    let release_plan = plan_release(root, config, &changesets)?;
     let release_context = ReleaseContext::from_plan(&release_plan);
     let release_branch = render_release_branch(&config.branches.release, &release_context)
         .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)))?;
 
-    let version::ApplyReport {
+    let semifold_engine::ApplyReport {
         changelogs: changelogs_map,
         file_edits,
         unconsumed_changesets: _,
-    } = version::apply_version_plan(ctx, &changesets, release_plan).await?;
+    } = version::prepare_and_apply_release(project, release_plan, dry_run).await?;
     let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
     let pull_request_context = ReleasePullRequestContext {
         release: &release_context,
@@ -110,6 +94,10 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         changelogs: changelogs_map,
     };
     let pull_request = render_release_pull_request(&pull_request_context);
+
+    if dry_run {
+        return Ok(());
+    }
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;
@@ -137,7 +125,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
         &[&parent_commit],
     )?;
 
-    force_push_release(repo, &github_token, &pull_request_context.branch)?;
+    force_push_release(&repo, &github_token, &pull_request_context.branch)?;
 
     let head = format!("{}:{}", owner, pull_request_context.branch);
     let pulls = octocrab.pulls(owner, repo_name);
@@ -164,7 +152,7 @@ pub(crate) async fn run(_ci: &CI, ctx: &Context) -> anyhow::Result<()> {
     } else {
         let pr = existing_prs
             .first()
-            .expect("non-empty pull request list must have a first entry");
+            .ok_or_else(|| anyhow::anyhow!(t!("cli.ci.existing_pr_missing")))?;
         log::info!("{}", t!("cli.ci.existing_pr_found", number = pr.number));
         pulls
             .update(pr.number)

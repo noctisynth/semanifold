@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{changeset::Changeset, context::Context, error::ResolveError, utils};
+use crate::{changeset::Changeset, config::Config, error::ResolveError, utils};
 use core::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub mod cpp;
 pub mod nodejs;
@@ -55,18 +55,17 @@ pub fn get_changeset_path() -> Result<PathBuf, ResolveError> {
     Ok(changeset_path)
 }
 
-pub fn get_changesets(ctx: &Context) -> Result<Vec<Changeset>, ResolveError> {
-    if let Some(changeset_root) = ctx.changeset_root.as_ref() {
-        let mut changesets = Vec::new();
-        utils::list_files(changeset_root, |p| p.extension() == Some("md".as_ref()))?
-            .into_iter()
-            .try_fold(&mut changesets, |changesets, path| {
-                changesets.push(Changeset::from_file(ctx, &path)?);
-                log::debug!("Loaded changeset at: {}", path.display());
-                Ok::<_, ResolveError>(changesets)
-            })?;
-        Ok(changesets)
-    } else {
-        Ok(Vec::new())
-    }
+pub fn get_changesets(
+    changeset_root: &Path,
+    config: &Config,
+) -> Result<Vec<Changeset>, ResolveError> {
+    let mut changesets = Vec::new();
+    utils::list_files(changeset_root, |p| p.extension() == Some("md".as_ref()))?
+        .into_iter()
+        .try_fold(&mut changesets, |changesets, path| {
+            changesets.push(Changeset::from_file(config, &path)?);
+            log::debug!("Loaded changeset at: {}", path.display());
+            Ok::<_, ResolveError>(changesets)
+        })?;
+    Ok(changesets)
 }

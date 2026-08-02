@@ -6,13 +6,13 @@ use semifold_resolver::config::Config;
 use toml_edit::{DocumentMut, Item, Table, value};
 
 /// Preserves an existing TOML configuration document while applying package-only sync edits.
-pub(crate) struct TomlConfigEditor {
+pub struct TomlConfigEditor {
     path: Utf8PathBuf,
     document: DocumentMut,
 }
 
 impl TomlConfigEditor {
-    pub(crate) fn load(path: &Utf8Path) -> Result<Self, ConfigEditError> {
+    pub fn load(path: &Utf8Path) -> Result<Self, ConfigEditError> {
         let content = fs::read_to_string(path).map_err(|source| ConfigEditError::Read {
             path: path.to_owned(),
             source,
@@ -31,7 +31,7 @@ impl TomlConfigEditor {
         Ok(editor)
     }
 
-    pub(crate) fn validate(&self) -> Result<Config, ConfigEditError> {
+    pub fn validate(&self) -> Result<Config, ConfigEditError> {
         toml_edit::de::from_str(&self.document.to_string()).map_err(|source| {
             ConfigEditError::InvalidConfig {
                 path: self.path.clone(),
@@ -40,11 +40,7 @@ impl TomlConfigEditor {
         })
     }
 
-    pub(crate) fn apply(
-        &mut self,
-        plan: &ConfigSyncPlan,
-        prune_missing: bool,
-    ) -> Result<(), ConfigEditError> {
+    pub fn apply(&mut self, plan: &ConfigSyncPlan) -> Result<(), ConfigEditError> {
         if plan.config_path != self.path {
             return Err(ConfigEditError::PlanPathMismatch {
                 editor: self.path.clone(),
@@ -78,7 +74,7 @@ impl TomlConfigEditor {
         for added in added {
             insert_discovered_package(packages, added)?;
         }
-        if prune_missing {
+        if plan.prune_missing {
             for missing in &plan.missing {
                 packages.remove(missing.id.as_str()).ok_or_else(|| {
                     ConfigEditError::PackageNotFound {
@@ -93,7 +89,7 @@ impl TomlConfigEditor {
     }
 
     #[must_use]
-    pub(crate) fn render(&self) -> String {
+    pub fn render(&self) -> String {
         self.document.to_string()
     }
 
@@ -143,7 +139,7 @@ const fn resolver_name(ecosystem: Ecosystem) -> &'static str {
 }
 
 #[derive(Debug)]
-pub(crate) enum ConfigEditError {
+pub enum ConfigEditError {
     Read {
         path: Utf8PathBuf,
         source: io::Error,
@@ -277,6 +273,7 @@ custom = "preserved"
     fn plan(path: Utf8PathBuf) -> ConfigSyncPlan {
         ConfigSyncPlan {
             config_path: path,
+            prune_missing: false,
             added: vec![DiscoveredPackage {
                 id: PackageId::new("new-package"),
                 ecosystem: Ecosystem::Python,
@@ -305,7 +302,7 @@ custom = "preserved"
         let path = temporary_config_path();
         fs::write(&path, CONFIG).unwrap();
         let mut editor = TomlConfigEditor::load(&path).unwrap();
-        editor.apply(&plan(path.clone()), false).unwrap();
+        editor.apply(&plan(path.clone())).unwrap();
         let rendered = editor.render();
 
         assert!(rendered.contains("# top-level comment"));
@@ -341,7 +338,7 @@ custom = "preserved"
             discovered: vec![],
         });
 
-        assert!(editor.apply(&plan, false).is_err());
+        assert!(editor.apply(&plan).is_err());
         assert_eq!(editor.render(), CONFIG);
 
         fs::remove_file(path).unwrap();
@@ -362,7 +359,7 @@ custom = "preserved"
             path: Utf8PathBuf::from("crates/keep"),
         }];
 
-        editor.apply(&plan, false).unwrap();
+        editor.apply(&plan).unwrap();
         assert_eq!(editor.render(), CONFIG);
 
         fs::remove_file(path).unwrap();
@@ -399,7 +396,7 @@ custom = "preserved"
             },
         ];
 
-        editor.apply(&plan, false).unwrap();
+        editor.apply(&plan).unwrap();
         let rendered = editor.render();
         let old_name = rendered.find("[packages.old-name]").unwrap();
         let moved = rendered.find("[packages.moved]").unwrap();

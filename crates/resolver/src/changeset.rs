@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use saphyr::{LoadableYamlNode, Mapping, Yaml, YamlEmitter};
 use serde::{Deserialize, Serialize};
 
-use crate::{context::Context, error::ResolveError};
+use crate::{config::Config, error::ResolveError};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
@@ -68,7 +68,7 @@ impl Changeset {
         self.summary = summary;
     }
 
-    pub fn from_file(ctx: &Context, path: &PathBuf) -> Result<Self, ResolveError> {
+    pub fn from_file(config: &Config, path: &PathBuf) -> Result<Self, ResolveError> {
         let changeset_str = std::fs::read_to_string(path)?;
         let separator = "---";
 
@@ -96,7 +96,7 @@ impl Changeset {
                         reason: format!("Failed to parse package name: {k:?}"),
                     })?
                     .to_string();
-                if !ctx.has_package(&name) {
+                if !config.packages.contains_key(&name) {
                     return Err(ResolveError::InvalidChangeset {
                         path: path.to_path_buf(),
                         reason: format!("Package {name} is not defined in config"),
@@ -213,7 +213,6 @@ mod tests {
 
     use crate::{
         config::{BranchesConfig, Config, PackageConfig, ReleaseChannel},
-        context::Context,
         error::ResolveError,
         resolver::ResolverType,
     };
@@ -233,7 +232,7 @@ mod tests {
         path
     }
 
-    fn context_with_packages(packages: &[&str]) -> Context {
+    fn config_with_packages(packages: &[&str]) -> Config {
         let packages = packages
             .iter()
             .map(|name| {
@@ -251,24 +250,21 @@ mod tests {
             })
             .collect();
 
-        Context {
-            config: Some(Config {
-                branches: BranchesConfig {
-                    base: "main".to_string(),
-                    release: "release".to_string(),
-                },
-                tags: BTreeMap::new(),
-                packages,
-                resolver: BTreeMap::new(),
-            }),
-            ..Default::default()
+        Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            packages,
+            resolver: BTreeMap::new(),
         }
     }
 
     #[test]
     fn writes_and_reads_a_changeset_with_tags() {
         let root = temp_dir("roundtrip");
-        let ctx = context_with_packages(&["api", "web"]);
+        let config = config_with_packages(&["api", "web"]);
         let mut changeset = Changeset::new("add-api".to_string(), &root);
         changeset.add_package(
             "api".to_string(),
@@ -281,7 +277,7 @@ mod tests {
         changeset.commit().unwrap();
 
         let path = root.join("add-api.md");
-        let parsed = Changeset::from_file(&ctx, &path).unwrap();
+        let parsed = Changeset::from_file(&config, &path).unwrap();
 
         assert_eq!(parsed.name, "add-api");
         assert_eq!(
@@ -307,7 +303,7 @@ mod tests {
         let path = root.join("invalid.md");
         fs::write(&path, "---\nmissing: patch\n---\n\nUnknown package.\n").unwrap();
 
-        let error = Changeset::from_file(&context_with_packages(&["api"]), &path).unwrap_err();
+        let error = Changeset::from_file(&config_with_packages(&["api"]), &path).unwrap_err();
 
         assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
         fs::remove_dir_all(root).unwrap();
@@ -319,7 +315,7 @@ mod tests {
         let path = root.join("invalid.md");
         fs::write(&path, "---\napi: breaking\n---\n\nUnknown level.\n").unwrap();
 
-        let error = Changeset::from_file(&context_with_packages(&["api"]), &path).unwrap_err();
+        let error = Changeset::from_file(&config_with_packages(&["api"]), &path).unwrap_err();
 
         assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
         fs::remove_dir_all(root).unwrap();

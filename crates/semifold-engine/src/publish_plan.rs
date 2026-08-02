@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, path::Path};
 
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
-use rust_i18n::t;
 use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext};
 use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType};
 use semver::Version;
@@ -11,14 +10,14 @@ use serde::Serialize;
 use crate::workspace::load_workspace_graph;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub(crate) struct PublishContext {
+pub struct PublishContext {
     pub package: PublishPackageContext,
     pub repository: Option<RepositoryContext>,
     pub ci: Option<CiContext>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub(crate) struct PublishPackageContext {
+pub struct PublishPackageContext {
     pub id: PackageId,
     pub name: String,
     pub ecosystem: Ecosystem,
@@ -29,12 +28,12 @@ pub(crate) struct PublishPackageContext {
 }
 
 #[derive(Debug)]
-pub(crate) struct PublishPlan {
+pub struct PublishPlan {
     pub packages: Vec<PackagePublish>,
 }
 
 #[derive(Debug)]
-pub(crate) struct PackagePublish {
+pub struct PackagePublish {
     pub context: PublishContext,
     pub preflight: Option<PlannedRegistryCheck>,
     pub commands: Vec<CommandSpec>,
@@ -43,7 +42,7 @@ pub(crate) struct PackagePublish {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum AssetDeclaration {
+pub enum AssetDeclaration {
     Path {
         path: std::path::PathBuf,
         name: String,
@@ -54,34 +53,34 @@ pub(crate) enum AssetDeclaration {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct PlannedRegistryCheck {
+pub struct PlannedRegistryCheck {
     pub url: String,
     pub extra_headers: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum PublishSkipReason {
+pub enum PublishSkipReason {
     Private,
     MissingChangelog,
     RegistryVersionExists,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CommandPhase {
+pub enum CommandPhase {
     Prepublish,
     Publish,
     PostVersion,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum StdioPolicy {
+pub enum StdioPolicy {
     Inherit,
     Pipe,
     Null,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct CommandSpec {
+pub struct CommandSpec {
     pub executable: String,
     pub args: Vec<String>,
     pub environment: BTreeMap<String, String>,
@@ -92,7 +91,7 @@ pub(crate) struct CommandSpec {
     pub run_in_dry_run: bool,
 }
 
-pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<PublishPlan> {
+pub fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<PublishPlan> {
     let graph = load_workspace_graph(root, config)?;
     let order = graph.topological_order()?;
     let packages = order
@@ -100,11 +99,11 @@ pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<Publi
         .map(|id| {
             let snapshot = graph
                 .package(&id)
-                .expect("workspace topological order only contains graph packages");
+                .ok_or_else(|| anyhow::anyhow!("workspace graph package {id} is missing"))?;
             let package_config = config
                 .packages
                 .get(id.as_str())
-                .expect("workspace graph is constructed from configured packages");
+                .ok_or_else(|| anyhow::anyhow!("configured package {id} is missing"))?;
             let resolver_config =
                 config
                     .resolver
@@ -186,7 +185,10 @@ fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
         match asset {
             Asset::Asset(asset) => {
                 validate_asset_path(&asset.path)?;
-                anyhow::ensure!(!asset.name.is_empty(), t!("cli.publish.asset_name_empty"));
+                anyhow::ensure!(
+                    !asset.name.is_empty(),
+                    "release asset name must not be empty"
+                );
                 assets.push(AssetDeclaration::Path {
                     path: asset.path.clone(),
                     name: asset.name.clone(),
@@ -195,11 +197,7 @@ fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
             Asset::String(pattern) => {
                 validate_asset_path(Path::new(pattern))?;
                 glob::Pattern::new(pattern).map_err(|error| {
-                    anyhow::anyhow!(t!(
-                        "cli.publish.asset_pattern_invalid",
-                        pattern = pattern,
-                        error = error
-                    ))
+                    anyhow::anyhow!("invalid release asset glob {pattern}: {error}")
                 })?;
                 assets.push(AssetDeclaration::Glob {
                     pattern: pattern.clone(),
@@ -220,7 +218,8 @@ fn validate_asset_path(path: &Path) -> anyhow::Result<()> {
         });
     anyhow::ensure!(
         valid,
-        t!("cli.publish.asset_path_invalid", path = path.display())
+        "release asset path must stay within the project: {}",
+        path.display()
     );
     Ok(())
 }

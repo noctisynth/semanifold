@@ -7,7 +7,7 @@ use std::{
 use camino::Utf8PathBuf;
 
 /// Converts a package path into a stable project-relative UTF-8 path.
-pub(crate) fn normalize_package_path(
+pub fn normalize_package_path(
     project_root: &Path,
     package_path: &Path,
 ) -> Result<Utf8PathBuf, PackagePathError> {
@@ -120,7 +120,7 @@ fn relative_to_utf8(path: &Path) -> Result<Utf8PathBuf, PackagePathError> {
 }
 
 #[derive(Debug)]
-pub(crate) enum PackagePathError {
+pub enum PackagePathError {
     InvalidProjectRoot { root: PathBuf },
     EscapesProjectRoot { root: PathBuf, path: PathBuf },
     SymlinkEscapesProjectRoot { root: PathBuf, path: PathBuf },

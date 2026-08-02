@@ -70,6 +70,7 @@ pub enum ConfigSyncWarning {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ConfigSyncPlan {
     pub config_path: Utf8PathBuf,
+    pub prune_missing: bool,
     pub added: Vec<DiscoveredPackage>,
     pub missing: Vec<ConfiguredPackage>,
     pub renamed: Vec<PackageRename>,
@@ -362,6 +363,7 @@ impl ConfigSyncPlanner {
 
         ConfigSyncPlan {
             config_path,
+            prune_missing: false,
             added,
             missing,
             renamed,

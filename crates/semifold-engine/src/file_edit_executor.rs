@@ -7,7 +7,6 @@ use std::{
 };
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
-use rust_i18n::t;
 use semifold_core::{FileEdit, FileEditExpectation, FileHash};
 
 static NEXT_TEMPORARY_FILE: AtomicU64 = AtomicU64::new(0);
@@ -164,7 +163,9 @@ fn cleanup_temporary_files(files: &[Utf8PathBuf]) {
 }
 
 fn cleanup_unapplied_temporary_files(files: &[Utf8PathBuf], applied: usize) {
-    cleanup_temporary_files(&files[applied..]);
+    for file in files.iter().skip(applied) {
+        let _ = fs::remove_file(file);
+    }
 }
 
 #[derive(Debug)]
@@ -205,57 +206,32 @@ pub enum FileEditApplyError {
 impl fmt::Display for FileEditApplyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidPath { path } => write!(
-                formatter,
-                "{}",
-                t!("cli.version.edit_path_invalid", path = path)
-            ),
-            Self::DuplicateTarget { path } => write!(
-                formatter,
-                "{}",
-                t!("cli.version.duplicate_edit", path = path)
-            ),
+            Self::InvalidPath { path } => write!(formatter, "planned edit path is invalid: {path}"),
+            Self::DuplicateTarget { path } => {
+                write!(formatter, "multiple planned edits target {path}")
+            }
             Self::Read { path, source } => write!(
                 formatter,
-                "{}",
-                t!("cli.version.edit_read_failed", path = path, error = source)
+                "failed to read planned edit target {path}: {source}"
             ),
             Self::HashMismatch { path, .. } => write!(
                 formatter,
-                "{}",
-                t!("cli.version.edit_hash_mismatch", path = path)
+                "planned edit target changed after planning: {path}"
             ),
-            Self::TargetExists { path } => write!(
-                formatter,
-                "{}",
-                t!("cli.version.edit_target_exists", path = path)
-            ),
+            Self::TargetExists { path } => {
+                write!(formatter, "planned new edit target already exists: {path}")
+            }
             Self::CreateTemporary { path, source } => write!(
                 formatter,
-                "{}",
-                t!(
-                    "cli.version.edit_temp_create_failed",
-                    path = path,
-                    error = source
-                )
+                "failed to create temporary edit file {path}: {source}"
             ),
             Self::WriteTemporary { path, source } => write!(
                 formatter,
-                "{}",
-                t!(
-                    "cli.version.edit_temp_write_failed",
-                    path = path,
-                    error = source
-                )
+                "failed to write temporary edit file {path}: {source}"
             ),
             Self::Replace { path, source, .. } => write!(
                 formatter,
-                "{}",
-                t!(
-                    "cli.version.edit_replace_failed",
-                    path = path,
-                    error = source
-                )
+                "failed to replace planned edit target {path}: {source}"
             ),
         }
     }

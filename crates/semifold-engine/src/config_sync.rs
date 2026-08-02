@@ -19,12 +19,12 @@ use crate::{
 
 /// Resolver selection and deletion safety for one config sync invocation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ConfigSyncScope {
+pub struct ConfigSyncScope {
     resolvers: Vec<ResolverType>,
-    pub(crate) is_complete: bool,
+    pub is_complete: bool,
 }
 
-pub(crate) fn config_sync_scope(
+pub fn config_sync_scope(
     config: &Config,
     requested: &[ResolverType],
 ) -> Result<ConfigSyncScope, ConfigSyncPlanningError> {
@@ -50,13 +50,17 @@ pub(crate) fn config_sync_scope(
 }
 
 /// Builds one config sync plan without editing the configuration document.
-pub(crate) fn plan_config_sync(
+pub fn plan_config_sync(
     project_root: &Path,
     config_path: &Path,
     config: &Config,
     changesets: &[Changeset],
     scope: &ConfigSyncScope,
+    prune_missing: bool,
 ) -> Result<ConfigSyncPlan, ConfigSyncPlanningError> {
+    if prune_missing && !scope.is_complete {
+        return Err(ConfigSyncPlanningError::IncompletePrune);
+    }
     let selected = scope.resolvers.iter().copied().collect::<BTreeSet<_>>();
     let configured = config
         .packages
@@ -93,16 +97,15 @@ pub(crate) fn plan_config_sync(
     let config_path = Utf8PathBuf::from_path_buf(config_path.to_path_buf())
         .map_err(|path| ConfigSyncPlanningError::NonUtf8ConfigPath { path })?;
 
-    Ok(ConfigSyncPlanner::plan(
-        config_path,
-        &configured,
-        &discovery.packages,
-        &changesets,
-    ))
+    let mut plan =
+        ConfigSyncPlanner::plan(config_path, &configured, &discovery.packages, &changesets);
+    plan.prune_missing = prune_missing;
+    Ok(plan)
 }
 
 #[derive(Debug)]
-pub(crate) enum ConfigSyncPlanningError {
+pub enum ConfigSyncPlanningError {
+    IncompletePrune,
     ResolverNotEnabled {
         resolver: ResolverType,
     },
@@ -119,6 +122,9 @@ pub(crate) enum ConfigSyncPlanningError {
 impl fmt::Display for ConfigSyncPlanningError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::IncompletePrune => {
+                formatter.write_str("pruning requires a complete resolver scan")
+            }
             Self::ResolverNotEnabled { resolver } => {
                 write!(
                     formatter,
@@ -148,7 +154,9 @@ impl Error for ConfigSyncPlanningError {
         match self {
             Self::ConfiguredPackagePath { source, .. } => Some(source),
             Self::Discovery(source) => Some(source),
-            Self::ResolverNotEnabled { .. } | Self::NonUtf8ConfigPath { .. } => None,
+            Self::IncompletePrune
+            | Self::ResolverNotEnabled { .. }
+            | Self::NonUtf8ConfigPath { .. } => None,
         }
     }
 }
@@ -260,6 +268,7 @@ mod tests {
             &config,
             &[changeset],
             &scope,
+            false,
         )
         .unwrap();
 

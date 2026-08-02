@@ -332,10 +332,10 @@
 ### 项目加载
 
 - [x] 定义字段完整的 `Project`
-- [ ] 为 `init` 定义独立 `ProjectLocation`
+- [x] 为 `init` 定义独立 `ProjectLocation`
 - [x] 定义结构化 `ProjectLoadError`
 - [x] 以 `ProjectLoadError::NonUtf8Path` 显式拒绝无法无损表示的项目路径
-- [ ] 不再使用 `.ok()` 吞掉配置、路径或 Git 错误
+- [x] 不再使用 `.ok()` 吞掉配置、路径或 Git 错误
 - [x] GitHub 环境、Git 句柄和 dry-run 不进入 `Project`
 - [x] 将发布事实建模为不可变 `ReleaseContext`，而不是恢复万能 `Context`
 - [x] 将 version 包级事实建模为 `ReleasePackageContext`，将发布事实建模为独立 `PublishContext`
@@ -344,11 +344,12 @@
 
 ### 应用服务
 
-- [ ] 创建 `semifold-engine`
-- [ ] 实现 `SemifoldService::plan_config_sync()`
-- [ ] 实现 `SemifoldService::apply_config_sync()`
-- [ ] 实现 `SemifoldService::plan_release()`
-- [ ] 实现 `SemifoldService::apply_release()`
+- [x] 创建 `semifold-engine`
+- [x] 实现 `SemifoldService::plan_config_sync()`
+- [x] 实现 `SemifoldService::apply_config_sync()`
+- [x] 实现 `SemifoldService::plan_release()`
+- [x] 实现 `SemifoldService::prepare_release()`，将纯领域 `ReleasePlan` 准备为完整 `ReleaseApplyPlan`
+- [x] 实现 `SemifoldService::apply_release()`
 - [ ] 实现 `SemifoldService::plan_publish()`
 - [ ] 实现 `SemifoldService::publish()`
 
@@ -357,11 +358,11 @@
 - [ ] CLI 只负责参数解析、交互和结果渲染
 - [ ] CI 通过 `SemifoldService` 编排 release branch、commit、push 和 PR
 - [ ] MCP 使用与 CLI 相同的应用服务
-- [ ] MCP 不再为每次调用重新构建全局 `Context`
-- [ ] MCP 不再使用 `set_current_dir()` 修改进程全局状态
-- [ ] 移除旧 `Context.version_bumps`
+- [x] MCP 不再为每次调用重新构建全局 `Context`
+- [x] MCP 不再使用 `set_current_dir()` 修改进程全局状态
+- [x] 移除旧 `Context.version_bumps`
 - [x] 移除旧 `Context::create_resolver()`
-- [ ] 删除旧 `Context`
+- [x] 删除旧 `Context`
 
 ### 错误边界
 
@@ -375,7 +376,7 @@
 
 ### 阶段完成条件
 
-- [ ] CLI 模块中不再包含版本计算或 manifest 文件操作
+- [x] CLI 模块中不再包含版本计算或 manifest 文件操作
 - [ ] CLI、CI 和 MCP 不复制业务编排
 - [x] 发布计算中不存在 `RefCell` 或隐式全局可变 map
 

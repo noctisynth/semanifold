@@ -8,8 +8,10 @@ use std::{
 pub use semifold_core::{
     ChangelogContext, ChangesetContext, DependencyUpdateContext, PackageChangesetContext,
 };
-use semifold_core::{ChangesetId, CommitContext, PullRequestContext, ReleasePackageContext};
-use semifold_resolver::{changeset, context, error::ResolveError};
+use semifold_core::{
+    ChangesetId, CommitContext, PullRequestContext, ReleasePackageContext, RepositoryContext,
+};
+use semifold_resolver::{changeset, error::ResolveError};
 
 pub mod types;
 pub mod utils;
@@ -22,6 +24,12 @@ pub struct GeneratedChangelog {
 pub struct CollectedChangelogContext<'release> {
     pub context: ChangelogContext<'release>,
     pub remote_metadata_failed: bool,
+}
+
+pub struct ChangelogSource<'a> {
+    pub repo_root: &'a Path,
+    pub tags: &'a BTreeMap<String, String>,
+    pub repository: Option<&'a RepositoryContext>,
 }
 
 pub fn format_changelog(context: &ChangelogContext<'_>) -> String {
@@ -120,7 +128,7 @@ pub fn format_line(changeset: &ChangesetContext) -> String {
 }
 
 pub async fn collect_changelog_context<'release>(
-    ctx: &context::Context,
+    source: &ChangelogSource<'_>,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
     package: ReleasePackageContext<'release>,
@@ -129,12 +137,6 @@ pub async fn collect_changelog_context<'release>(
 ) -> Result<CollectedChangelogContext<'release>, ResolveError> {
     let mut collected_changesets = Vec::new();
     let mut remote_metadata_failed = false;
-
-    let tags = ctx
-        .config
-        .as_ref()
-        .map(|c| c.tags.clone())
-        .unwrap_or_default();
 
     for changeset in changesets {
         let Some(changed_package) = changeset
@@ -151,10 +153,7 @@ pub async fn collect_changelog_context<'release>(
                 path: PathBuf::new(),
                 reason: "Changeset is missing its source path".to_string(),
             })?;
-        let repo_root = ctx.repo_root.as_ref().ok_or(ResolveError::GitError {
-            message: "Repository root is not available".to_string(),
-        })?;
-        let rel_path = pathdiff::diff_paths(changeset_path, repo_root).ok_or(
+        let rel_path = pathdiff::diff_paths(changeset_path, source.repo_root).ok_or(
             ResolveError::InvalidChangeset {
                 path: changeset_path.to_path_buf(),
                 reason: "Changeset path is not under repo root".to_string(),
@@ -162,12 +161,12 @@ pub async fn collect_changelog_context<'release>(
         )?;
         let commit_info = utils::find_first_commit_for_path(repo, &rel_path);
         let pr_info = if collect_remote_metadata
-            && let Some(repo_info) = ctx.repo_info.as_ref()
+            && let Some(repository) = source.repository
             && let Some(commit_info) = commit_info.as_ref()
         {
             match utils::query_pr_for_commit(
-                repo_info.owner.as_str(),
-                repo_info.repo_name.as_str(),
+                repository.owner.as_str(),
+                repository.name.as_str(),
                 commit_info,
             )
             .await
@@ -184,12 +183,9 @@ pub async fn collect_changelog_context<'release>(
 
         let commit = commit_info.map(|commit| {
             let sha = commit.oid.to_string();
-            let web_url = ctx.repo_info.as_ref().map(|repo_info| {
-                format!(
-                    "{}/{}/{}/commit/{sha}",
-                    repo_info.base_url, repo_info.owner, repo_info.repo_name
-                )
-            });
+            let web_url = source
+                .repository
+                .map(|repository| format!("{}/commit/{sha}", repository.web_url));
             CommitContext { sha, web_url }
         });
         let pull_request = pr_info.map(|pull_request| PullRequestContext {
@@ -200,7 +196,7 @@ pub async fn collect_changelog_context<'release>(
         let section = changed_package
             .tag
             .as_ref()
-            .and_then(|tag| tags.get(tag))
+            .and_then(|tag| source.tags.get(tag))
             .cloned()
             .unwrap_or_else(|| "Changes".to_string());
         collected_changesets.push(PackageChangesetContext {
@@ -226,7 +222,7 @@ pub async fn collect_changelog_context<'release>(
 }
 
 pub async fn generate_changelog<'release>(
-    ctx: &context::Context,
+    source: &ChangelogSource<'_>,
     repo: &git2::Repository,
     changesets: &[changeset::Changeset],
     package: ReleasePackageContext<'release>,
@@ -234,7 +230,7 @@ pub async fn generate_changelog<'release>(
     collect_remote_metadata: bool,
 ) -> Result<GeneratedChangelog, ResolveError> {
     let collected = collect_changelog_context(
-        ctx,
+        source,
         repo,
         changesets,
         package,

@@ -11,10 +11,25 @@ authors.workspace = true
 readme.workspace = true
 
 [dependencies]
+anyhow = "1.0.99"
+bytes = "1.10.1"
 camino = { version = "1.2.4", features = ["serde1"] }
 git2 = { version = "0.20.2", features = ["vendored-openssl"] }
+glob = "0.3.4"
+minijinja = { version = "2.12.0", default-features = false, features = ["serde"] }
+octocrab = "0.47.0"
+reqwest = { version = "0.12.24", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+semifold-changelog = { version = "0.3.0-beta.1", path = "../changelog" }
+semifold-core = { version = "0.1.0-beta.1", path = "../semifold-core" }
 semifold-resolver = { version = "0.4.0-beta.2", path = "../resolver" }
+semver = "1.0.28"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 thiserror = "2.0.18"
+toml_edit = { version = "0.23.3", features = ["serde"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }

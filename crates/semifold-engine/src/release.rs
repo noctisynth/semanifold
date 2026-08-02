@@ -18,19 +18,19 @@ use semver::VersionReq;
 
 use crate::workspace::load_workspace_graph;
 
-pub(crate) struct ReleasePullRequestContext<'a> {
+pub struct ReleasePullRequestContext<'a> {
     pub release: &'a ReleaseContext,
     pub branch: String,
     pub changelogs: BTreeMap<PackageId, String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct RenderedReleasePullRequest {
+pub struct RenderedReleasePullRequest {
     pub title: String,
     pub body: String,
 }
 
-pub(crate) fn render_release_pull_request(
+pub fn render_release_pull_request(
     context: &ReleasePullRequestContext<'_>,
 ) -> RenderedReleasePullRequest {
     let changelogs = context
@@ -53,10 +53,7 @@ pub(crate) fn render_release_pull_request(
     }
 }
 
-pub(crate) fn render_release_branch(
-    template: &str,
-    release: &ReleaseContext,
-) -> anyhow::Result<String> {
+pub fn render_release_branch(template: &str, release: &ReleaseContext) -> anyhow::Result<String> {
     let mut release_value = serde_json::to_value(release)?;
     if release.plan.common_version.is_none()
         && let Some(plan) = release_value
@@ -78,7 +75,7 @@ pub(crate) fn render_release_branch(
 }
 
 /// Builds the immutable release plan from the current migration-layer inputs.
-pub(crate) fn plan_release(
+pub fn plan_release(
     root: &Path,
     config: &Config,
     changesets: &[Changeset],

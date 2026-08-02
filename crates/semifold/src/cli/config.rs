@@ -1,20 +1,14 @@
 use std::{collections::BTreeSet, fs::OpenOptions, io::Write, path::Path};
 
 use anyhow::{Context as _, anyhow};
-use camino::Utf8Path;
 use clap::{Parser, Subcommand, ValueEnum};
 use rust_i18n::t;
-use semifold_core::{ConfigSyncWarning, PackageId};
-use semifold_resolver::{
-    config,
-    context::Context,
-    resolver::{self, ResolverType},
+use semifold_core::ConfigSyncWarning;
+use semifold_engine::{
+    AppError, ConfigSyncOptions, Project, SemifoldService, SystemDependencies,
+    config_sync::ConfigSyncPlanningError,
 };
-
-use crate::{
-    config_editor::TomlConfigEditor,
-    config_sync::{ConfigSyncPlanningError, config_sync_scope, plan_config_sync},
-};
+use semifold_resolver::{config, resolver::ResolverType};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Config {
@@ -126,36 +120,27 @@ struct MigrationPlan {
     packages: Vec<String>,
 }
 
-pub(crate) fn run(command: &Config, ctx: &Context) -> anyhow::Result<()> {
+pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow::Result<()> {
     match &command.command {
-        Commands::Sync(options) => sync(options, ctx),
-        Commands::Migrate(options) => migrate(options, ctx),
-        Commands::Channel(channel) => manage_channel(channel, ctx),
+        Commands::Sync(options) => sync(options, project, dry_run),
+        Commands::Migrate(options) => migrate(options, project, dry_run),
+        Commands::Channel(channel) => manage_channel(channel, project, dry_run),
     }
 }
 
-fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx)
+fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    toml_config_path(project)
         .map_err(|error| render_config_path_error(error, t!("cli.config.command_sync").as_ref()))?;
-    let project_root = ctx
-        .repo_root
-        .as_deref()
-        .context(t!("cli.config.sync_repo_root_not_found"))?;
-    let config = ctx.config.as_ref().context(t!("cli.config.not_found"))?;
-    let scope = config_sync_scope(config, &options.resolvers).map_err(|error| match error {
-        ConfigSyncPlanningError::ResolverNotEnabled { resolver } => anyhow!(t!(
-            "cli.config.sync_resolver_not_enabled",
-            resolver = resolver.to_string()
-        )),
-        error => anyhow!(t!("cli.config.sync_planning_failed", error = error)),
-    })?;
-    if options.prune && !scope.is_complete {
-        anyhow::bail!(t!("cli.config.sync_prune_partial_scan"));
-    }
-    let changesets = resolver::get_changesets(ctx)
-        .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
-    let plan = plan_config_sync(project_root, path, config, &changesets, &scope)
-        .map_err(|error| anyhow!(t!("cli.config.sync_planning_failed", error = error)))?;
+    let service = SemifoldService::new(SystemDependencies);
+    let plan = service
+        .plan_config_sync(
+            project,
+            &ConfigSyncOptions {
+                resolvers: options.resolvers.clone(),
+                prune_missing: options.prune,
+            },
+        )
+        .map_err(render_config_sync_error)?;
 
     report_sync_warnings(&plan.warnings);
     if !plan.missing.is_empty() {
@@ -179,7 +164,7 @@ fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
         println!("{}", t!("cli.config.sync_check_passed"));
         return Ok(());
     }
-    if ctx.dry_run {
+    if dry_run {
         println!("{}", t!("cli.config.sync_dry_run"));
         println!("{}", serde_json::to_string_pretty(&plan)?);
         return Ok(());
@@ -198,22 +183,30 @@ fn sync(options: &Sync, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let path = Utf8Path::from_path(path).context(t!("cli.config.sync_non_utf8_path"))?;
-    let mut editor = TomlConfigEditor::load(path)
+    let report = service
+        .apply_config_sync(&plan)
         .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
-    let original = editor.render();
-    editor
-        .apply(&plan, options.prune)
-        .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
-    let content = editor.render();
-    if content == original {
+    if !report.changed {
         println!("{}", t!("cli.config.sync_no_safe_changes"));
         return Ok(());
     }
-
-    write_atomically(path.as_std_path(), &content)?;
-    println!("{}", t!("cli.config.synced", path = path));
+    println!("{}", t!("cli.config.synced", path = report.path));
     Ok(())
+}
+
+fn render_config_sync_error(error: AppError) -> anyhow::Error {
+    match error {
+        AppError::ConfigSyncPlanning(ConfigSyncPlanningError::ResolverNotEnabled { resolver }) => {
+            anyhow!(t!(
+                "cli.config.sync_resolver_not_enabled",
+                resolver = resolver.to_string()
+            ))
+        }
+        AppError::ConfigSyncPlanning(ConfigSyncPlanningError::IncompletePrune) => {
+            anyhow!(t!("cli.config.sync_prune_partial_scan"))
+        }
+        error => anyhow!(t!("cli.config.sync_planning_failed", error = error)),
+    }
 }
 
 fn report_sync_warnings(warnings: &[ConfigSyncWarning]) {
@@ -236,15 +229,23 @@ fn report_sync_warnings(warnings: &[ConfigSyncWarning]) {
     }
 }
 
-fn manage_channel(command: &Channel, ctx: &Context) -> anyhow::Result<()> {
+fn manage_channel(command: &Channel, project: &Project, dry_run: bool) -> anyhow::Result<()> {
     match &command.command {
         ChannelCommands::Set(options) => {
             if options.channel.trim().is_empty() || options.channel == "stable" {
                 anyhow::bail!(t!("cli.config.channel_set_requires_named"));
             }
-            update_channel(Some(&options.channel), options.bump, &options.target, ctx)
+            update_channel(
+                Some(&options.channel),
+                options.bump,
+                &options.target,
+                project,
+                dry_run,
+            )
         }
-        ChannelCommands::Clear(options) => update_channel(None, None, &options.target, ctx),
+        ChannelCommands::Clear(options) => {
+            update_channel(None, None, &options.target, project, dry_run)
+        }
     }
 }
 
@@ -252,9 +253,10 @@ fn update_channel(
     channel: Option<&str>,
     bump: Option<ChannelBumpArg>,
     target: &ChannelTarget,
-    ctx: &Context,
+    project: &Project,
+    dry_run: bool,
 ) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx).map_err(|error| {
+    let path = toml_config_path(project).map_err(|error| {
         render_config_path_error(error, t!("cli.config.command_channel").as_ref())
     })?;
     let original = std::fs::read_to_string(path)?;
@@ -277,7 +279,7 @@ fn update_channel(
     if target.check {
         anyhow::bail!(t!("cli.config.channels_mismatch"));
     }
-    if ctx.dry_run {
+    if dry_run {
         return Ok(());
     }
 
@@ -287,8 +289,8 @@ fn update_channel(
     Ok(())
 }
 
-fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
-    let path = toml_config_path(ctx).map_err(|error| {
+fn migrate(options: &Migrate, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let path = toml_config_path(project).map_err(|error| {
         render_config_path_error(error, t!("cli.config.command_migrate").as_ref())
     })?;
 
@@ -310,7 +312,7 @@ fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
     if options.check {
         anyhow::bail!(t!("cli.config.migration_required_error"));
     }
-    if ctx.dry_run {
+    if dry_run {
         return Ok(());
     }
 
@@ -321,15 +323,11 @@ fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
 
 #[derive(Debug, Eq, PartialEq)]
 enum ConfigPathError {
-    ConfigNotFound,
     UnsupportedConfigFormat,
 }
 
-fn toml_config_path(ctx: &Context) -> Result<&Path, ConfigPathError> {
-    let path = ctx
-        .config_path
-        .as_deref()
-        .ok_or(ConfigPathError::ConfigNotFound)?;
+fn toml_config_path(project: &Project) -> Result<&Path, ConfigPathError> {
+    let path = project.config_path.as_std_path();
     if path.extension().and_then(|extension| extension.to_str()) != Some("toml") {
         return Err(ConfigPathError::UnsupportedConfigFormat);
     }
@@ -338,7 +336,6 @@ fn toml_config_path(ctx: &Context) -> Result<&Path, ConfigPathError> {
 
 fn render_config_path_error(error: ConfigPathError, command: &str) -> anyhow::Error {
     match error {
-        ConfigPathError::ConfigNotFound => anyhow!(t!("cli.config.not_found")),
         ConfigPathError::UnsupportedConfigFormat => {
             anyhow!(t!("cli.config.unsupported_format", command = command))
         }
@@ -609,34 +606,6 @@ fn parse_legacy_version_mode(
     )
 }
 
-pub(crate) fn consume_channel_bumps(path: &Path, packages: &[PackageId]) -> anyhow::Result<()> {
-    if packages.is_empty() {
-        return Ok(());
-    }
-    let original = std::fs::read_to_string(path)?;
-    let mut document = original.parse::<toml_edit::DocumentMut>()?;
-    let configured = document["packages"]
-        .as_table_mut()
-        .context(t!("cli.config.missing_packages_table"))?;
-    for package in packages {
-        let table = configured[package.as_str()]
-            .as_table_like_mut()
-            .with_context(|| {
-                t!(
-                    "cli.config.package_must_be_table",
-                    package = package.as_str()
-                )
-            })?;
-        table.remove("channel-bump");
-    }
-    let content = document.to_string();
-    if content != original {
-        config::load_config_from_str(path, &content)?;
-        write_atomically(path, &content)?;
-    }
-    Ok(())
-}
-
 fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
     let extension = path
         .extension()
@@ -663,8 +632,10 @@ fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
 mod tests {
     use std::{fs, path::PathBuf};
 
+    use camino::Utf8PathBuf;
     use clap::Parser as _;
-    use semifold_resolver::{config, context::Context, resolver::ResolverType};
+    use semifold_engine::Project;
+    use semifold_resolver::{config, resolver::ResolverType};
 
     use super::{
         ChannelBumpArg, ChannelTarget, Config as ConfigCommand, ConfigPathError, Migrate, Sync,
@@ -705,17 +676,32 @@ mod tests {
         directory
     }
 
-    fn sync_context(root: &std::path::Path, dry_run: bool) -> Context {
+    fn project_from_config_path(config_path: PathBuf) -> Project {
+        let config = config::load_config(&config_path).unwrap();
+        project_with_config_path(config_path, config)
+    }
+
+    fn project_with_config_path(config_path: PathBuf, config: config::Config) -> Project {
+        let changeset_root = config_path
+            .parent()
+            .expect("test config has a parent directory")
+            .to_path_buf();
+        let root = changeset_root
+            .parent()
+            .unwrap_or(&changeset_root)
+            .to_path_buf();
+        Project {
+            root: Utf8PathBuf::from_path_buf(root).unwrap(),
+            changeset_dir: Utf8PathBuf::from_path_buf(changeset_root).unwrap(),
+            config_path: Utf8PathBuf::from_path_buf(config_path.clone()).unwrap(),
+            config,
+        }
+    }
+
+    fn sync_project(root: &std::path::Path) -> Project {
         let changeset_root = root.join(".changes");
         let config_path = changeset_root.join("config.toml");
-        Context {
-            config: Some(config::load_config(&config_path).unwrap()),
-            changeset_root: Some(changeset_root),
-            config_path: Some(config_path),
-            repo_root: Some(root.to_path_buf()),
-            dry_run,
-            ..Default::default()
-        }
+        project_from_config_path(config_path)
     }
 
     fn enable_node_resolver(config_path: &std::path::Path) {
@@ -880,12 +866,9 @@ version-mode = "semantic"
 [resolver]
 "#;
         fs::write(&path, original).unwrap();
-        let context = Context {
-            config_path: Some(path.clone()),
-            ..Default::default()
-        };
+        let project = project_from_config_path(path.clone());
 
-        let error = migrate(&Migrate { check: true }, &context).unwrap_err();
+        let error = migrate(&Migrate { check: true }, &project, false).unwrap_err();
 
         assert!(
             error.to_string().contains("migration is required"),
@@ -913,12 +896,9 @@ resolver = "rust"
 url = ""
 "#;
         fs::write(&path, original).unwrap();
-        let context = Context {
-            config_path: Some(path.clone()),
-            ..Default::default()
-        };
+        let project = project_from_config_path(path.clone());
 
-        migrate(&Migrate { check: false }, &context).unwrap();
+        migrate(&Migrate { check: false }, &project, false).unwrap();
 
         let migrated = fs::read_to_string(&path).unwrap();
         assert!(migrated.contains("[resolver.rust.pre-check]"));
@@ -1031,17 +1011,14 @@ resolver = "rust"
 [resolver]
 "#;
         fs::write(&path, original).unwrap();
-        let context = Context {
-            config_path: Some(path.clone()),
-            ..Default::default()
-        };
+        let project = project_from_config_path(path.clone());
         let target = ChannelTarget {
             packages: vec!["app".to_string()],
             all: false,
             check: true,
         };
 
-        let error = update_channel(Some("alpha"), None, &target, &context).unwrap_err();
+        let error = update_channel(Some("alpha"), None, &target, &project, false).unwrap_err();
 
         assert!(error.to_string().contains("do not match"));
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
@@ -1051,7 +1028,7 @@ resolver = "rust"
     #[test]
     fn sync_adds_discovered_packages_and_is_idempotent() {
         let root = temporary_sync_root("write");
-        let context = sync_context(&root, false);
+        let context = sync_project(&root);
         let config_path = root.join(".changes/config.toml");
 
         sync(
@@ -1061,6 +1038,7 @@ resolver = "rust"
                 resolvers: vec![],
             },
             &context,
+            false,
         )
         .unwrap();
         let first = fs::read_to_string(&config_path).unwrap();
@@ -1072,7 +1050,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), first);
@@ -1083,7 +1062,7 @@ resolver = "rust"
     #[test]
     fn sync_dry_run_does_not_write_the_configuration() {
         let root = temporary_sync_root("dry-run");
-        let context = sync_context(&root, true);
+        let context = sync_project(&root);
         let config_path = root.join(".changes/config.toml");
         let original = fs::read_to_string(&config_path).unwrap();
 
@@ -1094,6 +1073,7 @@ resolver = "rust"
                 resolvers: vec![],
             },
             &context,
+            true,
         )
         .unwrap();
         assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
@@ -1104,7 +1084,7 @@ resolver = "rust"
     #[test]
     fn sync_check_reports_drift_without_writing_the_configuration() {
         let root = temporary_sync_root("check");
-        let context = sync_context(&root, false);
+        let context = sync_project(&root);
         let config_path = root.join(".changes/config.toml");
         let original = fs::read_to_string(&config_path).unwrap();
 
@@ -1115,6 +1095,7 @@ resolver = "rust"
                 resolvers: vec![],
             },
             &context,
+            false,
         )
         .unwrap_err();
         assert!(error.to_string().contains("out of sync"));
@@ -1133,7 +1114,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap();
 
@@ -1143,7 +1125,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap();
         assert!(
@@ -1174,7 +1157,8 @@ resolver = "rust"
                 prune: true,
                 resolvers: vec![],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap();
         let synced = fs::read_to_string(&config_path).unwrap();
@@ -1219,7 +1203,7 @@ resolver = "rust"
             resolvers: vec![ResolverType::Rust],
         };
 
-        sync(&rust_only, &sync_context(&root, false)).unwrap();
+        sync(&rust_only, &sync_project(&root), false).unwrap();
         let synced = fs::read_to_string(&config_path).unwrap();
         assert!(synced.contains("[packages.app]"));
         assert!(synced.contains("[packages.node-only]"));
@@ -1230,7 +1214,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![ResolverType::Rust],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap();
 
@@ -1249,7 +1234,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![ResolverType::Nodejs],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap_err();
         assert!(error.to_string().contains("not enabled"));
@@ -1271,7 +1257,8 @@ resolver = "rust"
                 prune: true,
                 resolvers: vec![ResolverType::Rust],
             },
-            &sync_context(&root, false),
+            &sync_project(&root),
+            false,
         )
         .unwrap_err();
         assert!(
@@ -1288,13 +1275,21 @@ resolver = "rust"
     fn sync_rejects_json_configuration_with_a_typed_format_error() {
         let path = temporary_config_path("json").with_extension("json");
         fs::write(&path, "{}").unwrap();
-        let context = Context {
-            config_path: Some(path.clone()),
-            ..Default::default()
-        };
+        let project = project_with_config_path(
+            path.clone(),
+            config::Config {
+                branches: config::BranchesConfig {
+                    base: "main".to_string(),
+                    release: "release".to_string(),
+                },
+                tags: Default::default(),
+                packages: Default::default(),
+                resolver: Default::default(),
+            },
+        );
 
         assert_eq!(
-            toml_config_path(&context),
+            toml_config_path(&project),
             Err(ConfigPathError::UnsupportedConfigFormat)
         );
         let error = sync(
@@ -1303,7 +1298,8 @@ resolver = "rust"
                 prune: false,
                 resolvers: vec![],
             },
-            &context,
+            &project,
+            false,
         )
         .unwrap_err();
         assert!(error.to_string().contains("supports only TOML"));

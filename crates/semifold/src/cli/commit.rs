@@ -5,7 +5,8 @@ use colored::Colorize;
 use inquire::{Confirm, MultiSelect, Select, Text};
 
 use rust_i18n::t;
-use semifold_resolver::{changeset, context::Context};
+use semifold_engine::Project;
+use semifold_resolver::changeset;
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
@@ -64,15 +65,9 @@ fn file_exists(root_path: &Path, filename: &str) -> bool {
     path.exists()
 }
 
-pub(crate) fn run(commit: &Commit, ctx: &Context) -> anyhow::Result<()> {
-    let Context {
-        config: Some(config),
-        changeset_root: Some(changeset_root),
-        ..
-    } = ctx
-    else {
-        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
-    };
+pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
+    let config = &project.config;
+    let changeset_root = project.changeset_dir.as_std_path();
 
     let name = if let Some(name) = &commit.name {
         let sanitized_name = sanitize_filename(name);

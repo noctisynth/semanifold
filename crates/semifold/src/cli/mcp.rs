@@ -1,3 +1,5 @@
+use std::{path::PathBuf, sync::Arc};
+
 use clap::Parser;
 use rmcp::schemars::JsonSchema;
 use rmcp::{
@@ -7,12 +9,10 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use rust_i18n::t;
+use semifold_engine::{Project, ProjectLocation};
 use serde::{Deserialize, Serialize};
 
-use semifold_resolver::{
-    changeset::{BumpLevel, Changeset},
-    context,
-};
+use semifold_resolver::changeset::{BumpLevel, Changeset};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[schemars(title = t!("cli.mcp.params.name"), description = t!("cli.mcp.tools.create_changeset"))]
@@ -40,8 +40,18 @@ pub struct McpCommand {
     pub current_dir: Option<String>,
 }
 
-#[derive(Default, Clone)]
-pub struct SemifoldMcp;
+#[derive(Clone)]
+pub struct SemifoldMcp {
+    project: Arc<Project>,
+}
+
+impl SemifoldMcp {
+    fn new(project: Project) -> Self {
+        Self {
+            project: Arc::new(project),
+        }
+    }
+}
 
 #[tool_router]
 impl SemifoldMcp {
@@ -50,13 +60,7 @@ impl SemifoldMcp {
         description = "Get all available tags from Semifold config"
     )]
     fn get_tags(&self) -> Result<String, String> {
-        let ctx =
-            context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
-
-        ctx.config
-            .as_ref()
-            .ok_or_else(|| t!("cli.mcp.not_initialized").into())
-            .and_then(|c| serde_json::to_string(&c.tags).map_err(|error| error.to_string()))
+        serde_json::to_string(&self.project.config.tags).map_err(|error| error.to_string())
     }
 
     #[tool(
@@ -64,28 +68,22 @@ impl SemifoldMcp {
         description = "Get all packages from Semifold config with their paths and resolvers"
     )]
     fn get_packages(&self) -> Result<String, String> {
-        let ctx =
-            context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
-
-        ctx.config
-            .as_ref()
-            .ok_or_else(|| t!("cli.mcp.not_initialized").into())
-            .and_then(|c| {
-                let pkgs: serde_json::Map<_, _> = c
-                    .packages
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            serde_json::json!({
-                                "path": v.path,
-                                "resolver": v.resolver.to_string()
-                            }),
-                        )
-                    })
-                    .collect();
-                serde_json::to_string(&pkgs).map_err(|error| error.to_string())
+        let packages: serde_json::Map<_, _> = self
+            .project
+            .config
+            .packages
+            .iter()
+            .map(|(key, value)| {
+                (
+                    key.clone(),
+                    serde_json::json!({
+                        "path": value.path,
+                        "resolver": value.resolver.to_string()
+                    }),
+                )
             })
+            .collect();
+        serde_json::to_string(&packages).map_err(|error| error.to_string())
     }
 
     #[tool(
@@ -96,19 +94,9 @@ impl SemifoldMcp {
         &self,
         Parameters(params): Parameters<CreateChangesetParams>,
     ) -> Result<String, String> {
-        let ctx =
-            context::Context::create().map_err(|e| format!("Failed to create context: {}", e))?;
-
-        let changeset_root = ctx
-            .changeset_root
-            .as_ref()
-            .ok_or_else(|| t!("cli.mcp.changeset_dir_not_found").to_string())?;
-
-        if let Some(config) = ctx.config.as_ref() {
-            for pkg in &params.packages {
-                if !config.packages.contains_key(pkg) {
-                    return Err(t!("cli.mcp.package_not_found", package = pkg).into());
-                }
+        for package in &params.packages {
+            if !self.project.config.packages.contains_key(package) {
+                return Err(t!("cli.mcp.package_not_found", package = package).into());
             }
         }
 
@@ -121,14 +109,14 @@ impl SemifoldMcp {
             }
         };
 
-        let tag = params.tag.or_else(|| {
-            ctx.config
-                .as_ref()
-                .and_then(|c| c.tags.keys().next())
-                .cloned()
-        });
+        let tag = params
+            .tag
+            .or_else(|| self.project.config.tags.keys().next().cloned());
 
-        let mut cs = Changeset::new(params.name.clone(), changeset_root);
+        let mut cs = Changeset::new(
+            params.name.clone(),
+            self.project.changeset_dir.as_std_path(),
+        );
         cs.add_packages(&params.packages, level, tag);
         cs.summary(params.summary);
         cs.commit()
@@ -152,10 +140,19 @@ impl ServerHandler for SemifoldMcp {
 }
 
 pub async fn run_mcp(opts: &McpCommand) -> anyhow::Result<()> {
-    if let Some(dir) = &opts.current_dir {
-        std::env::set_current_dir(dir)?;
-    }
-    let service = SemifoldMcp.serve(rmcp::transport::io::stdio()).await?;
+    let start = opts
+        .current_dir
+        .as_ref()
+        .map_or_else(std::env::current_dir, |directory| {
+            Ok(PathBuf::from(directory))
+        })?;
+    let changeset_dir = std::env::var_os("CHANGESET_PATH").map(PathBuf::from);
+    let project = ProjectLocation::discover_with_changeset_dir(&start, changeset_dir.as_deref())
+        .and_then(ProjectLocation::load)
+        .map_err(|error| anyhow::anyhow!(t!("cli.project_load_failed", error = error)))?;
+    let service = SemifoldMcp::new(project)
+        .serve(rmcp::transport::io::stdio())
+        .await?;
     service.waiting().await?;
     Ok(())
 }

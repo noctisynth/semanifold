@@ -3,13 +3,14 @@ use std::{collections::BTreeMap, path::PathBuf};
 use clap::{Parser, ValueEnum};
 use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
+use semifold_engine::{
+    ProjectLocation,
+    discovery::{PackageDiscoveryService, ResolverRegistry},
+};
 use semifold_resolver::{
     config::{self, BranchesConfig, CommandConfig, PreCheckConfig, ResolverConfig},
-    context,
     resolver::ResolverType,
 };
-
-use crate::discovery::{PackageDiscoveryService, ResolverRegistry};
 
 #[derive(rust_embed::Embed)]
 #[folder = "assets"]
@@ -29,8 +30,8 @@ pub(crate) struct Init {
     pub release_branch: Option<String>,
 }
 
-pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
-    if ctx.is_initialized() && !init.force {
+pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()> {
+    if location.existing_config.is_some() && !init.force {
         log::warn!("{}", t!("cli.init.already_initialized"));
         return Ok(());
     }
@@ -38,9 +39,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
     const AVAILABLE_TARGETS: [&str; 2] = [".changes", ".changesets"];
 
     let mut target_dir = std::env::current_dir()?;
-    if let Some(repo_root) = ctx.repo_root.as_ref()
-        && repo_root != &target_dir
-    {
+    if location.root.as_std_path() != target_dir {
         log::warn!("{}", t!("cli.init.not_repo_root"));
         if !Confirm::new(&t!("cli.init.continue"))
             .with_default(false)
@@ -49,7 +48,7 @@ pub(crate) fn run(init: &Init, ctx: &context::Context) -> anyhow::Result<()> {
             log::warn!("{}", t!("cli.init.aborted"));
             return Ok(());
         }
-        target_dir = repo_root.to_path_buf();
+        target_dir = location.root.clone().into_std_path_buf();
     }
 
     let target = if let Some(target) = &init.target {

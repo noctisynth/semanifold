@@ -2116,6 +2116,7 @@ dependencies = [
  "schemars",
  "semifold-changelog",
  "semifold-core",
+ "semifold-engine",
  "semifold-resolver",
  "semver",
  "serde",
@@ -2155,10 +2156,23 @@ dependencies = [
 name = "semifold-engine"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "bytes",
  "camino",
  "git2",
+ "glob",
+ "minijinja",
+ "octocrab",
+ "reqwest",
+ "semifold-changelog",
+ "semifold-core",
  "semifold-resolver",
+ "semver",
+ "serde",
+ "serde_json",
  "thiserror",
+ "tokio",
+ "toml_edit 0.23.10+spec-1.0.0",
 ]
 
 [[package]]

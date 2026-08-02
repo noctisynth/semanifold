@@ -6,10 +6,8 @@ use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
 use semifold_core::PlanWarning;
-use semifold_resolver::{context::Context, resolver};
+use semifold_engine::{Project, SemifoldService, SystemDependencies};
 use serde::{Deserialize, Serialize};
-
-use crate::release::plan_release;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RepoOwner {
@@ -49,22 +47,13 @@ pub(crate) struct Status {
     pub comment: bool,
 }
 
-pub(crate) async fn run(status: &Status, ctx: &Context) -> anyhow::Result<()> {
-    if !ctx.is_initialized() {
-        return Err(anyhow::anyhow!(t!("cli.not_initialized")));
-    };
-
-    let is_ci = ctx.is_ci();
+pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()> {
+    let is_ci = env::var("GITHUB_ACTIONS").is_ok();
+    let config = &project.config;
     log::debug!("GitHub CI environment: {}", is_ci);
 
-    let root = ctx.repo_root.clone().unwrap_or(std::env::current_dir()?);
-    let config = ctx
-        .config
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!(t!("cli.not_initialized")))?;
-
-    let changesets = resolver::get_changesets(ctx)?;
-    let plan = plan_release(&root, config, &changesets)
+    let plan = SemifoldService::new(SystemDependencies)
+        .plan_release(project)
         .map_err(|error| anyhow::anyhow!(t!("cli.status.plan_failed", error = error)))?;
     let name_width = plan
         .packages()

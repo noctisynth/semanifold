@@ -373,6 +373,48 @@ Adapter 生成内容修改，但不直接写文件。`expected_hash` 用于确�
 阶段失败时同样不得开始替换，并应清理已准备的临时文件。最终文件内容由已验证且目标唯一
 的完整 edit 集合决定，不依赖 edit 或 package 的输入顺序。
 
+`ReleasePlan` 只表达版本计算、发布闭包、顺序和领域文件修改，是 `status` 与 `version` 共享的
+纯领域事实。它不得为了执行 `version` 而携带项目根目录、配置、Git 句柄或 dry-run 状态。
+应用层在真正执行前将其准备为完整的 `ReleaseApplyPlan`：
+
+```rust
+pub struct ReleaseExecutionOptions {
+    pub collect_remote_metadata: bool,
+    pub repository: Option<RepositoryContext>,
+}
+
+pub enum ExecutionMode {
+    Apply,
+    DryRun,
+}
+
+pub struct ReleaseApplyPlan {
+    pub release: ReleasePlan,
+    pub project_root: Utf8PathBuf,
+    pub config_path: Utf8PathBuf,
+    pub changelogs: BTreeMap<PackageId, String>,
+    pub changesets_to_remove: Vec<Utf8PathBuf>,
+    pub channel_bumps_to_consume: Vec<PackageId>,
+    pub post_version_commands: Vec<PostVersionCommand>,
+    pub remote_metadata_failures: Vec<PackageId>,
+}
+
+pub struct PostVersionCommand {
+    pub package: PackageId,
+    pub command: CommandSpec,
+}
+```
+
+`prepare_release(project, release, options)` 负责加载并核对待消费 changeset、收集允许的 Git/Forge
+元数据、生成 changelog edit、规划 post-version 命令，并在产生副作用前验证完整计划。dry-run 调用方
+必须将 `collect_remote_metadata` 设为 `false`，保持 dry-run 不访问远程 changelog 元数据的既有约定。
+`apply_release(plan, mode)` 只消费已经准备好的应用计划：`DryRun` 不写 Semifold 文件、不删除
+changeset、不消费 `channel-bump`，但仍执行 `run_in_dry_run = true` 的 post-version 命令；`Apply`
+在文件修改和全部 post-version 命令成功后才删除 changeset 并消费一次性 channel bump。
+
+该两层计划避免把执行环境污染到 core `ReleasePlan`，也避免 application service 重新依赖进程全局
+状态或旧的万能 `Context`。
+
 ### 6.5 `PublishPlan`
 
 ```rust
@@ -1230,6 +1272,7 @@ dry-run、规划失败、文件应用失败或 post-version 失败都不得消�
 ```rust
 pub struct ConfigSyncPlan {
     pub config_path: Utf8PathBuf,
+    pub prune_missing: bool,
     pub added: Vec<DiscoveredPackage>,
     pub missing: Vec<ConfiguredPackage>,
     pub renamed: Vec<PackageRename>,
@@ -1238,6 +1281,9 @@ pub struct ConfigSyncPlan {
     pub warnings: Vec<ConfigSyncWarning>,
 }
 ```
+
+`prune_missing` 是计划的执行语义而不是 CLI 临时参数：只有完整 resolver 扫描成功且显式请求
+`--prune` 时为 `true`。`apply_config_sync()` 只消费计划本身，不得从入口层另取 prune 状态。
 
 首版领域输入与分类结果使用以下结构：
 
@@ -1589,7 +1635,17 @@ impl<D: Dependencies> SemifoldService<D> {
         plan: ConfigSyncPlan,
     ) -> Result<ConfigSyncReport, AppError>;
     pub fn plan_release(&self, project: &Project) -> Result<ReleasePlan, AppError>;
-    pub fn apply_release(&self, plan: ReleasePlan) -> Result<ApplyReport, AppError>;
+    pub async fn prepare_release(
+        &self,
+        project: &Project,
+        release: ReleasePlan,
+        options: ReleaseExecutionOptions,
+    ) -> Result<ReleaseApplyPlan, AppError>;
+    pub fn apply_release(
+        &self,
+        plan: ReleaseApplyPlan,
+        mode: ExecutionMode,
+    ) -> Result<ApplyReport, AppError>;
     pub async fn plan_publish(&self, project: &Project) -> Result<PublishPlan, AppError>;
     pub async fn publish(&self, plan: PublishPlan) -> Result<PublishReport, AppError>;
 }

@@ -556,7 +556,9 @@ fn plan_channel_update(
 
     let mut updated = Vec::new();
     for name in targets {
-        let table = packages[&name]
+        let table = packages
+            .get_mut(&name)
+            .with_context(|| t!("cli.config.package_not_configured", package = name))?
             .as_table_like_mut()
             .with_context(|| t!("cli.config.package_must_be_table", package = name))?;
         let current = table

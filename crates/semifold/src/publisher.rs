@@ -501,12 +501,12 @@ where
             .collect(),
     };
 
-    for (index, package) in plan.packages.iter_mut().enumerate() {
+    for (package, package_report) in plan.packages.iter_mut().zip(&mut report.packages) {
         if let Some(
             skip_reason @ (PublishSkipReason::Private | PublishSkipReason::MissingChangelog),
         ) = package.skip_reason
         {
-            report.packages[index].status = PublishStatus::Skipped(skip_reason);
+            package_report.status = PublishStatus::Skipped(skip_reason);
             continue;
         }
         let Some(preflight) = &package.preflight else {
@@ -515,26 +515,25 @@ where
         match registry_client.version_exists(preflight).await {
             Ok(true) => {
                 package.skip_reason = Some(PublishSkipReason::RegistryVersionExists);
-                report.packages[index].status =
+                package_report.status =
                     PublishStatus::Skipped(PublishSkipReason::RegistryVersionExists);
             }
             Ok(false) => {}
             Err(error) => {
-                report.packages[index].status =
-                    PublishStatus::Failed(PublishFailureStage::Preflight);
-                report.packages[index].error = Some(error.to_string());
+                package_report.status = PublishStatus::Failed(PublishFailureStage::Preflight);
+                package_report.error = Some(error.to_string());
                 return Err(PublishExecutionError { report });
             }
         }
     }
 
-    for (index, package) in plan.packages.iter().enumerate() {
-        if matches!(report.packages[index].status, PublishStatus::Skipped(_)) {
+    for (package, package_report) in plan.packages.iter().zip(&mut report.packages) {
+        if matches!(package_report.status, PublishStatus::Skipped(_)) {
             continue;
         }
         for command in &package.commands {
             if dry_run && !command.run_in_dry_run {
-                report.packages[index].commands.push(CommandReport {
+                package_report.commands.push(CommandReport {
                     phase: command.phase,
                     executable: command.executable.clone(),
                     disposition: CommandDisposition::SkippedDryRun,
@@ -542,12 +541,12 @@ where
                 continue;
             }
             if let Err(error) = command_runner.run(command) {
-                report.packages[index].status =
+                package_report.status =
                     PublishStatus::Failed(PublishFailureStage::Command(command.phase));
-                report.packages[index].error = Some(error.to_string());
+                package_report.error = Some(error.to_string());
                 return Err(PublishExecutionError { report });
             }
-            report.packages[index].commands.push(CommandReport {
+            package_report.commands.push(CommandReport {
                 phase: command.phase,
                 executable: command.executable.clone(),
                 disposition: CommandDisposition::Executed,
@@ -557,30 +556,30 @@ where
             && let Some(forge_plan) = forge.packages.get(&package.context.package.id)
         {
             if dry_run {
-                report.packages[index].forge = ForgeDisposition::SkippedDryRun;
+                package_report.forge = ForgeDisposition::SkippedDryRun;
             } else {
                 let assets = match forge.asset_resolver.resolve(forge.root, &package.assets) {
                     Ok(assets) => assets,
                     Err(error) => {
-                        report.packages[index].status =
+                        package_report.status =
                             PublishStatus::Failed(PublishFailureStage::AssetUpload);
-                        report.packages[index].error = Some(error.to_string());
+                        package_report.error = Some(error.to_string());
                         return Err(PublishExecutionError { report });
                     }
                 };
                 let release_id = match forge.client.create_release(&forge_plan.release).await {
                     Ok(ForgeReleaseOutcome::Created(release_id)) => {
-                        report.packages[index].forge = ForgeDisposition::Created;
+                        package_report.forge = ForgeDisposition::Created;
                         Some(release_id)
                     }
                     Ok(ForgeReleaseOutcome::AlreadyExists) => {
-                        report.packages[index].forge = ForgeDisposition::AlreadyExists;
+                        package_report.forge = ForgeDisposition::AlreadyExists;
                         None
                     }
                     Err(error) => {
-                        report.packages[index].status =
+                        package_report.status =
                             PublishStatus::Failed(PublishFailureStage::ForgeRelease);
-                        report.packages[index].error = Some(error.to_string());
+                        package_report.error = Some(error.to_string());
                         return Err(PublishExecutionError { report });
                     }
                 };
@@ -589,9 +588,9 @@ where
                         let content = match forge.file_system.read(&asset.path) {
                             Ok(content) => content,
                             Err(error) => {
-                                report.packages[index].status =
+                                package_report.status =
                                     PublishStatus::Failed(PublishFailureStage::AssetUpload);
-                                report.packages[index].error = Some(error.to_string());
+                                package_report.error = Some(error.to_string());
                                 return Err(PublishExecutionError { report });
                             }
                         };
@@ -600,16 +599,16 @@ where
                             .upload_asset(&forge_plan.release, &release_id, &asset.name, content)
                             .await
                         {
-                            report.packages[index].status =
+                            package_report.status =
                                 PublishStatus::Failed(PublishFailureStage::AssetUpload);
-                            report.packages[index].error = Some(error.to_string());
+                            package_report.error = Some(error.to_string());
                             return Err(PublishExecutionError { report });
                         }
                     }
                 }
             }
         }
-        report.packages[index].status = PublishStatus::Succeeded;
+        package_report.status = PublishStatus::Succeeded;
     }
 
     Ok(report)

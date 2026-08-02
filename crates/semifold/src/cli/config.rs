@@ -1,4 +1,4 @@
-use std::{fs::OpenOptions, io::Write, path::Path};
+use std::{collections::BTreeSet, fs::OpenOptions, io::Write, path::Path};
 
 use anyhow::{Context as _, anyhow};
 use camino::Utf8Path;
@@ -293,8 +293,8 @@ fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
     })?;
 
     let original = std::fs::read_to_string(path)?;
-    config::load_config(path)?;
     let plan = plan_migration(&original)?;
+    config::load_config_from_str(path, &plan.content)?;
     if plan.packages.is_empty() {
         println!("{}", t!("cli.config.migration_not_required"));
         return Ok(());
@@ -314,7 +314,6 @@ fn migrate(options: &Migrate, ctx: &Context) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    config::load_config_from_str(path, &plan.content)?;
     write_atomically(path, &plan.content)?;
     println!("{}", t!("cli.config.migrated", path = path.display()));
     Ok(())
@@ -348,10 +347,11 @@ fn render_config_path_error(error: ConfigPathError, command: &str) -> anyhow::Er
 
 fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
     let mut document = content.parse::<toml_edit::DocumentMut>()?;
+    let mut migrated = BTreeSet::new();
+    migrate_snake_case_fields(document.as_table_mut(), &mut migrated)?;
     let packages = document["packages"]
         .as_table_mut()
         .context(t!("cli.config.missing_packages_table"))?;
-    let mut migrated = Vec::new();
 
     for (name, package) in packages.iter_mut() {
         let table = package
@@ -372,13 +372,163 @@ fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
         if let semifold_resolver::config::VersionMode::PreRelease { tag } = version_mode {
             table.insert("channel", toml_edit::value(tag));
         }
-        migrated.push(name.to_string());
+        migrated.insert(name.to_string());
     }
 
     Ok(MigrationPlan {
         content: document.to_string(),
-        packages: migrated,
+        packages: migrated.into_iter().collect(),
     })
+}
+
+const SNAKE_CASE_FIELDS: [(&str, &str); 8] = [
+    ("version_mode", "version-mode"),
+    ("channel_bump", "channel-bump"),
+    ("depends_on", "depends-on"),
+    ("pre_check", "pre-check"),
+    ("post_version", "post-version"),
+    ("extra_headers", "extra-headers"),
+    ("extra_env", "extra-env"),
+    ("dry_run", "dry-run"),
+];
+
+fn migrate_snake_case_fields(
+    document: &mut toml_edit::Table,
+    migrated: &mut BTreeSet<String>,
+) -> anyhow::Result<()> {
+    if let Some(packages) = document
+        .get_mut("packages")
+        .and_then(toml_edit::Item::as_table_like_mut)
+    {
+        for (name, package) in packages.iter_mut() {
+            if let Some(package) = package.as_table_like_mut() {
+                rename_table_fields(
+                    package,
+                    &format!("packages.{name}"),
+                    &SNAKE_CASE_FIELDS[..3],
+                    migrated,
+                )?;
+            }
+        }
+    }
+
+    if let Some(resolvers) = document
+        .get_mut("resolver")
+        .and_then(toml_edit::Item::as_table_like_mut)
+    {
+        for (name, resolver) in resolvers.iter_mut() {
+            let Some(resolver) = resolver.as_table_like_mut() else {
+                continue;
+            };
+            let scope = format!("resolver.{name}");
+            rename_table_fields(resolver, &scope, &SNAKE_CASE_FIELDS[3..5], migrated)?;
+
+            if let Some(pre_check) = resolver
+                .get_mut("pre-check")
+                .and_then(toml_edit::Item::as_table_like_mut)
+            {
+                rename_table_fields(
+                    pre_check,
+                    &format!("{scope}.pre-check"),
+                    &SNAKE_CASE_FIELDS[5..6],
+                    migrated,
+                )?;
+            }
+
+            for phase in ["prepublish", "publish", "post-version"] {
+                if let Some(commands) = resolver.get_mut(phase) {
+                    migrate_command_fields(commands, &format!("{scope}.{phase}"), migrated)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn migrate_command_fields(
+    commands: &mut toml_edit::Item,
+    scope: &str,
+    migrated: &mut BTreeSet<String>,
+) -> anyhow::Result<()> {
+    match commands {
+        toml_edit::Item::ArrayOfTables(tables) => {
+            for (index, command) in tables.iter_mut().enumerate() {
+                rename_table_fields(
+                    command,
+                    &format!("{scope}[{index}]"),
+                    &SNAKE_CASE_FIELDS[6..],
+                    migrated,
+                )?;
+            }
+        }
+        toml_edit::Item::Value(toml_edit::Value::Array(commands)) => {
+            for (index, command) in commands.iter_mut().enumerate() {
+                if let toml_edit::Value::InlineTable(command) = command {
+                    rename_table_fields(
+                        command,
+                        &format!("{scope}[{index}]"),
+                        &SNAKE_CASE_FIELDS[6..],
+                        migrated,
+                    )?;
+                }
+            }
+        }
+        toml_edit::Item::Table(command) => {
+            rename_table_fields(command, scope, &SNAKE_CASE_FIELDS[6..], migrated)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn rename_table_fields(
+    table: &mut dyn toml_edit::TableLike,
+    scope: &str,
+    fields: &[(&str, &str)],
+    migrated: &mut BTreeSet<String>,
+) -> anyhow::Result<()> {
+    let renames = fields
+        .iter()
+        .filter(|(legacy, _)| table.contains_key(legacy))
+        .copied()
+        .collect::<Vec<_>>();
+
+    for (legacy, current) in &renames {
+        if table.contains_key(current) {
+            anyhow::bail!(t!(
+                "cli.config.snake_case_conflict",
+                scope = scope,
+                legacy = legacy,
+                current = current
+            ));
+        }
+        migrated.insert(format!("{scope}.{legacy}"));
+    }
+
+    if !renames.is_empty() {
+        let entries = table
+            .iter()
+            .filter_map(|(name, item)| {
+                let key = table.key(name)?;
+                let renamed = renames
+                    .iter()
+                    .find_map(|(legacy, current)| (*legacy == name).then_some(*current))
+                    .unwrap_or(name);
+                Some((
+                    toml_edit::Key::new(renamed)
+                        .with_leaf_decor(key.leaf_decor().clone())
+                        .with_dotted_decor(key.dotted_decor().clone()),
+                    item.clone(),
+                ))
+            })
+            .collect::<Vec<_>>();
+        table.clear();
+        for (key, item) in entries {
+            table.entry_format(&key).or_insert(item);
+        }
+    }
+
+    Ok(())
 }
 
 fn plan_channel_update(
@@ -615,6 +765,86 @@ version-mode = "semantic"
     }
 
     #[test]
+    fn migrates_known_snake_case_fields_recursively_and_preserves_comments() {
+        let plan = plan_migration(
+            r#"
+[packages.app]
+# retained package comment
+path = "."
+resolver = "rust"
+channel_bump = "preserve"
+depends_on = ["core"]
+
+[tags]
+dry_run = "User-defined tag"
+
+[resolver.rust]
+post_version = [
+  { command = "cargo", args = ["generate-lockfile"], dry_run = true },
+]
+
+[resolver.rust.pre_check]
+url = "https://example.test/{{ package.name }}"
+extra_headers = { User_Agent = "semifold", dry_run = "header-value" }
+
+[[resolver.rust.publish]]
+command = "cargo"
+extra_env = { TOKEN = "secret", dry_run = "environment-value" }
+dry_run = true
+"#,
+        )
+        .unwrap();
+
+        assert!(plan.content.contains("# retained package comment"));
+        assert!(plan.content.contains("channel-bump = \"preserve\""));
+        assert!(plan.content.contains("depends-on = [\"core\"]"));
+        assert!(plan.content.contains("[resolver.rust.pre-check]"));
+        assert!(
+            plan.content.contains(
+                "extra-headers = { User_Agent = \"semifold\", dry_run = \"header-value\" }"
+            )
+        );
+        assert!(
+            plan.content
+                .contains("extra-env = { TOKEN = \"secret\", dry_run = \"environment-value\" }")
+        );
+        assert!(plan.content.contains("dry_run = \"User-defined tag\""));
+        assert!(plan.content.contains("dry-run = true"));
+        assert!(plan.content.contains("post-version = ["));
+        for legacy in [
+            "channel_bump",
+            "depends_on",
+            "pre_check",
+            "extra_headers",
+            "extra_env",
+            "post_version",
+        ] {
+            assert!(
+                !plan.content.contains(legacy),
+                "legacy field remained: {legacy}"
+            );
+        }
+        assert!(!plan.packages.is_empty());
+        assert!(plan_migration(&plan.content).unwrap().packages.is_empty());
+    }
+
+    #[test]
+    fn rejects_snake_and_kebab_case_conflicts() {
+        let error = plan_migration(
+            r#"
+[packages.app]
+path = "."
+resolver = "rust"
+channel_bump = "preserve"
+channel-bump = "patch"
+"#,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("channel_bump and channel-bump"));
+    }
+
+    #[test]
     fn rejects_ambiguous_channel_and_legacy_mode() {
         let error = plan_migration(
             r#"
@@ -660,6 +890,38 @@ version-mode = "semantic"
             "unexpected error: {error:#}"
         );
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn migrate_accepts_snake_case_before_validating_the_result() {
+        let path = temporary_config_path("snake-case");
+        let original = r#"
+[branches]
+base = "main"
+release = "release"
+
+[packages.app]
+path = "."
+resolver = "rust"
+
+[tags]
+
+[resolver.rust.pre_check]
+url = ""
+"#;
+        fs::write(&path, original).unwrap();
+        let context = Context {
+            config_path: Some(path.clone()),
+            ..Default::default()
+        };
+
+        migrate(&Migrate { check: false }, &context).unwrap();
+
+        let migrated = fs::read_to_string(&path).unwrap();
+        assert!(migrated.contains("[resolver.rust.pre-check]"));
+        assert!(!migrated.contains("pre_check"));
+        config::load_config(&path).unwrap();
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 

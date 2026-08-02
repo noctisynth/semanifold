@@ -9,7 +9,8 @@ use crate::{
     publish_plan::plan_publish,
     publisher::{
         ForgeExecution, ForgeRelease, GithubForgeClient, HttpRegistryClient, PackageForgePlan,
-        PublishReport, SystemCommandRunner, SystemFileSystem, execute_publish_plan,
+        PublishReport, SystemAssetResolver, SystemCommandRunner, SystemFileSystem,
+        execute_publish_plan,
     },
 };
 
@@ -37,6 +38,19 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
     let mut plan = plan_publish(&root, config)
         .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
     log::debug!("Packages to publish: {:?}", plan.packages);
+    let mut changelogs = BTreeMap::new();
+    for package in &plan.packages {
+        if package.skip_reason.is_some() {
+            continue;
+        }
+        let changelog_path = root
+            .join(package.context.package.path.as_std_path())
+            .join("CHANGELOG.md");
+        changelogs.insert(
+            package.context.package.id.clone(),
+            read_latest_changelog(&changelog_path).await?,
+        );
+    }
     let forge_client = if should_create_github_release {
         let client = if let Ok(token) = std::env::var("GITHUB_TOKEN") {
             octocrab::Octocrab::builder()
@@ -56,16 +70,12 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!(t!("cli.publish.repo_info_missing")))?;
         for package in &plan.packages {
-            if package.context.package.private {
+            if package.skip_reason.is_some() {
                 continue;
             }
-            let changelog_path = root
-                .join(package.context.package.path.as_std_path())
-                .join("CHANGELOG.md");
-            if !changelog_path.is_file() {
-                continue;
-            }
-            let changelog = read_latest_changelog(&changelog_path).await?;
+            let changelog = changelogs
+                .get(&package.context.package.id)
+                .expect("non-skipped publish packages have a validated changelog");
             forge_packages.insert(
                 package.context.package.id.clone(),
                 PackageForgePlan {
@@ -74,18 +84,20 @@ pub(crate) async fn publish(ctx: &Context, github_release: bool) -> anyhow::Resu
                         repository: repo_info.repo_name.clone(),
                         tag: package.context.package.tag.clone(),
                         title: format!("{} {}", package.context.package.name, changelog.version),
-                        body: changelog.body,
+                        body: changelog.body.clone(),
                         prerelease: !package.context.package.version.pre.is_empty(),
                     },
-                    assets: package.assets.clone(),
                 },
             );
         }
     }
     let file_system = SystemFileSystem;
+    let asset_resolver = SystemAssetResolver;
     let forge = forge_client.as_ref().map(|client| ForgeExecution {
         client,
         file_system: &file_system,
+        asset_resolver: &asset_resolver,
+        root: &root,
         packages: &forge_packages,
     });
     let registry_client = HttpRegistryClient::default();

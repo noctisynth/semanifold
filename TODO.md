@@ -264,6 +264,7 @@
 
 - [x] 将 TOML/JSON 配置字段统一为 kebab-case，更新仓库配置、初始化模板、示例和 fixture；
   不为 snake_case 字段提供 serde alias
+- [x] 扩展 `config migrate`，原位重命名已知 snake_case 字段；新旧字段同时存在时报告冲突
 
 ### Workspace release context
 
@@ -287,8 +288,11 @@
   不将 changelog 写回 `ReleaseContext`
 - [x] 明确 package-level Git tag 与 workspace release branch / PR 的区别
 - [x] 将 preflight、commands 和 assets 纳入计划
+- [x] asset 在计划中仅保留已校验声明，package 命令成功后才展开 glob 并生成稳定
+  `ReleaseAsset`，不得遗漏命令生成的产物
 - [x] 基于 `WorkspaceGraph` 生成确定性发布顺序
 - [x] 为 private package 和已发布版本提供显式 skip reason
+- [x] 缺失 `CHANGELOG.md` 的 publishable package 以 `MissingChangelog` 跳过全部发布流程
 
 ### 外部能力
 

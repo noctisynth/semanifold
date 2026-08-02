@@ -384,7 +384,7 @@ pub struct PackagePublish {
     pub context: PublishContext,
     pub preflight: Option<RegistryCheck>,
     pub commands: Vec<CommandSpec>,
-    pub assets: Vec<ReleaseAsset>,
+    pub assets: Vec<AssetDeclaration>,
     pub skip_reason: Option<PublishSkipReason>,
 }
 
@@ -415,11 +415,20 @@ repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中
 和 registry 中已存在的版本通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan`
 推断本次发布集合。
 
+publishable package 必须存在 `<package.path>/CHANGELOG.md` 才能进入 registry preflight、命令或
+Forge release 流程。缺失时以 `PublishSkipReason::MissingChangelog` 显式跳过；private 的 skip
+优先于 changelog 检查。存在但无法解析的 changelog 是计划错误，不允许先发布 package 后才发现
+无法创建 release。
+
 publisher 在执行任何 package 命令前先完成所有非 private、未跳过 package 的 registry
 preflight。preflight 失败时不启动任何命令；版本已存在则以
 `PublishSkipReason::RegistryVersionExists` 跳过。随后按 `PublishPlan.packages` 的拓扑顺序逐包
-执行命令、创建 package release 并上传 asset，任一阶段失败即停止后续 package。所有 asset
-glob 在计划阶段解析为稳定排序的 `ReleaseAsset`，执行器只读取计划中的确定路径。
+执行命令、创建 package release 并上传 asset，任一阶段失败即停止后续 package。`PublishPlan`
+只保存已经过语法和路径校验的 `AssetDeclaration`，不得在命令执行前展开 glob 或过滤不存在文件；
+因为 asset 可以由 prepublish/publish 命令生成。package 命令成功后，执行器才通过注入的
+`AssetResolver` 展开声明，生成稳定排序的 `ReleaseAsset`，再由 `FileSystem` 读取并交给
+`ForgeClient` 上传。缺失或无效的显式 asset、glob 未匹配到预期产物以及读取失败必须进入该
+package 的结构化失败报告，不得静默省略。
 
 执行结果始终表示为结构化报告：
 
@@ -1155,7 +1164,8 @@ smif config sync --resolver rust --resolver nodejs
 
 ### 13.2.1 旧配置迁移
 
-为使仓库能够从旧的 `version-mode` 过渡到 `channel`，提供独立且不执行 workspace discovery 的入口：
+为使仓库能够从旧的 `version-mode` 过渡到 `channel`，并为 kebab-case 配置切换提供显式迁移，
+提供独立且不执行 workspace discovery 的入口：
 
 ```text
 smif config migrate
@@ -1167,6 +1177,11 @@ smif config migrate --check
 - `version-mode = "semantic"` 或缺省语义模式迁移为缺省 `channel`（删除旧字段，不写入 `channel = "stable"`）；
 - `version-mode = { pre-release = { tag = "alpha" } }` 迁移为 `channel = "alpha"`；
 - 已使用 `channel` 的 package 保持不变；同一 package 同时设置 `channel` 与 `version-mode` 时停止并报告冲突；
+- 将已知 snake_case 配置字段原位重命名为对应 kebab-case，包括 `version_mode`、
+  `channel_bump`、`depends_on`、`pre_check`、`post_version`、`extra_headers`、`extra_env` 和
+  `dry_run`；字段值、注释、table/array-of-tables 顺序及其他未知字段保持不变；
+- 同一 table 同时存在 snake_case 与目标 kebab-case 字段时停止并报告冲突，不覆盖任一值；
+- loader 不接受 snake_case alias；旧配置必须先运行 `config migrate`，该迁移支持不等于运行时兼容；
 - JSON 配置返回明确的不支持错误；
 - `--check` 在存在可迁移条目时返回非零且不写文件；全局 `--dry-run` 只报告将要迁移的条目，退出成功；
 - 成功迁移后再次运行不得产生 diff。

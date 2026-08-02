@@ -11,8 +11,8 @@ use rust_i18n::t;
 use semifold_core::PackageId;
 
 use crate::publish_plan::{
-    CommandPhase, CommandSpec, PlannedRegistryCheck, PublishPlan, PublishSkipReason, ReleaseAsset,
-    StdioPolicy,
+    AssetDeclaration, CommandPhase, CommandSpec, PlannedRegistryCheck, PublishPlan,
+    PublishSkipReason, StdioPolicy,
 };
 
 pub(crate) type ExternalFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -226,6 +226,105 @@ pub(crate) trait FileSystem {
     fn read(&self, path: &Path) -> std::io::Result<Vec<u8>>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ReleaseAsset {
+    pub path: std::path::PathBuf,
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub(crate) struct AssetResolveError {
+    message: String,
+}
+
+impl std::fmt::Display for AssetResolveError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for AssetResolveError {}
+
+pub(crate) trait AssetResolver {
+    fn resolve(
+        &self,
+        root: &Path,
+        declarations: &[AssetDeclaration],
+    ) -> Result<Vec<ReleaseAsset>, AssetResolveError>;
+}
+
+pub(crate) struct SystemAssetResolver;
+
+impl AssetResolver for SystemAssetResolver {
+    fn resolve(
+        &self,
+        root: &Path,
+        declarations: &[AssetDeclaration],
+    ) -> Result<Vec<ReleaseAsset>, AssetResolveError> {
+        let mut assets = Vec::new();
+        for declaration in declarations {
+            match declaration {
+                AssetDeclaration::Path { path, name } => {
+                    let path = root.join(path);
+                    if !path.is_file() {
+                        return Err(AssetResolveError {
+                            message: t!("cli.publish.asset_not_found", path = path.display())
+                                .to_string(),
+                        });
+                    }
+                    assets.push(ReleaseAsset {
+                        path,
+                        name: name.clone(),
+                    });
+                }
+                AssetDeclaration::Glob { pattern } => {
+                    let absolute_pattern = root.join(pattern).to_string_lossy().to_string();
+                    let mut matched = Vec::new();
+                    for entry in
+                        glob::glob(&absolute_pattern).map_err(|error| AssetResolveError {
+                            message: t!(
+                                "cli.publish.asset_pattern_invalid",
+                                pattern = pattern,
+                                error = error
+                            )
+                            .to_string(),
+                        })?
+                    {
+                        let path = entry.map_err(|error| AssetResolveError {
+                            message: t!(
+                                "cli.publish.asset_glob_failed",
+                                pattern = pattern,
+                                error = error
+                            )
+                            .to_string(),
+                        })?;
+                        if path.is_file() {
+                            let name = path.file_name().map_or_else(
+                                || path.to_string_lossy().to_string(),
+                                |name| name.to_string_lossy().to_string(),
+                            );
+                            matched.push(ReleaseAsset { path, name });
+                        }
+                    }
+                    if matched.is_empty() {
+                        return Err(AssetResolveError {
+                            message: t!("cli.publish.asset_pattern_unmatched", pattern = pattern)
+                                .to_string(),
+                        });
+                    }
+                    assets.extend(matched);
+                }
+            }
+        }
+        assets.sort_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then_with(|| left.name.cmp(&right.name))
+        });
+        Ok(assets)
+    }
+}
+
 pub(crate) struct SystemFileSystem;
 
 impl FileSystem for SystemFileSystem {
@@ -237,12 +336,13 @@ impl FileSystem for SystemFileSystem {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PackageForgePlan {
     pub release: ForgeRelease,
-    pub assets: Vec<ReleaseAsset>,
 }
 
 pub(crate) struct ForgeExecution<'a> {
     pub client: &'a dyn ForgeClient,
     pub file_system: &'a dyn FileSystem,
+    pub asset_resolver: &'a dyn AssetResolver,
+    pub root: &'a Path,
     pub packages: &'a BTreeMap<PackageId, PackageForgePlan>,
 }
 
@@ -402,8 +502,11 @@ where
     };
 
     for (index, package) in plan.packages.iter_mut().enumerate() {
-        if package.skip_reason == Some(PublishSkipReason::Private) {
-            report.packages[index].status = PublishStatus::Skipped(PublishSkipReason::Private);
+        if let Some(
+            skip_reason @ (PublishSkipReason::Private | PublishSkipReason::MissingChangelog),
+        ) = package.skip_reason
+        {
+            report.packages[index].status = PublishStatus::Skipped(skip_reason);
             continue;
         }
         let Some(preflight) = &package.preflight else {
@@ -456,6 +559,15 @@ where
             if dry_run {
                 report.packages[index].forge = ForgeDisposition::SkippedDryRun;
             } else {
+                let assets = match forge.asset_resolver.resolve(forge.root, &package.assets) {
+                    Ok(assets) => assets,
+                    Err(error) => {
+                        report.packages[index].status =
+                            PublishStatus::Failed(PublishFailureStage::AssetUpload);
+                        report.packages[index].error = Some(error.to_string());
+                        return Err(PublishExecutionError { report });
+                    }
+                };
                 let release_id = match forge.client.create_release(&forge_plan.release).await {
                     Ok(ForgeReleaseOutcome::Created(release_id)) => {
                         report.packages[index].forge = ForgeDisposition::Created;
@@ -473,7 +585,7 @@ where
                     }
                 };
                 if let Some(release_id) = release_id {
-                    for asset in &forge_plan.assets {
+                    for asset in &assets {
                         let content = match forge.file_system.read(&asset.path) {
                             Ok(content) => content,
                             Err(error) => {
@@ -594,6 +706,47 @@ mod tests {
     impl FileSystem for StaticFileSystem {
         fn read(&self, _path: &Path) -> std::io::Result<Vec<u8>> {
             Ok(vec![1, 2, 3])
+        }
+    }
+
+    struct StaticAssetResolver;
+
+    impl AssetResolver for StaticAssetResolver {
+        fn resolve(
+            &self,
+            _root: &Path,
+            _declarations: &[AssetDeclaration],
+        ) -> Result<Vec<ReleaseAsset>, AssetResolveError> {
+            Ok(vec![ReleaseAsset {
+                path: "artifact.tar.gz".into(),
+                name: "artifact.tar.gz".to_string(),
+            }])
+        }
+    }
+
+    struct PostCommandAssetResolver<'a> {
+        commands: &'a Mutex<Vec<String>>,
+    }
+
+    impl AssetResolver for PostCommandAssetResolver<'_> {
+        fn resolve(
+            &self,
+            _root: &Path,
+            _declarations: &[AssetDeclaration],
+        ) -> Result<Vec<ReleaseAsset>, AssetResolveError> {
+            let commands = self
+                .commands
+                .lock()
+                .expect("recording command mutex is not poisoned");
+            if commands.as_slice() != ["build-assets"] {
+                return Err(AssetResolveError {
+                    message: "assets resolved before package commands".to_string(),
+                });
+            }
+            Ok(vec![ReleaseAsset {
+                path: "generated.tar.gz".into(),
+                name: "generated.tar.gz".to_string(),
+            }])
         }
     }
 
@@ -748,12 +901,59 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn forge_release_and_assets_use_ports_and_are_skipped_in_dry_run() {
+    async fn missing_changelog_skips_registry_and_commands() {
+        let mut missing = package("core", false, vec![command("publish", false)]);
+        missing.skip_reason = Some(PublishSkipReason::MissingChangelog);
+        let mut plan = PublishPlan {
+            packages: vec![missing],
+        };
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let registry = StaticRegistry {
+            existing: Vec::new(),
+            checked: Mutex::new(Vec::new()),
+        };
+
+        let report = execute_publish_plan(&mut plan, &runner, &registry, None, false)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            report.packages[0].status,
+            PublishStatus::Skipped(PublishSkipReason::MissingChangelog)
+        );
+        assert!(
+            registry
+                .checked
+                .lock()
+                .expect("recording registry mutex is not poisoned")
+                .is_empty()
+        );
+        assert!(
+            runner
+                .commands
+                .lock()
+                .expect("recording command mutex is not poisoned")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn resolves_assets_after_package_commands() {
         let forge = RecordingForge {
             created: Mutex::new(Vec::new()),
             uploaded: Mutex::new(Vec::new()),
         };
         let file_system = StaticFileSystem;
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let asset_resolver = PostCommandAssetResolver {
+            commands: &runner.commands,
+        };
         let forge_packages = BTreeMap::from([(
             PackageId::new("core"),
             PackageForgePlan {
@@ -765,10 +965,65 @@ mod tests {
                     body: "changes".to_string(),
                     prerelease: false,
                 },
-                assets: vec![ReleaseAsset {
-                    path: "artifact.tar.gz".into(),
-                    name: "artifact.tar.gz".to_string(),
-                }],
+            },
+        )]);
+        let registry = StaticRegistry {
+            existing: Vec::new(),
+            checked: Mutex::new(Vec::new()),
+        };
+        let mut plan = PublishPlan {
+            packages: vec![package("core", false, vec![command("build-assets", false)])],
+        };
+        plan.packages[0].assets = vec![AssetDeclaration::Glob {
+            pattern: "generated*.tar.gz".to_string(),
+        }];
+
+        let report = execute_publish_plan(
+            &mut plan,
+            &runner,
+            &registry,
+            Some(ForgeExecution {
+                client: &forge,
+                file_system: &file_system,
+                asset_resolver: &asset_resolver,
+                root: Path::new("."),
+                packages: &forge_packages,
+            }),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.packages[0].status, PublishStatus::Succeeded);
+        assert_eq!(
+            *forge
+                .uploaded
+                .lock()
+                .expect("recording forge mutex is not poisoned"),
+            ["generated.tar.gz"]
+        );
+    }
+
+    #[tokio::test]
+    async fn forge_release_and_assets_use_ports_and_are_skipped_in_dry_run() {
+        let forge = RecordingForge {
+            created: Mutex::new(Vec::new()),
+            uploaded: Mutex::new(Vec::new()),
+        };
+        let file_system = StaticFileSystem;
+        let asset_resolver = StaticAssetResolver;
+        let root = Path::new(".");
+        let forge_packages = BTreeMap::from([(
+            PackageId::new("core"),
+            PackageForgePlan {
+                release: ForgeRelease {
+                    owner: "owner".to_string(),
+                    repository: "repo".to_string(),
+                    tag: "core-v1.0.0".to_string(),
+                    title: "core v1.0.0".to_string(),
+                    body: "changes".to_string(),
+                    prerelease: false,
+                },
             },
         )]);
         let registry = StaticRegistry {
@@ -782,6 +1037,9 @@ mod tests {
         let mut plan = PublishPlan {
             packages: vec![package("core", false, Vec::new())],
         };
+        plan.packages[0].assets = vec![AssetDeclaration::Glob {
+            pattern: "artifact*.tar.gz".to_string(),
+        }];
 
         let report = execute_publish_plan(
             &mut plan,
@@ -790,6 +1048,8 @@ mod tests {
             Some(ForgeExecution {
                 client: &forge,
                 file_system: &file_system,
+                asset_resolver: &asset_resolver,
+                root,
                 packages: &forge_packages,
             }),
             false,
@@ -825,6 +1085,9 @@ mod tests {
         let mut plan = PublishPlan {
             packages: vec![package("core", false, Vec::new())],
         };
+        plan.packages[0].assets = vec![AssetDeclaration::Glob {
+            pattern: "artifact*.tar.gz".to_string(),
+        }];
         let report = execute_publish_plan(
             &mut plan,
             &runner,
@@ -832,6 +1095,8 @@ mod tests {
             Some(ForgeExecution {
                 client: &forge,
                 file_system: &file_system,
+                asset_resolver: &asset_resolver,
+                root,
                 packages: &forge_packages,
             }),
             true,

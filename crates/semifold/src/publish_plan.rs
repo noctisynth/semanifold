@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
+use rust_i18n::t;
 use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext};
 use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType};
 use semver::Version;
@@ -37,14 +38,19 @@ pub(crate) struct PackagePublish {
     pub context: PublishContext,
     pub preflight: Option<PlannedRegistryCheck>,
     pub commands: Vec<CommandSpec>,
-    pub assets: Vec<ReleaseAsset>,
+    pub assets: Vec<AssetDeclaration>,
     pub skip_reason: Option<PublishSkipReason>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ReleaseAsset {
-    pub path: std::path::PathBuf,
-    pub name: String,
+pub(crate) enum AssetDeclaration {
+    Path {
+        path: std::path::PathBuf,
+        name: String,
+    },
+    Glob {
+        pattern: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +62,7 @@ pub(crate) struct PlannedRegistryCheck {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublishSkipReason {
     Private,
+    MissingChangelog,
     RegistryVersionExists,
 }
 
@@ -153,11 +160,18 @@ pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<Publi
                     .map(|preflight| render_preflight(preflight, &context))
                     .transpose()?,
                 commands,
-                assets: resolve_assets(root, &package_config.assets)?,
-                skip_reason: context
-                    .package
-                    .private
-                    .then_some(PublishSkipReason::Private),
+                assets: plan_assets(&package_config.assets)?,
+                skip_reason: if context.package.private {
+                    Some(PublishSkipReason::Private)
+                } else if !root
+                    .join(context.package.path.as_std_path())
+                    .join("CHANGELOG.md")
+                    .is_file()
+                {
+                    Some(PublishSkipReason::MissingChangelog)
+                } else {
+                    None
+                },
                 context,
             })
         })
@@ -166,40 +180,49 @@ pub(crate) fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<Publi
     Ok(PublishPlan { packages })
 }
 
-fn resolve_assets(root: &Path, configured: &[Asset]) -> anyhow::Result<Vec<ReleaseAsset>> {
+fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
     let mut assets = Vec::new();
     for asset in configured {
         match asset {
             Asset::Asset(asset) => {
-                let path = root.join(&asset.path);
-                if path.is_file() {
-                    assets.push(ReleaseAsset {
-                        path,
-                        name: asset.name.clone(),
-                    });
-                }
+                validate_asset_path(&asset.path)?;
+                anyhow::ensure!(!asset.name.is_empty(), t!("cli.publish.asset_name_empty"));
+                assets.push(AssetDeclaration::Path {
+                    path: asset.path.clone(),
+                    name: asset.name.clone(),
+                });
             }
             Asset::String(pattern) => {
-                let pattern = root.join(pattern).to_string_lossy().to_string();
-                for path in glob::glob(&pattern)?
-                    .flatten()
-                    .filter(|path| path.is_file())
-                {
-                    let name = path.file_name().map_or_else(
-                        || path.to_string_lossy().to_string(),
-                        |name| name.to_string_lossy().to_string(),
-                    );
-                    assets.push(ReleaseAsset { path, name });
-                }
+                validate_asset_path(Path::new(pattern))?;
+                glob::Pattern::new(pattern).map_err(|error| {
+                    anyhow::anyhow!(t!(
+                        "cli.publish.asset_pattern_invalid",
+                        pattern = pattern,
+                        error = error
+                    ))
+                })?;
+                assets.push(AssetDeclaration::Glob {
+                    pattern: pattern.clone(),
+                });
             }
         }
     }
-    assets.sort_by(|left, right| {
-        left.path
-            .cmp(&right.path)
-            .then_with(|| left.name.cmp(&right.name))
-    });
     Ok(assets)
+}
+
+fn validate_asset_path(path: &Path) -> anyhow::Result<()> {
+    let valid = !path.as_os_str().is_empty()
+        && path.components().all(|component| {
+            matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        });
+    anyhow::ensure!(
+        valid,
+        t!("cli.publish.asset_path_invalid", path = path.display())
+    );
+    Ok(())
 }
 
 fn render_preflight(
@@ -365,6 +388,11 @@ mod tests {
                 format!("[package]\nname = \"{name}\"\nversion = \"1.2.3\"\n{dependency}"),
             )
             .unwrap();
+            fs::write(
+                package_root.join("CHANGELOG.md"),
+                "# Changelog\n\n## v1.2.3\n\n- Changes\n",
+            )
+            .unwrap();
         }
     }
 
@@ -411,6 +439,41 @@ mod tests {
 
         assert!(plan_publish(&root, &config("not a URL")).is_err());
         assert!(plan_publish(&root, &config("file:///tmp/package")).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn publish_plan_rejects_assets_outside_the_project() {
+        let root = temporary_root();
+        write_workspace(&root);
+        let mut config = config("https://registry.test/{{ package.name }}/{{ package.version }}");
+        config
+            .packages
+            .get_mut("core")
+            .expect("core package exists in the test configuration")
+            .assets = vec![Asset::String("../artifact.tar.gz".to_string())];
+
+        assert!(plan_publish(&root, &config).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn publish_plan_skips_packages_without_changelogs() {
+        let root = temporary_root();
+        write_workspace(&root);
+        fs::remove_file(root.join("core/CHANGELOG.md")).unwrap();
+
+        let plan = plan_publish(
+            &root,
+            &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            plan.packages[0].skip_reason,
+            Some(PublishSkipReason::MissingChangelog)
+        );
+        assert_eq!(plan.packages[1].skip_reason, None);
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -7,7 +7,12 @@ use thiserror::Error;
 
 use crate::{
     config_editor::{ConfigEditError, TomlConfigEditor},
+    config_management::{
+        ChannelUpdate, ConfigMutationError, ConfigMutationPlan, plan_channel_update,
+        plan_config_migration,
+    },
     config_sync::{ConfigSyncPlanningError, config_sync_scope, plan_config_sync},
+    init::{InitOptions, InitPlan, InitPlanningError, InitReport},
     project::Project,
     publish_plan::{PublishOptions, PublishPlan, PublishPlanError},
     publisher::{CommandRunner, SystemCommandRunner},
@@ -34,7 +39,14 @@ pub struct ConfigSyncReport {
     pub changed: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConfigMutationReport {
+    pub path: Utf8PathBuf,
+    pub changed: bool,
+}
+
 pub trait EngineDependencies {
+    fn create_dir_all(&self, path: &Utf8Path) -> Result<(), std::io::Error>;
     fn write_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error>;
     fn remove_file(&self, path: &Utf8Path) -> Result<(), std::io::Error>;
 }
@@ -43,6 +55,10 @@ pub trait EngineDependencies {
 pub struct SystemDependencies;
 
 impl EngineDependencies for SystemDependencies {
+    fn create_dir_all(&self, path: &Utf8Path) -> Result<(), std::io::Error> {
+        std::fs::create_dir_all(path)
+    }
+
     fn write_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error> {
         let extension = path.extension().unwrap_or("tmp");
         let temporary = path.with_extension(format!("{extension}.{}.tmp", std::process::id()));
@@ -84,6 +100,37 @@ impl<D> SemifoldService<D> {
         Self { deps }
     }
 
+    pub fn plan_init(
+        &self,
+        location: &crate::project::ProjectLocation,
+        options: InitOptions,
+    ) -> Result<InitPlan, AppError> {
+        crate::init::plan_init(location, options).map_err(AppError::InitPlanning)
+    }
+
+    pub fn ensure_clean_worktree(
+        &self,
+        project: &Project,
+        allow_dirty: bool,
+    ) -> Result<(), AppError> {
+        if allow_dirty {
+            return Ok(());
+        }
+        let repository =
+            git2::Repository::open(project.root.as_std_path()).map_err(AppError::GitOpen)?;
+        let statuses = repository.statuses(None).map_err(AppError::GitStatus)?;
+        if statuses.iter().all(|entry| {
+            matches!(
+                entry.status(),
+                git2::Status::CURRENT | git2::Status::IGNORED
+            )
+        }) {
+            Ok(())
+        } else {
+            Err(AppError::DirtyWorktree)
+        }
+    }
+
     pub fn create_changeset(
         &self,
         project: &Project,
@@ -98,6 +145,7 @@ impl<D> SemifoldService<D> {
         project: &Project,
         options: &ConfigSyncOptions,
     ) -> Result<ConfigSyncPlan, AppError> {
+        ensure_toml_config(project)?;
         let scope = config_sync_scope(&project.config, &options.resolvers)?;
         let changesets =
             resolver::get_changesets(project.changeset_dir.as_std_path(), &project.config)?;
@@ -111,6 +159,26 @@ impl<D> SemifoldService<D> {
         )?)
     }
 
+    pub fn plan_config_migration(&self, project: &Project) -> Result<ConfigMutationPlan, AppError> {
+        let content = read_editable_config(project)?;
+        let plan = plan_config_migration(project.config_path.clone(), &content)
+            .map_err(AppError::ConfigMutation)?;
+        validate_config_mutation(&plan)?;
+        Ok(plan)
+    }
+
+    pub fn plan_channel_update(
+        &self,
+        project: &Project,
+        update: &ChannelUpdate,
+    ) -> Result<ConfigMutationPlan, AppError> {
+        let content = read_editable_config(project)?;
+        let plan = plan_channel_update(project.config_path.clone(), &content, update)
+            .map_err(AppError::ConfigMutation)?;
+        validate_config_mutation(&plan)?;
+        Ok(plan)
+    }
+
     pub fn plan_release(&self, project: &Project) -> Result<ReleasePlan, AppError> {
         let changesets =
             resolver::get_changesets(project.changeset_dir.as_std_path(), &project.config)?;
@@ -120,6 +188,28 @@ impl<D> SemifoldService<D> {
 }
 
 impl<D: EngineDependencies> SemifoldService<D> {
+    pub fn apply_init(&self, plan: &InitPlan) -> Result<InitReport, AppError> {
+        for directory in &plan.directories {
+            self.deps
+                .create_dir_all(directory)
+                .map_err(|source| AppError::InitDirectory {
+                    path: directory.clone(),
+                    source,
+                })?;
+        }
+        for file in &plan.files {
+            self.deps
+                .write_atomic(&file.path, &file.content)
+                .map_err(|source| AppError::InitWrite {
+                    path: file.path.clone(),
+                    source,
+                })?;
+        }
+        Ok(InitReport {
+            files: plan.files.iter().map(|file| file.path.clone()).collect(),
+        })
+    }
+
     pub fn apply_config_sync(&self, plan: &ConfigSyncPlan) -> Result<ConfigSyncReport, AppError> {
         let mut editor = TomlConfigEditor::load(&plan.config_path)?;
         let original = editor.render();
@@ -139,6 +229,46 @@ impl<D: EngineDependencies> SemifoldService<D> {
             changed,
         })
     }
+
+    pub fn apply_config_mutation(
+        &self,
+        plan: &ConfigMutationPlan,
+    ) -> Result<ConfigMutationReport, AppError> {
+        self.deps
+            .write_atomic(&plan.path, &plan.content)
+            .map_err(|source| AppError::ConfigWrite {
+                path: plan.path.clone(),
+                source,
+            })?;
+        Ok(ConfigMutationReport {
+            path: plan.path.clone(),
+            changed: true,
+        })
+    }
+}
+
+fn read_editable_config(project: &Project) -> Result<String, AppError> {
+    ensure_toml_config(project)?;
+    std::fs::read_to_string(&project.config_path).map_err(|source| {
+        AppError::ConfigMutation(ConfigMutationError::Read {
+            path: project.config_path.clone(),
+            source,
+        })
+    })
+}
+
+fn ensure_toml_config(project: &Project) -> Result<(), AppError> {
+    if project.config_path.extension() == Some("toml") {
+        Ok(())
+    } else {
+        Err(AppError::UnsupportedConfigFormat)
+    }
+}
+
+fn validate_config_mutation(plan: &ConfigMutationPlan) -> Result<(), AppError> {
+    semifold_resolver::config::load_config_from_str(plan.path.as_std_path(), &plan.content)
+        .map(|_| ())
+        .map_err(|source| AppError::ConfigMutation(ConfigMutationError::InvalidResult(source)))
 }
 
 impl<D> SemifoldService<D>
@@ -220,14 +350,38 @@ impl SemifoldService<SystemDependencies> {
 
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("configuration format is not supported for editing")]
+    UnsupportedConfigFormat,
     #[error("failed to create changeset: {0}")]
     ChangesetCreate(#[source] crate::changeset_service::ChangesetCreateError),
     #[error("failed to load changesets")]
     Changesets(#[from] ResolveError),
+    #[error("failed to plan initialization: {0}")]
+    InitPlanning(#[source] InitPlanningError),
+    #[error("failed to create initialization directory {path}")]
+    InitDirectory {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to write initialization file {path}")]
+    InitWrite {
+        path: Utf8PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to open Git repository")]
+    GitOpen(#[source] git2::Error),
+    #[error("failed to inspect Git worktree status")]
+    GitStatus(#[source] git2::Error),
+    #[error("Git worktree contains uncommitted changes")]
+    DirtyWorktree,
     #[error("failed to plan configuration synchronization")]
     ConfigSyncPlanning(#[from] ConfigSyncPlanningError),
     #[error("failed to edit configuration")]
     ConfigEdit(#[from] ConfigEditError),
+    #[error("failed to mutate configuration: {0}")]
+    ConfigMutation(#[source] ConfigMutationError),
     #[error("failed to write configuration {path}")]
     ConfigWrite {
         path: Utf8PathBuf,

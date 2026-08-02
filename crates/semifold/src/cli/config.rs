@@ -1,14 +1,12 @@
-use std::{collections::BTreeSet, fs::OpenOptions, io::Write, path::Path};
-
-use anyhow::{Context as _, anyhow};
+use anyhow::anyhow;
 use clap::{Parser, Subcommand, ValueEnum};
 use rust_i18n::t;
 use semifold_core::ConfigSyncWarning;
 use semifold_engine::{
-    AppError, ConfigSyncOptions, Project, SemifoldService, SystemDependencies,
-    config_sync::ConfigSyncPlanningError,
+    AppError, ChannelUpdate, ConfigMutationError, ConfigSyncOptions, Project, SemifoldService,
+    SystemDependencies, config_sync::ConfigSyncPlanningError,
 };
-use semifold_resolver::{config, resolver::ResolverType};
+use semifold_resolver::{config::ChannelBump, resolver::ResolverType};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Config {
@@ -83,12 +81,12 @@ enum ChannelBumpArg {
 }
 
 impl ChannelBumpArg {
-    const fn as_str(self) -> &'static str {
+    const fn as_channel_bump(self) -> ChannelBump {
         match self {
-            Self::Preserve => "preserve",
-            Self::Patch => "patch",
-            Self::Minor => "minor",
-            Self::Major => "major",
+            Self::Preserve => ChannelBump::Preserve,
+            Self::Patch => ChannelBump::Patch,
+            Self::Minor => ChannelBump::Minor,
+            Self::Major => ChannelBump::Major,
         }
     }
 }
@@ -114,12 +112,6 @@ struct ChannelTarget {
     check: bool,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-struct MigrationPlan {
-    content: String,
-    packages: Vec<String>,
-}
-
 pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow::Result<()> {
     match &command.command {
         Commands::Sync(options) => sync(options, project, dry_run),
@@ -129,8 +121,6 @@ pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow:
 }
 
 fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> {
-    toml_config_path(project)
-        .map_err(|error| render_config_path_error(error, t!("cli.config.command_sync").as_ref()))?;
     let service = SemifoldService::new(SystemDependencies);
     let plan = service
         .plan_config_sync(
@@ -196,6 +186,10 @@ fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> 
 
 fn render_config_sync_error(error: AppError) -> anyhow::Error {
     match error {
+        AppError::UnsupportedConfigFormat => anyhow!(t!(
+            "cli.config.unsupported_format",
+            command = t!("cli.config.command_sync")
+        )),
         AppError::ConfigSyncPlanning(ConfigSyncPlanningError::ResolverNotEnabled { resolver }) => {
             anyhow!(t!(
                 "cli.config.sync_resolver_not_enabled",
@@ -256,12 +250,20 @@ fn update_channel(
     project: &Project,
     dry_run: bool,
 ) -> anyhow::Result<()> {
-    let path = toml_config_path(project).map_err(|error| {
-        render_config_path_error(error, t!("cli.config.command_channel").as_ref())
-    })?;
-    let original = std::fs::read_to_string(path)?;
-    config::load_config(path)?;
-    let plan = plan_channel_update(&original, channel, bump, &target.packages, target.all)?;
+    let service = SemifoldService::new(SystemDependencies);
+    let plan = service
+        .plan_channel_update(
+            project,
+            &ChannelUpdate {
+                channel: channel.map(ToOwned::to_owned),
+                bump: bump.map(ChannelBumpArg::as_channel_bump),
+                packages: target.packages.clone(),
+                all: target.all,
+            },
+        )
+        .map_err(|error| {
+            render_config_mutation_error(error, t!("cli.config.command_channel").as_ref())
+        })?;
     if plan.packages.is_empty() {
         println!("{}", t!("cli.config.channels_already_match"));
         return Ok(());
@@ -283,20 +285,16 @@ fn update_channel(
         return Ok(());
     }
 
-    config::load_config_from_str(path, &plan.content)?;
-    write_atomically(path, &plan.content)?;
-    println!("{}", t!("cli.config.updated", path = path.display()));
+    let report = service.apply_config_mutation(&plan)?;
+    println!("{}", t!("cli.config.updated", path = report.path));
     Ok(())
 }
 
 fn migrate(options: &Migrate, project: &Project, dry_run: bool) -> anyhow::Result<()> {
-    let path = toml_config_path(project).map_err(|error| {
-        render_config_path_error(error, t!("cli.config.command_migrate").as_ref())
+    let service = SemifoldService::new(SystemDependencies);
+    let plan = service.plan_config_migration(project).map_err(|error| {
+        render_config_mutation_error(error, t!("cli.config.command_migrate").as_ref())
     })?;
-
-    let original = std::fs::read_to_string(path)?;
-    let plan = plan_migration(&original)?;
-    config::load_config_from_str(path, &plan.content)?;
     if plan.packages.is_empty() {
         println!("{}", t!("cli.config.migration_not_required"));
         return Ok(());
@@ -316,318 +314,46 @@ fn migrate(options: &Migrate, project: &Project, dry_run: bool) -> anyhow::Resul
         return Ok(());
     }
 
-    write_atomically(path, &plan.content)?;
-    println!("{}", t!("cli.config.migrated", path = path.display()));
+    let report = service.apply_config_mutation(&plan)?;
+    println!("{}", t!("cli.config.migrated", path = report.path));
     Ok(())
 }
 
-#[derive(Debug, Eq, PartialEq)]
-enum ConfigPathError {
-    UnsupportedConfigFormat,
-}
-
-fn toml_config_path(project: &Project) -> Result<&Path, ConfigPathError> {
-    let path = project.config_path.as_std_path();
-    if path.extension().and_then(|extension| extension.to_str()) != Some("toml") {
-        return Err(ConfigPathError::UnsupportedConfigFormat);
-    }
-    Ok(path)
-}
-
-fn render_config_path_error(error: ConfigPathError, command: &str) -> anyhow::Error {
+fn render_config_mutation_error(error: AppError, command: &str) -> anyhow::Error {
     match error {
-        ConfigPathError::UnsupportedConfigFormat => {
+        AppError::UnsupportedConfigFormat => {
             anyhow!(t!("cli.config.unsupported_format", command = command))
         }
+        AppError::ConfigMutation(ConfigMutationError::MissingPackagesTable) => {
+            anyhow!(t!("cli.config.missing_packages_table"))
+        }
+        AppError::ConfigMutation(ConfigMutationError::PackageNotTable { package }) => {
+            anyhow!(t!("cli.config.package_must_be_table", package = package))
+        }
+        AppError::ConfigMutation(ConfigMutationError::ChannelLegacyConflict { package }) => {
+            anyhow!(t!("cli.config.channel_legacy_conflict", package = package))
+        }
+        AppError::ConfigMutation(ConfigMutationError::InvalidLegacyVersionMode {
+            package, ..
+        }) => anyhow!(t!(
+            "cli.config.invalid_legacy_version_mode",
+            package = package
+        )),
+        AppError::ConfigMutation(ConfigMutationError::SnakeCaseConflict {
+            scope,
+            legacy,
+            current,
+        }) => anyhow!(t!(
+            "cli.config.snake_case_conflict",
+            scope = scope,
+            legacy = legacy,
+            current = current
+        )),
+        AppError::ConfigMutation(ConfigMutationError::PackageNotConfigured { package }) => {
+            anyhow!(t!("cli.config.package_not_configured", package = package))
+        }
+        error => anyhow!(error),
     }
-}
-
-fn plan_migration(content: &str) -> anyhow::Result<MigrationPlan> {
-    let mut document = content.parse::<toml_edit::DocumentMut>()?;
-    let mut migrated = BTreeSet::new();
-    migrate_snake_case_fields(document.as_table_mut(), &mut migrated)?;
-    let packages = document
-        .get_mut("packages")
-        .and_then(toml_edit::Item::as_table_mut)
-        .context(t!("cli.config.missing_packages_table"))?;
-
-    for (name, package) in packages.iter_mut() {
-        let table = package
-            .as_table_like_mut()
-            .with_context(|| t!("cli.config.package_must_be_table", package = name))?;
-        let has_channel = table.contains_key("channel");
-        let legacy = table.get("version-mode").map(ToString::to_string);
-        let Some(legacy) = legacy else {
-            continue;
-        };
-        if has_channel {
-            anyhow::bail!(t!("cli.config.channel_legacy_conflict", package = name));
-        }
-
-        let version_mode = parse_legacy_version_mode(&legacy)
-            .with_context(|| t!("cli.config.invalid_legacy_version_mode", package = name))?;
-        table.remove("version-mode");
-        if let semifold_resolver::config::VersionMode::PreRelease { tag } = version_mode {
-            table.insert("channel", toml_edit::value(tag));
-        }
-        migrated.insert(name.to_string());
-    }
-
-    Ok(MigrationPlan {
-        content: document.to_string(),
-        packages: migrated.into_iter().collect(),
-    })
-}
-
-const SNAKE_CASE_FIELDS: [(&str, &str); 8] = [
-    ("version_mode", "version-mode"),
-    ("channel_bump", "channel-bump"),
-    ("depends_on", "depends-on"),
-    ("pre_check", "pre-check"),
-    ("post_version", "post-version"),
-    ("extra_headers", "extra-headers"),
-    ("extra_env", "extra-env"),
-    ("dry_run", "dry-run"),
-];
-
-fn migrate_snake_case_fields(
-    document: &mut toml_edit::Table,
-    migrated: &mut BTreeSet<String>,
-) -> anyhow::Result<()> {
-    if let Some(packages) = document
-        .get_mut("packages")
-        .and_then(toml_edit::Item::as_table_like_mut)
-    {
-        for (name, package) in packages.iter_mut() {
-            if let Some(package) = package.as_table_like_mut() {
-                rename_table_fields(
-                    package,
-                    &format!("packages.{name}"),
-                    &SNAKE_CASE_FIELDS[..3],
-                    migrated,
-                )?;
-            }
-        }
-    }
-
-    if let Some(resolvers) = document
-        .get_mut("resolver")
-        .and_then(toml_edit::Item::as_table_like_mut)
-    {
-        for (name, resolver) in resolvers.iter_mut() {
-            let Some(resolver) = resolver.as_table_like_mut() else {
-                continue;
-            };
-            let scope = format!("resolver.{name}");
-            rename_table_fields(resolver, &scope, &SNAKE_CASE_FIELDS[3..5], migrated)?;
-
-            if let Some(pre_check) = resolver
-                .get_mut("pre-check")
-                .and_then(toml_edit::Item::as_table_like_mut)
-            {
-                rename_table_fields(
-                    pre_check,
-                    &format!("{scope}.pre-check"),
-                    &SNAKE_CASE_FIELDS[5..6],
-                    migrated,
-                )?;
-            }
-
-            for phase in ["prepublish", "publish", "post-version"] {
-                if let Some(commands) = resolver.get_mut(phase) {
-                    migrate_command_fields(commands, &format!("{scope}.{phase}"), migrated)?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn migrate_command_fields(
-    commands: &mut toml_edit::Item,
-    scope: &str,
-    migrated: &mut BTreeSet<String>,
-) -> anyhow::Result<()> {
-    match commands {
-        toml_edit::Item::ArrayOfTables(tables) => {
-            for (index, command) in tables.iter_mut().enumerate() {
-                rename_table_fields(
-                    command,
-                    &format!("{scope}[{index}]"),
-                    &SNAKE_CASE_FIELDS[6..],
-                    migrated,
-                )?;
-            }
-        }
-        toml_edit::Item::Value(toml_edit::Value::Array(commands)) => {
-            for (index, command) in commands.iter_mut().enumerate() {
-                if let toml_edit::Value::InlineTable(command) = command {
-                    rename_table_fields(
-                        command,
-                        &format!("{scope}[{index}]"),
-                        &SNAKE_CASE_FIELDS[6..],
-                        migrated,
-                    )?;
-                }
-            }
-        }
-        toml_edit::Item::Table(command) => {
-            rename_table_fields(command, scope, &SNAKE_CASE_FIELDS[6..], migrated)?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn rename_table_fields(
-    table: &mut dyn toml_edit::TableLike,
-    scope: &str,
-    fields: &[(&str, &str)],
-    migrated: &mut BTreeSet<String>,
-) -> anyhow::Result<()> {
-    let renames = fields
-        .iter()
-        .filter(|(legacy, _)| table.contains_key(legacy))
-        .copied()
-        .collect::<Vec<_>>();
-
-    for (legacy, current) in &renames {
-        if table.contains_key(current) {
-            anyhow::bail!(t!(
-                "cli.config.snake_case_conflict",
-                scope = scope,
-                legacy = legacy,
-                current = current
-            ));
-        }
-        migrated.insert(format!("{scope}.{legacy}"));
-    }
-
-    if !renames.is_empty() {
-        let entries = table
-            .iter()
-            .filter_map(|(name, item)| {
-                let key = table.key(name)?;
-                let renamed = renames
-                    .iter()
-                    .find_map(|(legacy, current)| (*legacy == name).then_some(*current))
-                    .unwrap_or(name);
-                Some((
-                    toml_edit::Key::new(renamed)
-                        .with_leaf_decor(key.leaf_decor().clone())
-                        .with_dotted_decor(key.dotted_decor().clone()),
-                    item.clone(),
-                ))
-            })
-            .collect::<Vec<_>>();
-        table.clear();
-        for (key, item) in entries {
-            table.entry_format(&key).or_insert(item);
-        }
-    }
-
-    Ok(())
-}
-
-fn plan_channel_update(
-    content: &str,
-    channel: Option<&str>,
-    bump: Option<ChannelBumpArg>,
-    requested: &[String],
-    all: bool,
-) -> anyhow::Result<MigrationPlan> {
-    let mut document = content.parse::<toml_edit::DocumentMut>()?;
-    let packages = document
-        .get_mut("packages")
-        .and_then(toml_edit::Item::as_table_mut)
-        .context(t!("cli.config.missing_packages_table"))?;
-    let targets = if all {
-        packages.iter().map(|(name, _)| name.to_string()).collect()
-    } else {
-        requested.to_vec()
-    };
-
-    for name in &targets {
-        if !packages.contains_key(name) {
-            anyhow::bail!(t!("cli.config.package_not_configured", package = name));
-        }
-    }
-
-    let mut updated = Vec::new();
-    for name in targets {
-        let table = packages
-            .get_mut(&name)
-            .with_context(|| t!("cli.config.package_not_configured", package = name))?
-            .as_table_like_mut()
-            .with_context(|| t!("cli.config.package_must_be_table", package = name))?;
-        let current = table
-            .get("channel")
-            .and_then(toml_edit::Item::as_value)
-            .and_then(toml_edit::Value::as_str);
-        if current == channel {
-            continue;
-        }
-        match channel {
-            Some(channel) => {
-                table.insert("channel", toml_edit::value(channel));
-                match bump {
-                    Some(bump) => {
-                        table.insert("channel-bump", toml_edit::value(bump.as_str()));
-                    }
-                    None => {
-                        table.remove("channel-bump");
-                    }
-                }
-            }
-            None => {
-                table.remove("channel");
-                table.remove("channel-bump");
-            }
-        }
-        updated.push(name.to_string());
-    }
-
-    Ok(MigrationPlan {
-        content: document.to_string(),
-        packages: updated,
-    })
-}
-
-fn parse_legacy_version_mode(
-    value: &str,
-) -> anyhow::Result<semifold_resolver::config::VersionMode> {
-    #[derive(serde::Deserialize)]
-    struct LegacyVersionMode {
-        #[serde(rename = "version-mode")]
-        version_mode: semifold_resolver::config::VersionMode,
-    }
-
-    Ok(
-        toml_edit::de::from_str::<LegacyVersionMode>(&format!("version-mode = {value}"))?
-            .version_mode,
-    )
-}
-
-fn write_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
-    let extension = path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or("tmp");
-    let temporary = path.with_extension(format!("{extension}.{}.tmp", std::process::id()));
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temporary)
-        .with_context(|| {
-            t!(
-                "cli.config.create_temporary_failed",
-                path = temporary.display()
-            )
-        })?;
-    file.write_all(content.as_bytes())?;
-    file.sync_all()?;
-    std::fs::rename(&temporary, path)?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -636,13 +362,42 @@ mod tests {
 
     use camino::Utf8PathBuf;
     use clap::Parser as _;
-    use semifold_engine::Project;
+    use semifold_engine::{
+        ChannelUpdate, ConfigMutationError, ConfigMutationPlan, Project,
+        config_management::{
+            plan_channel_update as engine_plan_channel_update,
+            plan_config_migration as engine_plan_config_migration,
+        },
+    };
     use semifold_resolver::{config, resolver::ResolverType};
 
     use super::{
-        ChannelBumpArg, ChannelTarget, Config as ConfigCommand, ConfigPathError, Migrate, Sync,
-        migrate, plan_channel_update, plan_migration, sync, toml_config_path, update_channel,
+        ChannelBumpArg, ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate, sync,
+        update_channel,
     };
+
+    fn plan_migration(content: &str) -> Result<ConfigMutationPlan, ConfigMutationError> {
+        engine_plan_config_migration("config.toml".into(), content)
+    }
+
+    fn plan_channel_update(
+        content: &str,
+        channel: Option<&str>,
+        bump: Option<ChannelBumpArg>,
+        packages: &[String],
+        all: bool,
+    ) -> Result<ConfigMutationPlan, ConfigMutationError> {
+        engine_plan_channel_update(
+            "config.toml".into(),
+            content,
+            &ChannelUpdate {
+                channel: channel.map(ToOwned::to_owned),
+                bump: bump.map(ChannelBumpArg::as_channel_bump),
+                packages: packages.to_vec(),
+                all,
+            },
+        )
+    }
 
     fn temporary_config_path(name: &str) -> PathBuf {
         let directory = std::env::temp_dir().join(format!(
@@ -1290,10 +1045,6 @@ resolver = "rust"
             },
         );
 
-        assert_eq!(
-            toml_config_path(&project),
-            Err(ConfigPathError::UnsupportedConfigFormat)
-        );
         let error = sync(
             &Sync {
                 check: false,

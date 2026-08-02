@@ -4,7 +4,7 @@ use semifold_engine::{
     ExecutionMode, Project, PublishOptions, PublishReport, SemifoldService, SystemDependencies,
 };
 
-use crate::cli::{is_git_repo_clean, repository_context};
+use crate::cli::repository_context;
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -56,9 +56,9 @@ pub(crate) async fn publish(
 }
 
 pub(crate) async fn run(opts: &Publish, project: &Project, dry_run: bool) -> anyhow::Result<()> {
-    if !opts.allow_dirty && !is_git_repo_clean(project)? {
-        return Err(anyhow::anyhow!(t!("cli.dirty_repo")));
-    }
+    SemifoldService::new(SystemDependencies)
+        .ensure_clean_worktree(project, opts.allow_dirty)
+        .map_err(super::version::render_worktree_error)?;
 
     let _report = publish(project, dry_run, opts.github_release).await?;
 

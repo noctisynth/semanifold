@@ -7,7 +7,7 @@ use semifold_engine::{
     ReleaseExecutionOptions, SemifoldService, SystemDependencies,
 };
 
-use crate::cli::{is_git_repo_clean, repository_context};
+use crate::cli::repository_context;
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -122,11 +122,10 @@ fn render_apply_error(error: AppError) -> anyhow::Error {
 }
 
 pub(crate) async fn run(opts: &Version, project: &Project, dry_run: bool) -> anyhow::Result<()> {
-    if !opts.allow_dirty && !is_git_repo_clean(project)? {
-        return Err(anyhow::anyhow!(t!("cli.dirty_repo")));
-    }
-
     let service = SemifoldService::new(SystemDependencies);
+    service
+        .ensure_clean_worktree(project, opts.allow_dirty)
+        .map_err(render_worktree_error)?;
     let release = service.plan_release(project)?;
     if release.consumed_changesets().is_empty() {
         log::warn!("{}", t!("cli.version.empty_changesets"));
@@ -134,4 +133,17 @@ pub(crate) async fn run(opts: &Version, project: &Project, dry_run: bool) -> any
     }
     prepare_and_apply_release(project, release, dry_run).await?;
     Ok(())
+}
+
+pub(crate) fn render_worktree_error(error: AppError) -> anyhow::Error {
+    match error {
+        AppError::DirtyWorktree => anyhow::anyhow!(t!("cli.dirty_repo")),
+        AppError::GitOpen(error) => {
+            anyhow::anyhow!(t!("cli.version.git_open_failed", error = error))
+        }
+        AppError::GitStatus(error) => {
+            anyhow::anyhow!(t!("cli.version.git_status_failed", error = error))
+        }
+        error => error.into(),
+    }
 }

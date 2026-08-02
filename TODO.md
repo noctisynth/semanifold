@@ -4,10 +4,10 @@
 
 ## 总体目标
 
-- [ ] 以跨生态 `WorkspaceGraph` 和不可变 `ReleasePlan` 取代以 `Resolver` 为中心的设计
+- [x] 以跨生态 `WorkspaceGraph` 和不可变 `ReleasePlan` 取代以 `Resolver` 为中心的设计
 - [x] 以 workspace 级 `ReleaseContext` 统一 version/release PR 事实，并以 package 级 `PublishContext` 统一发布事实
-- [ ] 让 `status`、`version`、`publish` 和 CI 使用同一套应用服务
-- [ ] 将领域计算与文件系统、Git、HTTP、GitHub 和子进程副作用分离
+- [x] 让 `status`、`version`、`publish` 和 CI 使用同一套应用服务
+- [x] 将领域计算与文件系统、Git、HTTP、GitHub 和子进程副作用分离
 - [x] 使用 `smif config sync` 增量同步 `.changes/config.toml`，不再依赖重复执行 `init`
 - [x] 保持现有 CLI 主要用法稳定；配置字段统一为 kebab-case，不兼容 snake_case
 
@@ -345,6 +345,7 @@
 ### 应用服务
 
 - [x] 创建 `semifold-engine`
+- [x] 实现 `SemifoldService::plan_init()` / `apply_init()`，并让 `init` 与 `config sync` 复用 package discovery
 - [x] 实现 CLI/MCP 共用的 `SemifoldService::create_changeset()`
 - [x] 实现 `SemifoldService::plan_config_sync()`
 - [x] 实现 `SemifoldService::apply_config_sync()`
@@ -356,7 +357,7 @@
 
 ### CLI、CI 与 MCP
 
-- [ ] CLI 只负责参数解析、交互和结果渲染
+- [x] CLI 只负责参数解析、交互和结果渲染
 - [x] CI 通过 `SemifoldService` 编排 release branch、commit、push 和 PR
 - [x] MCP 使用与 CLI 相同的应用服务
 - [x] MCP 不再为每次调用重新构建全局 `Context`
@@ -378,7 +379,7 @@
 ### 阶段完成条件
 
 - [x] CLI 模块中不再包含版本计算或 manifest 文件操作
-- [ ] CLI、CI 和 MCP 不复制业务编排
+- [x] CLI、CI 和 MCP 不复制业务编排
 - [x] 发布计算中不存在 `RefCell` 或隐式全局可变 map
 
 ## 最终验收
@@ -386,14 +387,14 @@
 - [x] `cargo fmt --all --check` 通过
 - [x] `cargo clippy --workspace --all-targets --all-features` 通过
 - [x] `cargo test --workspace --all-features` 通过
-- [ ] `status` 与 `version` 的计划结果完全一致
-- [ ] 跨生态依赖图支持确定性拓扑排序和环检测
-- [ ] 所有文件修改在写入前完成计划和验证
+- [x] `status` 与 `version` 的计划结果完全一致
+- [x] 跨生态依赖图支持确定性拓扑排序和环检测
+- [x] 所有文件修改在写入前完成计划和验证
 - [x] `--dry-run` 不应用 Semifold 文件修改、不创建 Forge release 或上传 asset；只执行 registry
   preflight 与显式配置 `dry-run = true` 的命令，并在报告中区分实际执行和跳过
 - [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
 - [x] `config sync --check` 可稳定用于 CI
-- [ ] 连续执行配置同步和版本规划均具有幂等性
+- [x] 连续执行配置同步和版本规划均具有幂等性
 - [x] 非测试 target 通过 `clippy::unwrap_used`、`clippy::expect_used` 和
   `clippy::indexing_slicing`，生产代码不存在可识别的 panic 路径
 - [x] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板

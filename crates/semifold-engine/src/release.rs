@@ -496,7 +496,10 @@ mod tests {
         let mut changeset = Changeset::new("core-major".to_string(), &root);
         changeset.add_package("core".to_string(), ResolverBumpLevel::Major, None);
 
-        let plan = plan_release(&root, &config, &[changeset]).unwrap();
+        let plan = plan_release(&root, &config, std::slice::from_ref(&changeset)).unwrap();
+        let repeated = plan_release(&root, &config, std::slice::from_ref(&changeset)).unwrap();
+
+        assert_eq!(repeated, plan);
 
         assert_eq!(
             plan.order(),

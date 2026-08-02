@@ -2,9 +2,11 @@
 
 pub mod changeset_service;
 pub mod config_editor;
+pub mod config_management;
 pub mod config_sync;
 pub mod discovery;
 pub mod file_edit_executor;
+pub mod init;
 pub mod package_path;
 pub mod project;
 pub mod publish_plan;
@@ -15,6 +17,8 @@ pub mod service;
 pub mod workspace;
 
 pub use changeset_service::{ChangesetCreateError, ChangesetDraft, ChangesetPackageInput};
+pub use config_management::{ChannelUpdate, ConfigMutationError, ConfigMutationPlan};
+pub use init::{InitFile, InitOptions, InitPlan, InitReport, InitWorkflowTemplates};
 pub use project::{Project, ProjectLoadError, ProjectLocation};
 pub use publish_plan::{PublishOptions, PublishPlan};
 pub use publisher::{PublishReport, PublishStatus};
@@ -23,5 +27,6 @@ pub use release_apply::{
     ReleaseApplyPlan, ReleaseExecutionOptions,
 };
 pub use service::{
-    AppError, ConfigSyncOptions, ConfigSyncReport, SemifoldService, SystemDependencies,
+    AppError, ConfigMutationReport, ConfigSyncOptions, ConfigSyncReport, SemifoldService,
+    SystemDependencies,
 };

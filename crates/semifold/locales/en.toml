@@ -51,6 +51,7 @@ base_branch = "What is the base branch?"
 release_branch = "What is the release branch?"
 write_ci = "Write GitHub Actions workflows?"
 discovery_failed = "Package discovery failed: %{error}"
+non_utf8_target = "Initialization target path is not valid UTF-8: %{path}"
 
 [cli.init.flags]
 target = "Target directory to store changesets"

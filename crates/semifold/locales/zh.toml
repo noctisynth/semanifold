@@ -51,6 +51,7 @@ base_branch = "要使用的基础分支？"
 release_branch = "要使用的发布分支？"
 write_ci = "是否写入 GitHub Actions 工作流？"
 discovery_failed = "包发现失败：%{error}"
+non_utf8_target = "初始化目标路径不是有效的 UTF-8：%{path}"
 
 [cli.init.flags]
 target = "要存储变更集的目标目录"

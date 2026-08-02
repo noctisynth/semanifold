@@ -2106,7 +2106,6 @@ dependencies = [
  "glob",
  "inquire",
  "log",
- "minijinja",
  "octocrab",
  "reqwest",
  "rmcp",

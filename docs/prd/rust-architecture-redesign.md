@@ -1639,6 +1639,20 @@ pub struct SemifoldService<D> {
 }
 
 impl<D: Dependencies> SemifoldService<D> {
+    pub fn plan_init(
+        &self,
+        location: &ProjectLocation,
+        options: InitOptions,
+    ) -> Result<InitPlan, AppError>;
+    pub fn apply_init(
+        &self,
+        plan: InitPlan,
+    ) -> Result<InitReport, AppError>;
+    pub fn ensure_clean_worktree(
+        &self,
+        project: &Project,
+        allow_dirty: bool,
+    ) -> Result<(), AppError>;
     pub fn create_changeset(
         &self,
         project: &Project,
@@ -1677,6 +1691,12 @@ impl<D: Dependencies> SemifoldService<D> {
     ) -> Result<PublishReport, AppError>;
 }
 ```
+
+`init` 的询问与 embedded workflow asset 读取仍属于 CLI；用户选择完成后，CLI 将目标目录、
+resolver、branch、tag 和可选 workflow 模板组成 `InitOptions`。应用服务统一完成 package
+发现、默认 resolver 配置构造、配置序列化和 workflow 渲染，返回包含全部目标目录与文件内容
+的不可变 `InitPlan`；`apply_init()` 只消费该计划创建目录并写入文件。这样 `init` 与
+`config sync` 复用同一个 `PackageDiscoveryService`，入口层不直接构造配置或操作文件。
 
 ### 14.2 CI
 

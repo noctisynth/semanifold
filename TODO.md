@@ -345,19 +345,20 @@
 ### 应用服务
 
 - [x] 创建 `semifold-engine`
+- [x] 实现 CLI/MCP 共用的 `SemifoldService::create_changeset()`
 - [x] 实现 `SemifoldService::plan_config_sync()`
 - [x] 实现 `SemifoldService::apply_config_sync()`
 - [x] 实现 `SemifoldService::plan_release()`
 - [x] 实现 `SemifoldService::prepare_release()`，将纯领域 `ReleasePlan` 准备为完整 `ReleaseApplyPlan`
 - [x] 实现 `SemifoldService::apply_release()`
-- [ ] 实现 `SemifoldService::plan_publish()`
-- [ ] 实现 `SemifoldService::publish()`
+- [x] 实现接收显式 `PublishOptions` 并生成完整 Forge/asset 执行事实的 `SemifoldService::plan_publish()`
+- [x] 实现只消费 `PublishPlan` 与 `ExecutionMode` 的 `SemifoldService::publish()`
 
 ### CLI、CI 与 MCP
 
 - [ ] CLI 只负责参数解析、交互和结果渲染
-- [ ] CI 通过 `SemifoldService` 编排 release branch、commit、push 和 PR
-- [ ] MCP 使用与 CLI 相同的应用服务
+- [x] CI 通过 `SemifoldService` 编排 release branch、commit、push 和 PR
+- [x] MCP 使用与 CLI 相同的应用服务
 - [x] MCP 不再为每次调用重新构建全局 `Context`
 - [x] MCP 不再使用 `set_current_dir()` 修改进程全局状态
 - [x] 移除旧 `Context.version_bumps`

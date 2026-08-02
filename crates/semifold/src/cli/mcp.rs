@@ -9,10 +9,12 @@ use rmcp::{
     tool, tool_handler, tool_router,
 };
 use rust_i18n::t;
-use semifold_engine::{Project, ProjectLocation};
+use semifold_core::{BumpLevel, PackageId};
+use semifold_engine::{
+    ChangesetDraft, ChangesetPackageInput, Project, ProjectLocation, SemifoldService,
+    SystemDependencies,
+};
 use serde::{Deserialize, Serialize};
-
-use semifold_resolver::changeset::{BumpLevel, Changeset};
 
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[schemars(title = t!("cli.mcp.params.name"), description = t!("cli.mcp.tools.create_changeset"))]
@@ -43,12 +45,14 @@ pub struct McpCommand {
 #[derive(Clone)]
 pub struct SemifoldMcp {
     project: Arc<Project>,
+    service: Arc<SemifoldService<SystemDependencies>>,
 }
 
 impl SemifoldMcp {
     fn new(project: Project) -> Self {
         Self {
             project: Arc::new(project),
+            service: Arc::new(SemifoldService::new(SystemDependencies)),
         }
     }
 }
@@ -94,12 +98,6 @@ impl SemifoldMcp {
         &self,
         Parameters(params): Parameters<CreateChangesetParams>,
     ) -> Result<String, String> {
-        for package in &params.packages {
-            if !self.project.config.packages.contains_key(package) {
-                return Err(t!("cli.mcp.package_not_found", package = package).into());
-            }
-        }
-
         let level = match params.level.as_str() {
             "major" => BumpLevel::Major,
             "minor" => BumpLevel::Minor,
@@ -113,16 +111,28 @@ impl SemifoldMcp {
             .tag
             .or_else(|| self.project.config.tags.keys().next().cloned());
 
-        let mut cs = Changeset::new(
-            params.name.clone(),
-            self.project.changeset_dir.as_std_path(),
-        );
-        cs.add_packages(&params.packages, level, tag);
-        cs.summary(params.summary);
-        cs.commit()
-            .map_err(|e| format!("Failed to write changeset: {}", e))?;
+        let packages = params
+            .packages
+            .into_iter()
+            .map(|package| ChangesetPackageInput {
+                package: PackageId::new(package),
+                bump: level,
+                tag: tag.clone(),
+            })
+            .collect();
+        let id = self
+            .service
+            .create_changeset(
+                &self.project,
+                ChangesetDraft {
+                    name: params.name,
+                    packages,
+                    summary: params.summary,
+                },
+            )
+            .map_err(|error| t!("cli.mcp.create_failed", error = error).to_string())?;
 
-        Ok(t!("cli.mcp.changeset_created", name = params.name).into())
+        Ok(t!("cli.mcp.changeset_created", name = id.as_str()).into())
     }
 }
 

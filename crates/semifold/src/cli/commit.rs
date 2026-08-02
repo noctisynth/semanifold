@@ -1,12 +1,15 @@
-use std::{fmt, path::Path};
+use std::fmt;
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
 use inquire::{Confirm, MultiSelect, Select, Text};
 
 use rust_i18n::t;
-use semifold_engine::Project;
-use semifold_resolver::changeset;
+use semifold_core::{BumpLevel, PackageId};
+use semifold_engine::{
+    AppError, ChangesetCreateError, ChangesetDraft, ChangesetPackageInput, Project,
+    SemifoldService, SystemDependencies,
+};
 
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
@@ -26,11 +29,11 @@ impl fmt::Display for Level {
 }
 
 impl Level {
-    pub fn to_bump_level(&self) -> changeset::BumpLevel {
+    pub fn to_bump_level(&self) -> BumpLevel {
         match self {
-            Level::Patch => changeset::BumpLevel::Patch,
-            Level::Minor => changeset::BumpLevel::Minor,
-            Level::Major => changeset::BumpLevel::Major,
+            Level::Patch => BumpLevel::Patch,
+            Level::Minor => BumpLevel::Minor,
+            Level::Major => BumpLevel::Major,
         }
     }
 }
@@ -45,39 +48,11 @@ pub(crate) struct Commit {
     pub summary: Option<String>,
 }
 
-fn sanitize_filename(filename: &str) -> String {
-    const ILLEGAL_CHARS: [char; 8] = ['<', '>', ':', '"', '/', '\\', '|', ' '];
-
-    filename
-        .chars()
-        .map(|c| {
-            if ILLEGAL_CHARS.contains(&c) {
-                '-'
-            } else {
-                c.to_ascii_lowercase()
-            }
-        })
-        .collect()
-}
-
-fn file_exists(root_path: &Path, filename: &str) -> bool {
-    let path = root_path.join(format!("{filename}.md"));
-    path.exists()
-}
-
 pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
     let config = &project.config;
-    let changeset_root = project.changeset_dir.as_std_path();
 
     let name = if let Some(name) = &commit.name {
-        let sanitized_name = sanitize_filename(name);
-        if sanitized_name.is_empty() {
-            return Err(anyhow::anyhow!(t!("cli.commit.empty_name")));
-        }
-        if file_exists(changeset_root, &sanitized_name) {
-            return Err(anyhow::anyhow!(t!("cli.commit.commit_exists", name = name)));
-        }
-        sanitized_name
+        name.clone()
     } else {
         loop {
             let name = Text::new(&t!("cli.commit.query_name"))
@@ -87,7 +62,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
             if name.is_empty() {
                 continue;
             }
-            break sanitize_filename(&name);
+            break name;
         }
     };
 
@@ -113,7 +88,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
     )
     .prompt()?;
 
-    let mut changeset = changeset::Changeset::new(name.clone(), changeset_root);
+    let mut package_inputs = Vec::new();
     let level_variants = Level::value_variants().iter().rev();
     for variant in level_variants {
         if packages.is_empty() {
@@ -146,10 +121,14 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
             &[]
         })
         .prompt()?;
-        changeset.add_packages(
-            &selected_packages,
-            variant.to_bump_level(),
-            Some(tag.clone()),
+        package_inputs.extend(
+            selected_packages
+                .iter()
+                .map(|package| ChangesetPackageInput {
+                    package: PackageId::new(package),
+                    bump: variant.to_bump_level(),
+                    tag: Some(tag.clone()),
+                }),
         );
         packages.retain(|p| !selected_packages.contains(p));
     }
@@ -174,9 +153,24 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
             break summary;
         }
     };
-    changeset.summary(summary);
-
-    changeset.commit()?;
+    SemifoldService::new(SystemDependencies)
+        .create_changeset(
+            project,
+            ChangesetDraft {
+                name: name.clone(),
+                packages: package_inputs,
+                summary,
+            },
+        )
+        .map_err(|error| match error {
+            AppError::ChangesetCreate(ChangesetCreateError::EmptyName) => {
+                anyhow::anyhow!(t!("cli.commit.empty_name"))
+            }
+            AppError::ChangesetCreate(ChangesetCreateError::AlreadyExists { .. }) => {
+                anyhow::anyhow!(t!("cli.commit.commit_exists", name = name))
+            }
+            error => anyhow::anyhow!(t!("cli.commit.create_failed", error = error)),
+        })?;
 
     Ok(())
 }

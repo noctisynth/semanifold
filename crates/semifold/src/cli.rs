@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand, builder::styling};
 use rust_i18n::t;
+use semifold_core::RepositoryContext;
+use semifold_engine::Project;
 
 pub mod ci;
 pub mod commit;
@@ -9,6 +11,34 @@ pub mod mcp;
 pub mod publish;
 pub mod status;
 pub mod version;
+
+pub(crate) fn repository_context() -> Option<RepositoryContext> {
+    let repository = std::env::var("GITHUB_REPOSITORY").ok()?;
+    let (owner, name) = repository.split_once('/')?;
+    let host =
+        std::env::var("GITHUB_SERVER_URL").unwrap_or_else(|_| "https://github.com".to_string());
+    Some(RepositoryContext {
+        host: host.clone(),
+        owner: owner.to_string(),
+        name: name.to_string(),
+        web_url: format!("{}/{owner}/{name}", host.trim_end_matches('/')),
+        commit: None,
+    })
+}
+
+pub(crate) fn is_git_repo_clean(project: &Project) -> anyhow::Result<bool> {
+    let repository = git2::Repository::open(project.root.as_std_path())
+        .map_err(|error| anyhow::anyhow!(t!("cli.version.git_open_failed", error = error)))?;
+    let statuses = repository
+        .statuses(None)
+        .map_err(|error| anyhow::anyhow!(t!("cli.version.git_status_failed", error = error)))?;
+    Ok(statuses.iter().all(|entry| {
+        matches!(
+            entry.status(),
+            git2::Status::CURRENT | git2::Status::IGNORED
+        )
+    }))
+}
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum Commands {

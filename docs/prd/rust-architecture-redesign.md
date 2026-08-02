@@ -419,7 +419,13 @@ changeset、不消费 `channel-bump`，但仍执行 `run_in_dry_run = true` 的 
 
 ```rust
 pub struct PublishPlan {
+    pub project_root: Utf8PathBuf,
     pub packages: Vec<PackagePublish>,
+}
+
+pub struct PublishOptions {
+    pub create_forge_release: bool,
+    pub repository: Option<RepositoryContext>,
 }
 
 pub struct PackagePublish {
@@ -427,6 +433,7 @@ pub struct PackagePublish {
     pub preflight: Option<RegistryCheck>,
     pub commands: Vec<CommandSpec>,
     pub assets: Vec<AssetDeclaration>,
+    pub forge: Option<PackageForgePlan>,
     pub skip_reason: Option<PublishSkipReason>,
 }
 
@@ -449,13 +456,20 @@ pub struct PublishPackageContext {
 
 Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem adapter 中。它们由 engine 根据统一包模型和用户配置组装。
 
-`PublishPlan` 在 publish 进程中根据当前 `WorkspaceSnapshot`、强类型配置和
+`PublishPlan` 在 publish 进程中根据当前 `WorkspaceSnapshot`、强类型配置、显式
+`PublishOptions` 和
 `WorkspaceGraph` 重新构造，不依赖已被 version 消费的 changeset，也不持久化或恢复
 `ReleaseContext`。`PublishContext` 是单个 package 的只读模板快照；pre-check、
 prepublish、publish、asset 和 package GitHub Release 只消费 `package.*` 以及可选的
 repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中的 package；private package
 和 registry 中已存在的版本通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan`
 推断本次发布集合。
+
+`create_forge_release = true` 时必须同时提供 `RepositoryContext`；engine 在规划阶段读取并验证
+最新 changelog，将完整 `PackageForgePlan` 固化到对应 `PackagePublish`。不创建 Forge release 时
+不读取 changelog 正文，但 publishable package 仍必须通过 changelog 存在性检查。项目根目录作为
+不可变执行事实保存在 application 层 `PublishPlan`，只用于命令工作目录和延迟 asset 解析，不进入
+package 模板 context。
 
 publishable package 必须存在 `<package.path>/CHANGELOG.md` 才能进入 registry preflight、命令或
 Forge release 流程。缺失时以 `PublishSkipReason::MissingChangelog` 显式跳过；private 的 skip
@@ -1625,6 +1639,11 @@ pub struct SemifoldService<D> {
 }
 
 impl<D: Dependencies> SemifoldService<D> {
+    pub fn create_changeset(
+        &self,
+        project: &Project,
+        draft: ChangesetDraft,
+    ) -> Result<ChangesetId, AppError>;
     pub fn plan_config_sync(
         &self,
         project: &Project,
@@ -1646,8 +1665,16 @@ impl<D: Dependencies> SemifoldService<D> {
         plan: ReleaseApplyPlan,
         mode: ExecutionMode,
     ) -> Result<ApplyReport, AppError>;
-    pub async fn plan_publish(&self, project: &Project) -> Result<PublishPlan, AppError>;
-    pub async fn publish(&self, plan: PublishPlan) -> Result<PublishReport, AppError>;
+    pub async fn plan_publish(
+        &self,
+        project: &Project,
+        options: PublishOptions,
+    ) -> Result<PublishPlan, AppError>;
+    pub async fn publish(
+        &self,
+        plan: PublishPlan,
+        mode: ExecutionMode,
+    ) -> Result<PublishReport, AppError>;
 }
 ```
 
@@ -1660,6 +1687,24 @@ CI 编排仍然可以处理 release branch、commit、push 和 Pull Request，�
 MCP 服务不应在每个工具调用中重新构建全局 `Context`，也不应依赖 `set_current_dir()` 修改进程全局状态。
 
 MCP handler 应持有已加载的 service 或显式 `ProjectLocator`，然后调用与 CLI 相同的 changeset 和规划接口。
+
+CLI 与 MCP 提交 changeset 时都先将各自的参数或交互结果映射为 `ChangesetDraft`。应用层统一负责
+名称规范化、重复文件检查、package/tag 校验和写入；入口层不得直接构造或提交 resolver
+`Changeset`：
+
+```rust
+pub struct ChangesetDraft {
+    pub name: String,
+    pub packages: Vec<ChangesetPackageInput>,
+    pub summary: String,
+}
+
+pub struct ChangesetPackageInput {
+    pub package: PackageId,
+    pub bump: BumpLevel,
+    pub tag: Option<String>,
+}
+```
 
 ## 15. 错误模型
 

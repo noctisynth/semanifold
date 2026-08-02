@@ -6,10 +6,11 @@ use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
 
-use crate::cli::{publish, version};
+use crate::cli::repository_context;
 use semifold_core::ReleaseContext;
 use semifold_engine::{
-    Project, SemifoldService, SystemDependencies,
+    ExecutionMode, Project, PublishOptions, ReleaseExecutionOptions, SemifoldService,
+    SystemDependencies,
     release::{ReleasePullRequestContext, render_release_branch, render_release_pull_request},
 };
 
@@ -75,18 +76,59 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     let release_plan = SemifoldService::new(SystemDependencies).plan_release(project)?;
     if release_plan.consumed_changesets().is_empty() {
         log::info!("{}", t!("cli.ci.no_changesets_publish"));
-        return publish::publish(project, dry_run, true).await.map(|_| ());
+        let repository = repository_context()
+            .ok_or_else(|| anyhow::anyhow!(t!("cli.publish.repo_info_missing")))?;
+        let service = SemifoldService::new(SystemDependencies);
+        let publish_plan = service
+            .plan_publish(
+                project,
+                &PublishOptions {
+                    create_forge_release: true,
+                    repository: Some(repository),
+                },
+            )
+            .await
+            .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
+        service
+            .publish(
+                publish_plan,
+                if dry_run {
+                    ExecutionMode::DryRun
+                } else {
+                    ExecutionMode::Apply
+                },
+            )
+            .await?;
+        return Ok(());
     }
 
     let release_context = ReleaseContext::from_plan(&release_plan);
     let release_branch = render_release_branch(&config.branches.release, &release_context)
         .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)))?;
 
+    let service = SemifoldService::new(SystemDependencies);
+    let apply_plan = service
+        .prepare_release(
+            project,
+            release_plan,
+            &ReleaseExecutionOptions {
+                collect_remote_metadata: !dry_run,
+                repository: repository_context(),
+            },
+        )
+        .await?;
     let semifold_engine::ApplyReport {
         changelogs: changelogs_map,
         file_edits,
         unconsumed_changesets: _,
-    } = version::prepare_and_apply_release(project, release_plan, dry_run).await?;
+    } = service.apply_release(
+        apply_plan,
+        if dry_run {
+            ExecutionMode::DryRun
+        } else {
+            ExecutionMode::Apply
+        },
+    )?;
     let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
     let pull_request_context = ReleasePullRequestContext {
         release: &release_context,

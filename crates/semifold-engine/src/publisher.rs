@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     future::Future,
     path::Path,
     pin::Pin,
@@ -10,7 +9,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use semifold_core::PackageId;
 
 use crate::publish_plan::{
-    AssetDeclaration, CommandPhase, CommandSpec, PlannedRegistryCheck, PublishPlan,
+    AssetDeclaration, CommandPhase, CommandSpec, ForgeRelease, PlannedRegistryCheck, PublishPlan,
     PublishSkipReason, StdioPolicy,
 };
 
@@ -97,16 +96,6 @@ pub trait RegistryClient {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ForgeReleaseId(pub u64);
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ForgeRelease {
-    pub owner: String,
-    pub repository: String,
-    pub tag: String,
-    pub title: String,
-    pub body: String,
-    pub prerelease: bool,
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ForgeReleaseOutcome {
@@ -319,17 +308,11 @@ impl FileSystem for SystemFileSystem {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PackageForgePlan {
-    pub release: ForgeRelease,
-}
-
 pub struct ForgeExecution<'a> {
     pub client: &'a dyn ForgeClient,
     pub file_system: &'a dyn FileSystem,
     pub asset_resolver: &'a dyn AssetResolver,
     pub root: &'a Path,
-    pub packages: &'a BTreeMap<PackageId, PackageForgePlan>,
 }
 
 #[derive(Default)]
@@ -535,7 +518,7 @@ where
             });
         }
         if let Some(forge) = &forge
-            && let Some(forge_plan) = forge.packages.get(&package.context.package.id)
+            && let Some(forge_plan) = &package.forge
         {
             if dry_run {
                 package_report.forge = ForgeDisposition::SkippedDryRun;
@@ -752,7 +735,15 @@ mod tests {
             }),
             commands,
             assets: Vec::new(),
+            forge: None,
             skip_reason: private.then_some(PublishSkipReason::Private),
+        }
+    }
+
+    fn publish_plan(packages: Vec<PackagePublish>) -> PublishPlan {
+        PublishPlan {
+            project_root: Utf8PathBuf::from("."),
+            packages,
         }
     }
 
@@ -771,12 +762,10 @@ mod tests {
 
     #[tokio::test]
     async fn completes_all_preflights_before_running_commands() {
-        let mut plan = PublishPlan {
-            packages: vec![
-                package("core", false, vec![command("core-publish", false)]),
-                package("app", false, vec![command("app-publish", false)]),
-            ],
-        };
+        let mut plan = publish_plan(vec![
+            package("core", false, vec![command("core-publish", false)]),
+            package("app", false, vec![command("app-publish", false)]),
+        ]);
         let runner = RecordingRunner {
             commands: Mutex::new(Vec::new()),
             fail: None,
@@ -813,13 +802,11 @@ mod tests {
 
     #[tokio::test]
     async fn dry_run_only_executes_explicitly_allowed_commands() {
-        let mut plan = PublishPlan {
-            packages: vec![package(
-                "core",
-                false,
-                vec![command("skip", false), command("execute", true)],
-            )],
-        };
+        let mut plan = publish_plan(vec![package(
+            "core",
+            false,
+            vec![command("skip", false), command("execute", true)],
+        )]);
         let runner = RecordingRunner {
             commands: Mutex::new(Vec::new()),
             fail: None,
@@ -855,12 +842,10 @@ mod tests {
 
     #[tokio::test]
     async fn command_failure_marks_following_packages_not_started() {
-        let mut plan = PublishPlan {
-            packages: vec![
-                package("core", false, vec![command("fail", false)]),
-                package("app", false, vec![command("app", false)]),
-            ],
-        };
+        let mut plan = publish_plan(vec![
+            package("core", false, vec![command("fail", false)]),
+            package("app", false, vec![command("app", false)]),
+        ]);
         let runner = RecordingRunner {
             commands: Mutex::new(Vec::new()),
             fail: Some("fail".to_string()),
@@ -885,9 +870,7 @@ mod tests {
     async fn missing_changelog_skips_registry_and_commands() {
         let mut missing = package("core", false, vec![command("publish", false)]);
         missing.skip_reason = Some(PublishSkipReason::MissingChangelog);
-        let mut plan = PublishPlan {
-            packages: vec![missing],
-        };
+        let mut plan = publish_plan(vec![missing]);
         let runner = RecordingRunner {
             commands: Mutex::new(Vec::new()),
             fail: None,
@@ -935,26 +918,25 @@ mod tests {
         let asset_resolver = PostCommandAssetResolver {
             commands: &runner.commands,
         };
-        let forge_packages = BTreeMap::from([(
-            PackageId::new("core"),
-            PackageForgePlan {
-                release: ForgeRelease {
-                    owner: "owner".to_string(),
-                    repository: "repo".to_string(),
-                    tag: "core-v1.0.0".to_string(),
-                    title: "core v1.0.0".to_string(),
-                    body: "changes".to_string(),
-                    prerelease: false,
-                },
-            },
-        )]);
         let registry = StaticRegistry {
             existing: Vec::new(),
             checked: Mutex::new(Vec::new()),
         };
-        let mut plan = PublishPlan {
-            packages: vec![package("core", false, vec![command("build-assets", false)])],
-        };
+        let mut plan = publish_plan(vec![package(
+            "core",
+            false,
+            vec![command("build-assets", false)],
+        )]);
+        plan.packages[0].forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "core-v1.0.0".to_string(),
+                title: "core v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
         plan.packages[0].assets = vec![AssetDeclaration::Glob {
             pattern: "generated*.tar.gz".to_string(),
         }];
@@ -968,7 +950,6 @@ mod tests {
                 file_system: &file_system,
                 asset_resolver: &asset_resolver,
                 root: Path::new("."),
-                packages: &forge_packages,
             }),
             false,
         )
@@ -994,19 +975,6 @@ mod tests {
         let file_system = StaticFileSystem;
         let asset_resolver = StaticAssetResolver;
         let root = Path::new(".");
-        let forge_packages = BTreeMap::from([(
-            PackageId::new("core"),
-            PackageForgePlan {
-                release: ForgeRelease {
-                    owner: "owner".to_string(),
-                    repository: "repo".to_string(),
-                    tag: "core-v1.0.0".to_string(),
-                    title: "core v1.0.0".to_string(),
-                    body: "changes".to_string(),
-                    prerelease: false,
-                },
-            },
-        )]);
         let registry = StaticRegistry {
             existing: Vec::new(),
             checked: Mutex::new(Vec::new()),
@@ -1015,9 +983,17 @@ mod tests {
             commands: Mutex::new(Vec::new()),
             fail: None,
         };
-        let mut plan = PublishPlan {
-            packages: vec![package("core", false, Vec::new())],
-        };
+        let mut plan = publish_plan(vec![package("core", false, Vec::new())]);
+        plan.packages[0].forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "core-v1.0.0".to_string(),
+                title: "core v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
         plan.packages[0].assets = vec![AssetDeclaration::Glob {
             pattern: "artifact*.tar.gz".to_string(),
         }];
@@ -1031,7 +1007,6 @@ mod tests {
                 file_system: &file_system,
                 asset_resolver: &asset_resolver,
                 root,
-                packages: &forge_packages,
             }),
             false,
         )
@@ -1063,9 +1038,17 @@ mod tests {
             .lock()
             .expect("recording forge mutex is not poisoned")
             .clear();
-        let mut plan = PublishPlan {
-            packages: vec![package("core", false, Vec::new())],
-        };
+        let mut plan = publish_plan(vec![package("core", false, Vec::new())]);
+        plan.packages[0].forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "core-v1.0.0".to_string(),
+                title: "core v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
         plan.packages[0].assets = vec![AssetDeclaration::Glob {
             pattern: "artifact*.tar.gz".to_string(),
         }];
@@ -1078,7 +1061,6 @@ mod tests {
                 file_system: &file_system,
                 asset_resolver: &asset_resolver,
                 root,
-                packages: &forge_packages,
             }),
             true,
         )

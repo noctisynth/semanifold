@@ -1,44 +1,18 @@
 use clap::Parser;
 use colored::Colorize;
 use rust_i18n::t;
-use semifold_core::{ChangesetId, RepositoryContext};
+use semifold_core::ChangesetId;
 use semifold_engine::{
     AppError, ApplyReport, ExecutionMode, Project, ReleaseApplyError, ReleaseApplyPlan,
     ReleaseExecutionOptions, SemifoldService, SystemDependencies,
 };
 
+use crate::cli::{is_git_repo_clean, repository_context};
+
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
     #[clap(long, help = t!("cli.version.flags.allow_dirty"))]
     allow_dirty: bool,
-}
-
-pub(crate) fn repository_context() -> Option<RepositoryContext> {
-    let repository = std::env::var("GITHUB_REPOSITORY").ok()?;
-    let (owner, name) = repository.split_once('/')?;
-    let host =
-        std::env::var("GITHUB_SERVER_URL").unwrap_or_else(|_| "https://github.com".to_string());
-    Some(RepositoryContext {
-        host: host.clone(),
-        owner: owner.to_string(),
-        name: name.to_string(),
-        web_url: format!("{}/{owner}/{name}", host.trim_end_matches('/')),
-        commit: None,
-    })
-}
-
-pub(crate) fn is_git_repo_clean(project: &Project) -> anyhow::Result<bool> {
-    let repository = git2::Repository::open(project.root.as_std_path())
-        .map_err(|error| anyhow::anyhow!(t!("cli.version.git_open_failed", error = error)))?;
-    let statuses = repository
-        .statuses(None)
-        .map_err(|error| anyhow::anyhow!(t!("cli.version.git_status_failed", error = error)))?;
-    Ok(statuses.iter().all(|entry| {
-        matches!(
-            entry.status(),
-            git2::Status::CURRENT | git2::Status::IGNORED
-        )
-    }))
 }
 
 pub(crate) async fn prepare_and_apply_release(

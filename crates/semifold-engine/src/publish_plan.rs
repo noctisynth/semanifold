@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
+use semifold_changelog::read_latest_changelog;
 use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext};
 use semifold_resolver::config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType};
 use semver::Version;
@@ -29,7 +30,14 @@ pub struct PublishPackageContext {
 
 #[derive(Debug)]
 pub struct PublishPlan {
+    pub project_root: Utf8PathBuf,
     pub packages: Vec<PackagePublish>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PublishOptions {
+    pub create_forge_release: bool,
+    pub repository: Option<RepositoryContext>,
 }
 
 #[derive(Debug)]
@@ -38,7 +46,23 @@ pub struct PackagePublish {
     pub preflight: Option<PlannedRegistryCheck>,
     pub commands: Vec<CommandSpec>,
     pub assets: Vec<AssetDeclaration>,
+    pub forge: Option<PackageForgePlan>,
     pub skip_reason: Option<PublishSkipReason>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackageForgePlan {
+    pub release: ForgeRelease,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForgeRelease {
+    pub owner: String,
+    pub repository: String,
+    pub tag: String,
+    pub title: String,
+    pub body: String,
+    pub prerelease: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -91,92 +115,122 @@ pub struct CommandSpec {
     pub run_in_dry_run: bool,
 }
 
-pub fn plan_publish(root: &Path, config: &Config) -> anyhow::Result<PublishPlan> {
+pub async fn plan_publish(
+    root: &Path,
+    config: &Config,
+    options: &PublishOptions,
+) -> anyhow::Result<PublishPlan> {
+    if options.create_forge_release && options.repository.is_none() {
+        anyhow::bail!("repository context is required to create Forge releases");
+    }
     let graph = load_workspace_graph(root, config)?;
     let order = graph.topological_order()?;
-    let packages = order
-        .into_iter()
-        .map(|id| {
-            let snapshot = graph
-                .package(&id)
-                .ok_or_else(|| anyhow::anyhow!("workspace graph package {id} is missing"))?;
-            let package_config = config
-                .packages
-                .get(id.as_str())
-                .ok_or_else(|| anyhow::anyhow!("configured package {id} is missing"))?;
-            let resolver_config =
-                config
-                    .resolver
-                    .get(&package_config.resolver)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "resolver config is missing for {}",
-                            package_config.resolver
-                        )
-                    })?;
-            let package = PublishPackageContext {
-                id: id.clone(),
-                name: snapshot.manifest_name.clone(),
-                ecosystem: snapshot.ecosystem,
-                version: snapshot.version.clone(),
-                tag: format!("{}-v{}", snapshot.manifest_name, snapshot.version),
-                path: snapshot.path.clone(),
-                private: !snapshot.publishable,
-            };
-            let tag_reference = format!("refs/tags/{}", package.tag);
-            anyhow::ensure!(
-                git2::Reference::is_valid_name(&tag_reference),
-                "planned package tag is not a valid Git reference: {}",
-                package.tag
-            );
-            let context = PublishContext {
-                package,
-                repository: None,
-                ci: None,
-            };
-            let working_directory = Utf8PathBuf::from_path_buf(root.join(&context.package.path))
-                .map_err(|_| anyhow::anyhow!("publish working directory is not valid UTF-8"))?;
-            let commands = resolver_config
-                .prepublish
-                .iter()
-                .map(|command| {
-                    render_command(
-                        command,
-                        &context,
-                        &working_directory,
-                        CommandPhase::Prepublish,
-                    )
-                })
-                .chain(resolver_config.publish.iter().map(|command| {
-                    render_command(command, &context, &working_directory, CommandPhase::Publish)
-                }))
-                .collect::<anyhow::Result<Vec<_>>>()?;
-
-            Ok(PackagePublish {
-                preflight: resolver_config
-                    .pre_check
-                    .as_ref()
-                    .map(|preflight| render_preflight(preflight, &context))
-                    .transpose()?,
-                commands,
-                assets: plan_assets(&package_config.assets)?,
-                skip_reason: if context.package.private {
-                    Some(PublishSkipReason::Private)
-                } else if !root
-                    .join(context.package.path.as_std_path())
-                    .join("CHANGELOG.md")
-                    .is_file()
-                {
-                    Some(PublishSkipReason::MissingChangelog)
-                } else {
-                    None
-                },
-                context,
+    let mut packages = Vec::with_capacity(order.len());
+    for id in order {
+        let snapshot = graph
+            .package(&id)
+            .ok_or_else(|| anyhow::anyhow!("workspace graph package {id} is missing"))?;
+        let package_config = config
+            .packages
+            .get(id.as_str())
+            .ok_or_else(|| anyhow::anyhow!("configured package {id} is missing"))?;
+        let resolver_config = config
+            .resolver
+            .get(&package_config.resolver)
+            .ok_or_else(|| {
+                anyhow::anyhow!("resolver config is missing for {}", package_config.resolver)
+            })?;
+        let package = PublishPackageContext {
+            id: id.clone(),
+            name: snapshot.manifest_name.clone(),
+            ecosystem: snapshot.ecosystem,
+            version: snapshot.version.clone(),
+            tag: format!("{}-v{}", snapshot.manifest_name, snapshot.version),
+            path: snapshot.path.clone(),
+            private: !snapshot.publishable,
+        };
+        let tag_reference = format!("refs/tags/{}", package.tag);
+        anyhow::ensure!(
+            git2::Reference::is_valid_name(&tag_reference),
+            "planned package tag is not a valid Git reference: {}",
+            package.tag
+        );
+        let context = PublishContext {
+            package,
+            repository: options.repository.clone(),
+            ci: None,
+        };
+        let working_directory = Utf8PathBuf::from_path_buf(root.join(&context.package.path))
+            .map_err(|_| anyhow::anyhow!("publish working directory is not valid UTF-8"))?;
+        let commands = resolver_config
+            .prepublish
+            .iter()
+            .map(|command| {
+                render_command(
+                    command,
+                    &context,
+                    &working_directory,
+                    CommandPhase::Prepublish,
+                )
             })
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+            .chain(resolver_config.publish.iter().map(|command| {
+                render_command(command, &context, &working_directory, CommandPhase::Publish)
+            }))
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
-    Ok(PublishPlan { packages })
+        let skip_reason = if context.package.private {
+            Some(PublishSkipReason::Private)
+        } else if !root
+            .join(context.package.path.as_std_path())
+            .join("CHANGELOG.md")
+            .is_file()
+        {
+            Some(PublishSkipReason::MissingChangelog)
+        } else {
+            None
+        };
+        let forge = if options.create_forge_release && skip_reason.is_none() {
+            let repository = options.repository.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("repository context is required to plan a Forge release")
+            })?;
+            let changelog_path = root
+                .join(context.package.path.as_std_path())
+                .join("CHANGELOG.md");
+            let changelog = read_latest_changelog(changelog_path).await?;
+            Some(PackageForgePlan {
+                release: ForgeRelease {
+                    owner: repository.owner.clone(),
+                    repository: repository.name.clone(),
+                    tag: context.package.tag.clone(),
+                    title: format!("{} {}", context.package.name, changelog.version),
+                    body: changelog.body,
+                    prerelease: !context.package.version.pre.is_empty(),
+                },
+            })
+        } else {
+            None
+        };
+
+        packages.push(PackagePublish {
+            preflight: resolver_config
+                .pre_check
+                .as_ref()
+                .map(|preflight| render_preflight(preflight, &context))
+                .transpose()?,
+            commands,
+            assets: plan_assets(&package_config.assets)?,
+            forge,
+            skip_reason,
+            context,
+        });
+    }
+
+    let project_root = Utf8PathBuf::from_path_buf(root.to_path_buf())
+        .map_err(|_| anyhow::anyhow!("project root is not valid UTF-8"))?;
+    Ok(PublishPlan {
+        project_root,
+        packages,
+    })
 }
 
 fn plan_assets(configured: &[Asset]) -> anyhow::Result<Vec<AssetDeclaration>> {
@@ -395,15 +449,17 @@ mod tests {
         }
     }
 
-    #[test]
-    fn publish_plan_is_rebuilt_from_current_packages_in_topological_order() {
+    #[tokio::test]
+    async fn publish_plan_is_rebuilt_from_current_packages_in_topological_order() {
         let root = temporary_root();
         write_workspace(&root);
 
         let plan = plan_publish(
             &root,
             &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+            &PublishOptions::default(),
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -421,28 +477,56 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn publish_templates_reject_release_scope_and_unknown_package_fields() {
+    #[tokio::test]
+    async fn publish_templates_reject_release_scope_and_unknown_package_fields() {
         let root = temporary_root();
         write_workspace(&root);
 
-        assert!(plan_publish(&root, &config("{{ release.plan.fingerprint }}")).is_err());
-        assert!(plan_publish(&root, &config("{{ package.next_version }}")).is_err());
+        assert!(
+            plan_publish(
+                &root,
+                &config("{{ release.plan.fingerprint }}"),
+                &PublishOptions::default()
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            plan_publish(
+                &root,
+                &config("{{ package.next_version }}"),
+                &PublishOptions::default()
+            )
+            .await
+            .is_err()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn publish_plan_rejects_invalid_preflight_urls() {
+    #[tokio::test]
+    async fn publish_plan_rejects_invalid_preflight_urls() {
         let root = temporary_root();
         write_workspace(&root);
 
-        assert!(plan_publish(&root, &config("not a URL")).is_err());
-        assert!(plan_publish(&root, &config("file:///tmp/package")).is_err());
+        assert!(
+            plan_publish(&root, &config("not a URL"), &PublishOptions::default())
+                .await
+                .is_err()
+        );
+        assert!(
+            plan_publish(
+                &root,
+                &config("file:///tmp/package"),
+                &PublishOptions::default()
+            )
+            .await
+            .is_err()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn publish_plan_rejects_assets_outside_the_project() {
+    #[tokio::test]
+    async fn publish_plan_rejects_assets_outside_the_project() {
         let root = temporary_root();
         write_workspace(&root);
         let mut config = config("https://registry.test/{{ package.name }}/{{ package.version }}");
@@ -452,12 +536,16 @@ mod tests {
             .expect("core package exists in the test configuration")
             .assets = vec![Asset::String("../artifact.tar.gz".to_string())];
 
-        assert!(plan_publish(&root, &config).is_err());
+        assert!(
+            plan_publish(&root, &config, &PublishOptions::default())
+                .await
+                .is_err()
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[test]
-    fn publish_plan_skips_packages_without_changelogs() {
+    #[tokio::test]
+    async fn publish_plan_skips_packages_without_changelogs() {
         let root = temporary_root();
         write_workspace(&root);
         fs::remove_file(root.join("core/CHANGELOG.md")).unwrap();
@@ -465,7 +553,9 @@ mod tests {
         let plan = plan_publish(
             &root,
             &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+            &PublishOptions::default(),
         )
+        .await
         .unwrap();
 
         assert_eq!(
@@ -473,6 +563,64 @@ mod tests {
             Some(PublishSkipReason::MissingChangelog)
         );
         assert_eq!(plan.packages[1].skip_reason, None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn forge_release_is_fully_planned_from_the_latest_changelog() {
+        let root = temporary_root();
+        write_workspace(&root);
+        let repository = RepositoryContext {
+            host: "https://github.com".to_string(),
+            owner: "semifold".to_string(),
+            name: "semifold".to_string(),
+            web_url: "https://github.com/semifold/semifold".to_string(),
+            commit: None,
+        };
+
+        let plan = plan_publish(
+            &root,
+            &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository),
+            },
+        )
+        .await
+        .expect("Forge publish plan must be created");
+
+        let core = plan
+            .packages
+            .first()
+            .expect("core package must be first in the publish plan");
+        let forge = core
+            .forge
+            .as_ref()
+            .expect("publishable package must contain a Forge plan");
+        assert_eq!(forge.release.owner, "semifold");
+        assert_eq!(forge.release.tag, "core-v1.2.3");
+        assert_eq!(forge.release.title, "core v1.2.3");
+        assert_eq!(forge.release.body, "## v1.2.3\n\n- Changes");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn forge_planning_requires_repository_context() {
+        let root = temporary_root();
+        write_workspace(&root);
+
+        let error = plan_publish(
+            &root,
+            &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+            &PublishOptions {
+                create_forge_release: true,
+                repository: None,
+            },
+        )
+        .await
+        .expect_err("Forge planning without repository context must fail");
+
+        assert!(error.to_string().contains("repository context"));
         fs::remove_dir_all(root).unwrap();
     }
 }

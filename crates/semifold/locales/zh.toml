@@ -18,6 +18,7 @@ dry_run = "启用模拟运行模式"
 debug = "启用调试模式"
 
 [cli.commit]
+create_failed = "创建变更集失败：%{error}"
 warn_incomplete_select = "未提升所有已选包，是否继续？"
 query_name = "提交的名称是什么？"
 query_packages = "要包含哪些包？"
@@ -140,6 +141,7 @@ existing_pr_found = "找到现有 PR #%{number}，跳过创建新 PR。"
 release_branch_invalid = "无法渲染有效的发布分支：%{error}"
 
 [cli.mcp]
+create_failed = "创建变更集失败：%{error}"
 not_initialized = "Semifold 未初始化。请先运行 'smif init'。"
 changeset_dir_not_found = "未找到变更集目录。请先运行 'smif init'。"
 package_not_found = "包 '%{package}' 在配置中未找到"

@@ -9,7 +9,12 @@ use crate::{
     config_editor::{ConfigEditError, TomlConfigEditor},
     config_sync::{ConfigSyncPlanningError, config_sync_scope, plan_config_sync},
     project::Project,
+    publish_plan::{PublishOptions, PublishPlan},
     publisher::{CommandRunner, SystemCommandRunner},
+    publisher::{
+        ForgeExecution, GithubForgeClient, HttpRegistryClient, PublishExecutionError,
+        PublishReport, SystemAssetResolver, SystemFileSystem, execute_publish_plan,
+    },
     release,
     release_apply::{
         ApplyReport, ExecutionMode, ReleaseApplyError, ReleaseApplyPlan, ReleaseExecutionOptions,
@@ -76,6 +81,15 @@ pub struct SemifoldService<D> {
 impl<D> SemifoldService<D> {
     pub const fn new(deps: D) -> Self {
         Self { deps }
+    }
+
+    pub fn create_changeset(
+        &self,
+        project: &Project,
+        draft: crate::changeset_service::ChangesetDraft,
+    ) -> Result<semifold_core::ChangesetId, AppError> {
+        crate::changeset_service::create_changeset(project, draft)
+            .map_err(AppError::ChangesetCreate)
     }
 
     pub fn plan_config_sync(
@@ -152,8 +166,60 @@ where
     }
 }
 
+impl SemifoldService<SystemDependencies> {
+    pub async fn plan_publish(
+        &self,
+        project: &Project,
+        options: &PublishOptions,
+    ) -> Result<PublishPlan, AppError> {
+        crate::publish_plan::plan_publish(project.root.as_std_path(), &project.config, options)
+            .await
+            .map_err(AppError::PublishPlan)
+    }
+
+    pub async fn publish(
+        &self,
+        mut plan: PublishPlan,
+        mode: ExecutionMode,
+    ) -> Result<PublishReport, AppError> {
+        let forge_client = if plan.packages.iter().any(|package| package.forge.is_some()) {
+            let client = if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+                octocrab::Octocrab::builder()
+                    .personal_token(token)
+                    .build()
+                    .map_err(|error| AppError::PublishSetup(anyhow::Error::from(error)))?
+            } else {
+                octocrab::Octocrab::default()
+            };
+            Some(GithubForgeClient::new(client))
+        } else {
+            None
+        };
+        let file_system = SystemFileSystem;
+        let asset_resolver = SystemAssetResolver;
+        let project_root = plan.project_root.clone();
+        let forge = forge_client.as_ref().map(|client| ForgeExecution {
+            client,
+            file_system: &file_system,
+            asset_resolver: &asset_resolver,
+            root: project_root.as_std_path(),
+        });
+        execute_publish_plan(
+            &mut plan,
+            &self.deps,
+            &HttpRegistryClient::default(),
+            forge,
+            mode == ExecutionMode::DryRun,
+        )
+        .await
+        .map_err(AppError::PublishExecution)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum AppError {
+    #[error("failed to create changeset: {0}")]
+    ChangesetCreate(#[source] crate::changeset_service::ChangesetCreateError),
     #[error("failed to load changesets")]
     Changesets(#[from] ResolveError),
     #[error("failed to plan configuration synchronization")]
@@ -172,4 +238,10 @@ pub enum AppError {
     ReleasePrepare(#[source] anyhow::Error),
     #[error("failed to apply release: {0}")]
     ReleaseApply(#[source] ReleaseApplyError),
+    #[error("failed to plan publish: {0}")]
+    PublishPlan(#[source] anyhow::Error),
+    #[error("failed to initialize publish dependencies: {0}")]
+    PublishSetup(#[source] anyhow::Error),
+    #[error("failed to execute publish plan: {0}")]
+    PublishExecution(#[source] PublishExecutionError),
 }

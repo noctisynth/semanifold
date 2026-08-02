@@ -18,6 +18,7 @@ dry_run = "Enable dry run mode"
 debug = "Enable debug mode"
 
 [cli.commit]
+create_failed = "Failed to create changeset: %{error}"
 warn_incomplete_select = "Not all selected packages are bumped, continue?"
 query_name = "What is the name of the commit?"
 query_packages = "Which packages to include?"
@@ -140,6 +141,7 @@ existing_pr_found = "Existing PR #%{number} found, skip creating a new one."
 release_branch_invalid = "Failed to render a valid release branch: %{error}"
 
 [cli.mcp]
+create_failed = "Failed to create changeset: %{error}"
 not_initialized = "Semifold not initialized. Run 'smif init' first."
 changeset_dir_not_found = "Changeset directory not found. Run 'smif init' first."
 package_not_found = "Package '%{package}' not found in config"

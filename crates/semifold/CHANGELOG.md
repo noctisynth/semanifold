@@ -1,5 +1,68 @@
 # Changelog
 
+## v0.3.0-beta.4
+
+### Bug Fixes
+
+- [`7a8b7d0`](https://github.com/noctisynth/semifold/commit/7a8b7d0feb9c59b2ad56fd93a206b32310c4ea1b): Resolve release asset paths only after package publish commands finish, so generated artifacts are
+    included. Packages without a changelog are now skipped before registry checks or publish commands.
+
+- [`60fbc32`](https://github.com/noctisynth/semifold/commit/60fbc32b1ea91cac50476b1682bbe2df755bcb19): Update publish reports and channel configuration through safe iteration and lookup instead of
+    potentially panicking collection indexing.
+
+
+### Changes
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Isolate config editor tests when the suite runs concurrently.
+
+    Temporary configuration paths now include the process ID and an atomic sequence so parallel tests
+    cannot delete one another's fixtures.
+
+
+### New Features
+
+- [`7a8b7d0`](https://github.com/noctisynth/semifold/commit/7a8b7d0feb9c59b2ad56fd93a206b32310c4ea1b): Migrate known snake-case configuration fields to kebab-case with conflict detection while keeping
+    the normal configuration loader strict.
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Plan package publishing from the current workspace with package-scoped template contexts.
+
+    Registry checks and publish commands now use strict package variables without depending on a
+    persisted release context or consumed changesets.
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Support Rust packages that inherit `workspace.package.version`.
+
+    Shared version sources now merge bumps across every inheriting crate, validate channel policy, keep
+    private crates in the version closure, and update the owning workspace manifest exactly once.
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Execute publish plans through injectable external capability ports.
+
+    Registry preflights now complete before commands start, command dry-run permissions are reported
+    explicitly, GitHub releases and assets use a Forge adapter, and partial failures return structured
+    package statuses with retry guidance.
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Add deterministic workspace release contexts and strict release branch templates.
+
+    Release branch templates now consume a workspace release view derived from the same validated plan
+    that versioning applies.
+
+
+### Refactors
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Use kebab-case for every Semifold configuration field.
+
+    Snake-case configuration keys are no longer supported. Repository configuration, generated
+    configuration, and fixtures now use fields such as `dry-run`, `extra-env`, and `extra-headers`.
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Model changelog rendering as immutable package and changeset facts.
+
+    Changelog collection now resolves package sections and optional commit and pull request metadata
+    before passing a capability-free aggregate context to the Markdown formatter.
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Build release pull requests from an explicit workspace release context.
+
+    Release pull request rendering now preserves the existing title and body format while ordering
+    package changelogs deterministically and avoiding any implicit primary package.
+
 ## v0.3.0-beta.3
 
 ### Bug Fixes

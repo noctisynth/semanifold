@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1.0-beta.2
+
+### New Features
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Support Rust packages that inherit `workspace.package.version`.
+
+    Shared version sources now merge bumps across every inheriting crate, validate channel policy, keep
+    private crates in the version closure, and update the owning workspace manifest exactly once.
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Model changelog rendering as immutable package and changeset facts.
+
+    Changelog collection now resolves package sections and optional commit and pull request metadata
+    before passing a capability-free aggregate context to the Markdown formatter.
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Add deterministic workspace release contexts and strict release branch templates.
+
+    Release branch templates now consume a workspace release view derived from the same validated plan
+    that versioning applies.
+
 ## v0.1.0-beta.1
 
 ### New Features

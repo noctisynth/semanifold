@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.0-beta.3
+
+### New Features
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Support Rust packages that inherit `workspace.package.version`.
+
+    Shared version sources now merge bumps across every inheriting crate, validate channel policy, keep
+    private crates in the version closure, and update the owning workspace manifest exactly once.
+
+
+### Refactors
+
+- [`ea86a6a`](https://github.com/noctisynth/semifold/commit/ea86a6a87bb6b155d13e1aceabe9cf7f3da974fd): Use kebab-case for every Semifold configuration field.
+
+    Snake-case configuration keys are no longer supported. Repository configuration, generated
+    configuration, and fixtures now use fields such as `dry-run`, `extra-env`, and `extra-headers`.
+
 ## v0.4.0-beta.2
 
 ### New Features

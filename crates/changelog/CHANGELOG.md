@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0-beta.2
+
+### New Features
+
+- [`2624d2d`](https://github.com/noctisynth/semifold/commit/2624d2d12fb9678d3f622a2aac69acddbd3af5f4): Model changelog rendering as immutable package and changeset facts.
+
+    Changelog collection now resolves package sections and optional commit and pull request metadata
+    before passing a capability-free aggregate context to the Markdown formatter.
+
 ## v0.3.0-beta.1
 
 ### Bug Fixes

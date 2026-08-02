@@ -2152,6 +2152,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "semifold-engine"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "git2",
+ "semifold-resolver",
+ "thiserror",
+]
+
+[[package]]
 name = "semifold-resolver"
 version = "0.4.0-beta.3"
 dependencies = [

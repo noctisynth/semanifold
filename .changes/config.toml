@@ -35,6 +35,14 @@ path = "crates/resolver"
 resolver = "rust"
 channel = "beta"
 
+[packages."@semifold/workspace"]
+path = "."
+resolver = "nodejs"
+
+[packages.semifold-engine]
+path = "crates/semifold-engine"
+resolver = "rust"
+
 [resolver.rust.pre-check]
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 

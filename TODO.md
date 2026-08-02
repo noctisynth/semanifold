@@ -331,11 +331,12 @@
 
 ### 项目加载
 
-- [ ] 定义字段完整的 `Project`
+- [x] 定义字段完整的 `Project`
 - [ ] 为 `init` 定义独立 `ProjectLocation`
-- [ ] 定义结构化 `ProjectLoadError`
+- [x] 定义结构化 `ProjectLoadError`
+- [x] 以 `ProjectLoadError::NonUtf8Path` 显式拒绝无法无损表示的项目路径
 - [ ] 不再使用 `.ok()` 吞掉配置、路径或 Git 错误
-- [ ] GitHub 环境、Git 句柄和 dry-run 不进入 `Project`
+- [x] GitHub 环境、Git 句柄和 dry-run 不进入 `Project`
 - [x] 将发布事实建模为不可变 `ReleaseContext`，而不是恢复万能 `Context`
 - [x] 将 version 包级事实建模为 `ReleasePackageContext`，将发布事实建模为独立 `PublishContext`
 - [x] 将 changelog 所需事实建模为 `ChangelogContext`
@@ -369,6 +370,8 @@
 - [ ] Engine 使用结构化 `AppError`
 - [ ] 仅在 CLI 最外层使用 `anyhow` 补充上下文
 - [ ] 本地化和终端着色不进入 core 或 engine
+- [ ] 消除生产代码中的 `unwrap`、`expect`、主动 panic、未经验证的索引与切片，并在非测试
+  target 启用对应 Clippy 验收
 
 ### 阶段完成条件
 
@@ -389,6 +392,8 @@
 - [x] `config sync` 保留 TOML 注释、顺序、未知字段和手工配置
 - [x] `config sync --check` 可稳定用于 CI
 - [ ] 连续执行配置同步和版本规划均具有幂等性
+- [ ] 非测试 target 通过 `clippy::unwrap_used`、`clippy::expect_used` 和
+  `clippy::indexing_slicing`，生产代码不存在可识别的 panic 路径
 - [x] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
 - [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
 - [x] 现有 CLI 主要用法保持稳定；所有 TOML/JSON 配置字段使用 kebab-case，snake_case 不兼容

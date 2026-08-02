@@ -963,6 +963,7 @@ pub enum ProjectLoadError {
     RepositoryNotFound,
     ChangesetDirectoryNotFound,
     ConfigNotFound,
+    NonUtf8Path { path: PathBuf },
     ConfigInvalid { path: Utf8PathBuf, source: ConfigError },
     RepositoryOpenFailed { path: Utf8PathBuf, source: GitError },
 }
@@ -978,6 +979,9 @@ pub struct ProjectLocation {
 ```
 
 GitHub 环境、Git 仓库和 dry-run 均不是 `Project` 数据的一部分。
+
+repository root、changeset directory 或 config path 无法无损转换为 UTF-8 时，返回
+`ProjectLoadError::NonUtf8Path` 并保留原始 `PathBuf`；不得使用 lossy conversion，也不得 panic。
 
 `Project` 负责项目加载，一次 release 的动态事实以及包或 changelog 的模板数据则
 分层表示为 `ReleaseContext`、`ReleasePackageContext`、`PublishContext` 和
@@ -1630,6 +1634,12 @@ AppError
 
 CLI 负责将这些错误转换成本地化用户消息，不应让翻译宏进入 core。
 
+生产代码不得依靠 panic 表达错误或内部控制流。除依赖库内部与进程资源耗尽等无法由
+Semifold 控制的情况外，Semifold 自身生产路径不得使用 `unwrap()`、`expect()`、`panic!()`、
+可能越界的集合索引或未经验证的切片；外部输入、配置、文件系统和领域查询失败必须进入上述
+结构化错误边界。能够由构造过程证明长度一致的集合也应优先使用 `zip` 等无索引迭代，避免后续
+重构破坏隐式不变量。测试中的断言式索引和 panic 不进入生产构建，可继续用于表达测试失败。
+
 ## 16. 测试策略
 
 ### 16.1 领域单元测试
@@ -1841,6 +1851,8 @@ adapter 暴露旧 `ResolvedPackage`。
     `X.Y.Z` 时从 GitHub Release 标签 `semifold-X.Y.Z` 下载对应平台资产。下载失败必须终止
     安装，不能将 GitHub 错误响应写为可执行文件。两个脚本还必须接受可选安装目录；未指定
     时保持 `$HOME/.local/bin`，并允许安装目录与可选版本独立组合。
+18. Semifold 自身生产代码不存在可识别的主动 panic、未经验证的索引或切片路径；
+    `clippy::unwrap_used`、`clippy::expect_used` 与 `clippy::indexing_slicing` 在非测试 target 上通过。
 
 ## 19. 开放决策
 

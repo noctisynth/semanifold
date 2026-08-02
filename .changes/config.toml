@@ -12,36 +12,38 @@ refactor = "Refactors"
 [packages."@semifold/docs"]
 path = "docs"
 resolver = "nodejs"
-channel = "beta"
+channel = "rc"
 
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
-channel = "beta"
+channel = "rc"
 assets = ["artifacts/*"]
 
 [packages.semifold-changelog]
 path = "crates/changelog"
 resolver = "rust"
-channel = "beta"
+channel = "rc"
 
 [packages.semifold-core]
 path = "crates/semifold-core"
 resolver = "rust"
-channel = "beta"
+channel = "rc"
 
 [packages.semifold-resolver]
 path = "crates/resolver"
 resolver = "rust"
-channel = "beta"
+channel = "rc"
 
 [packages."@semifold/workspace"]
 path = "."
 resolver = "nodejs"
+channel = "rc"
 
 [packages.semifold-engine]
 path = "crates/semifold-engine"
 resolver = "rust"
+channel = "rc"
 
 [resolver.rust.pre-check]
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"

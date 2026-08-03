@@ -65,7 +65,7 @@ pub fn plan_init(
             release: options.release_branch,
         },
         tags: options.tags,
-        changelog: Default::default(),
+        changelog: semifold_changelog::default_changelog_config(),
         packages,
         resolver,
     };
@@ -268,6 +268,14 @@ mod tests {
             .unwrap();
         assert!(config.content.contains("[packages.example]"));
         assert!(config.content.contains("resolver = \"nodejs\""));
+        assert!(config.content.contains("[changelog]"));
+        assert!(config.content.contains("changeset-template"));
+        assert!(config.content.contains("template = \"\"\""));
+        let parsed: config::Config = toml_edit::de::from_str(&config.content).unwrap();
+        assert_eq!(
+            parsed.changelog,
+            semifold_changelog::default_changelog_config()
+        );
         assert!(
             plan.files
                 .iter()

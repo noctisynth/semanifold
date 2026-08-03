@@ -212,6 +212,7 @@
 - [x] 使用 Semifold release marker 插入和读取任意格式 block，并兼容解析旧 `##` changelog
 - [x] 在 `prepare_release` 和 dry-run 中完成模板编译、渲染与结构校验，失败时保持零文件副作用
 - [x] 为配置、模板作用域、空白、多段 summary、metadata、marker、兼容解析和 CLI 路径建立回归测试
+- [x] `smif init` 显式写入与运行时 fallback 同源的默认 `[changelog]` 模板，便于用户直接修改
 
 ### 接入 `version`
 

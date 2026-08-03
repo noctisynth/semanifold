@@ -15,7 +15,7 @@ pub struct BranchesConfig {
     pub release: String,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ChangelogConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]

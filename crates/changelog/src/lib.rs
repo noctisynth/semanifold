@@ -88,6 +88,14 @@ const DEFAULT_RELEASE_TEMPLATE: &str = concat!(
     "{% endif %}",
 );
 
+#[must_use]
+pub fn default_changelog_config() -> ChangelogConfig {
+    ChangelogConfig {
+        template: Some(DEFAULT_RELEASE_TEMPLATE.to_string()),
+        changeset_template: Some(DEFAULT_CHANGESET_TEMPLATE.to_string()),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ChangelogTemplateKind {
     Release,
@@ -606,6 +614,28 @@ mod tests {
             render_default(&context),
             "## v1.0.0\n\n### Changes\n\n- Add release planning\n\n### Dependencies\n\n- Update core to 1.0.0."
         );
+    }
+
+    #[test]
+    fn explicit_init_defaults_match_runtime_fallback_templates() {
+        let release = release_context();
+        let context = ChangelogContext {
+            package: package_context(&release),
+            changesets: vec![PackageChangesetContext {
+                changeset: changeset("release", "Add release planning"),
+                section: "Changes".to_string(),
+            }],
+            dependency_updates: vec![],
+        };
+        let fallback = render_default(&context);
+        let explicit = ChangelogRenderer::new(
+            &super::default_changelog_config(),
+            &PackageId::new("package"),
+        )
+        .unwrap();
+
+        assert_eq!(explicit.render(&context).unwrap(), fallback);
+        assert!(explicit.is_customized());
     }
 
     #[test]

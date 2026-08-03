@@ -1205,7 +1205,10 @@ pub struct ChangelogConfig {
 `template` 渲染一个 package 本次发布的完整 release block；`changeset-template` 渲染一条
 `PackageChangesetContext`。首版只支持配置内的字符串模板，不支持模板文件，也不支持 package
 级覆盖。任一字段缺省时使用对应的内置默认模板；两者都缺省时，生成结果必须与引入模板能力前
-字节级兼容。初始化配置不主动写出空的 `[changelog]`。
+字节级兼容。`smif init` 必须显式写出 `[changelog]` 以及当前内置的 `template` 和
+`changeset-template`，使新用户可以直接从生成的配置中发现并修改模板；加载旧配置或用户删除任一
+字段时仍使用同一份内置模板作为运行时 fallback。初始化输出和运行时 fallback 必须复用同一模板
+来源，不能维护两份可能漂移的默认值。
 
 renderer 必须分两阶段执行：先以 `release`、`package`、`section` 和 `changeset` 为根变量渲染
 每一条 changeset，再按 `section` 和 changeset ID 的既有稳定顺序形成仅存在于 renderer 内部的

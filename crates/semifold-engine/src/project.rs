@@ -205,6 +205,23 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn discovers_json_configuration_only_to_report_it_as_unsupported() {
+        let root = fixture("json-config");
+        fs::write(root.join(".changes/config.json"), "{}").unwrap();
+
+        let result = ProjectLocation::discover(&root).unwrap().load();
+
+        assert!(matches!(
+            result,
+            Err(ProjectLoadError::ConfigInvalid {
+                source: ResolveError::UnsupportedConfigFormat { .. },
+                ..
+            })
+        ));
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn reports_non_utf8_repository_paths_without_lossy_conversion() {

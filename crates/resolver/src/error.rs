@@ -6,6 +6,8 @@ pub enum ResolveError {
     InvalidChangeset { path: PathBuf, reason: String },
     #[error("Invalid config {path}: {reason}")]
     InvalidConfig { path: PathBuf, reason: String },
+    #[error("Unsupported config format: {path}")]
+    UnsupportedConfigFormat { path: PathBuf },
     #[error("Invalid changelog {path}: {reason}")]
     InvalidChangelog { path: PathBuf, reason: String },
     #[error("IO error: {0}")]

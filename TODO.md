@@ -270,7 +270,7 @@
 
 ### 配置字段规范化
 
-- [x] 将 TOML/JSON 配置字段统一为 kebab-case，更新仓库配置、初始化模板、示例和 fixture；
+- [x] 将 TOML 配置字段统一为 kebab-case，更新仓库配置、初始化模板、示例和 fixture；
   不为 snake_case 字段提供 serde alias
 - [x] 扩展 `config migrate`，原位重命名已知 snake_case 字段；新旧字段同时存在时报告冲突
 
@@ -412,7 +412,7 @@
 - [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
 - [x] changelog 默认模板保持现有输出，自定义模板可控制 release block 和单条 changeset 的渲染格式
 - [x] publish 能读取 marker 包围的自定义 changelog，并对无 marker 的旧格式保持兼容
-- [x] 现有 CLI 主要用法保持稳定；所有 TOML/JSON 配置字段使用 kebab-case，snake_case 不兼容
+- [x] 现有 CLI 主要用法保持稳定；所有 TOML 配置字段使用 kebab-case，snake_case 不兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 
@@ -424,13 +424,14 @@
 - [x] `PackageId` 不自动添加 namespace；跨生态同名由稳定配置 ID 区分，首次发现歧义时报告冲突
 - [x] Post-version 命令失败时保留已写入文件和 changeset，不自动回滚，并返回结构化恢复指引
 - [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`
-- [ ] 是否长期支持 JSON 配置更新
+- [x] 移除 Semifold JSON 配置加载与保存；发现 `config.json` 时返回明确的不支持错误
 - [x] `config sync` 遇到未启用 resolver 时返回 `ResolverNotEnabled`
-- [ ] 是否提供 `--rewrite-changesets` 辅助包重命名
+- [x] 当前不提供 `--rewrite-changesets`；rename 只报告 changeset 中的旧 PackageId，由用户显式修改
 - [x] Rust workspace 继承版本的共享版本来源、bump 合并、channel 与发布闭包规则
 
 ## 低优先级优化
 
-- [ ] 定义 `PackageReleaseState`，区分首次发布与已有发布历史
-- [ ] 将 registry package metadata 查询与目标版本 `version_exists` pre-check 分离
-- [ ] 确定首次发布状态查询失败、离线模式和无 registry 配置时的行为
+- [x] `PackageReleaseState` 与 registry package metadata 查询明确延期，不复用目标版本 pre-check
+- [x] 将 publish pre-check 改为带 `type` 的 `http` / `command` 强类型配置
+- [x] HTTP pre-check 仅将 200 视为存在、404 视为不存在，其他状态均失败
+- [x] command pre-check 实现固定 JSON Lines stdin/stdout 契约，并在 dry-run 中照常执行

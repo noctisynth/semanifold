@@ -17,8 +17,8 @@ use crate::{
     publish_plan::{PublishOptions, PublishPlan, PublishPlanError},
     publisher::{CommandRunner, SystemCommandRunner},
     publisher::{
-        ForgeExecution, GithubForgeClient, HttpRegistryClient, PublishExecutionError,
-        PublishReport, SystemAssetResolver, SystemFileSystem, execute_publish_plan,
+        ForgeExecution, GithubForgeClient, PublishExecutionError, PublishReport,
+        SystemAssetResolver, SystemFileSystem, SystemPreCheckRunner, execute_publish_plan,
     },
     release::{self, ReleasePlanningError},
     release_apply::{
@@ -339,7 +339,7 @@ impl SemifoldService<SystemDependencies> {
         execute_publish_plan(
             &mut plan,
             &self.deps,
-            &HttpRegistryClient::default(),
+            &SystemPreCheckRunner::default(),
             forge,
             mode == ExecutionMode::DryRun,
         )

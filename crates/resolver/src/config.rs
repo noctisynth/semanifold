@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    ffi::OsStr,
     path::{Path, PathBuf},
 };
 
@@ -221,12 +220,21 @@ pub struct CommandConfig {
     pub dry_run: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
-pub struct PreCheckConfig {
-    pub url: String,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extra_headers: BTreeMap<String, String>,
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+pub enum PreCheckConfig {
+    Http {
+        url: String,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        extra_headers: BTreeMap<String, String>,
+    },
+    Command {
+        command: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        args: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        extra_env: BTreeMap<String, String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -266,20 +274,16 @@ fn is_default_changelog_config(config: &ChangelogConfig) -> bool {
 }
 
 pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
-    let config_paths = ["config.toml", "config.json"];
-    let config_path = config_paths
-        .iter()
-        .find_map(|path| {
-            let config_path = changeset_path.join(path);
-            if config_path.exists() {
-                Some(config_path)
-            } else {
-                None
-            }
-        })
-        .ok_or(ResolveError::FileOrDirNotFound {
+    let config_path = changeset_path.join("config.toml");
+    if !config_path.is_file() {
+        let json_path = changeset_path.join("config.json");
+        if json_path.is_file() {
+            return Err(ResolveError::UnsupportedConfigFormat { path: json_path });
+        }
+        return Err(ResolveError::FileOrDirNotFound {
             path: "config.toml".into(),
-        })?;
+        });
+    }
 
     log::debug!("Found config path: {config_path:?}");
 
@@ -295,17 +299,20 @@ pub fn load_config_from_str(
     config_path: &Path,
     config_content: &str,
 ) -> Result<Config, ResolveError> {
-    let config = if config_path.extension() == Some(OsStr::new("toml")) {
+    if config_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("toml")
+    {
+        return Err(ResolveError::UnsupportedConfigFormat {
+            path: config_path.to_path_buf(),
+        });
+    }
+    let config =
         toml_edit::de::from_str(config_content).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
-        })?
-    } else {
-        serde_json::from_str(config_content).map_err(|e| ResolveError::InvalidConfig {
-            path: config_path.to_path_buf(),
-            reason: e.to_string(),
-        })?
-    };
+        })?;
     Ok(config)
 }
 
@@ -316,28 +323,35 @@ pub fn get_config() -> Result<Config, ResolveError> {
 }
 
 pub fn save_config(config_path: &Path, config: &Config) -> Result<(), ResolveError> {
-    let config_content = if config_path.extension() == Some(OsStr::new("toml")) {
+    if config_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        != Some("toml")
+    {
+        return Err(ResolveError::UnsupportedConfigFormat {
+            path: config_path.to_path_buf(),
+        });
+    }
+    let config_content =
         toml_edit::ser::to_string_pretty(config).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
-        })?
-    } else {
-        serde_json::to_string(config).map_err(|e| ResolveError::InvalidConfig {
-            path: config_path.to_path_buf(),
-            reason: e.to_string(),
-        })?
-    };
+        })?;
     std::fs::write(config_path, config_content)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, path::Path};
 
     use semifold_core::PackageId;
 
-    use super::{ChangelogConfig, ChannelBump, CommandConfig, PackageConfig, ReleaseChannel};
+    use super::{
+        ChangelogConfig, ChannelBump, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
+        load_config_from_str,
+    };
+    use crate::error::ResolveError;
 
     #[test]
     fn changelog_templates_round_trip_with_kebab_case_fields() {
@@ -360,11 +374,25 @@ changeset-template = "Change {{ changeset.summary }}"
         let rendered = toml_edit::ser::to_string(&config).unwrap();
         assert!(rendered.contains("changeset-template"));
         assert!(!rendered.contains("changeset_template"));
+    }
 
-        let json = serde_json::to_string(&config).unwrap();
-        let reparsed: ChangelogConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(reparsed.template, config.template);
-        assert_eq!(reparsed.changeset_template, config.changeset_template);
+    #[test]
+    fn semifold_json_configuration_is_rejected() {
+        assert!(matches!(
+            load_config_from_str(Path::new("config.json"), "{}"),
+            Err(ResolveError::UnsupportedConfigFormat { .. })
+        ));
+    }
+
+    #[test]
+    fn pre_check_requires_an_explicit_type() {
+        let http: PreCheckConfig =
+            toml_edit::de::from_str("type = \"http\"\nurl = \"https://registry.test/pkg/1.0.0\"\n")
+                .unwrap();
+        assert!(matches!(http, PreCheckConfig::Http { .. }));
+        assert!(
+            toml_edit::de::from_str::<PreCheckConfig>("url = \"https://registry.test\"").is_err()
+        );
     }
 
     #[test]

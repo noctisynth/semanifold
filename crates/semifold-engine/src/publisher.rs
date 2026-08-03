@@ -1,5 +1,6 @@
 use std::{
     future::Future,
+    io::Write,
     path::Path,
     pin::Pin,
     process::{Command, Stdio},
@@ -9,8 +10,8 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use semifold_core::PackageId;
 
 use crate::publish_plan::{
-    AssetDeclaration, CommandPhase, CommandSpec, ForgeRelease, PlannedRegistryCheck, PublishPlan,
-    PublishSkipReason, StdioPolicy,
+    AssetDeclaration, CommandPhase, CommandSpec, ForgeRelease, PlannedPreCheck,
+    PublishPackageContext, PublishPlan, PublishSkipReason, StdioPolicy,
 };
 
 pub type ExternalFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -75,23 +76,24 @@ fn stdio(policy: StdioPolicy) -> Stdio {
 }
 
 #[derive(Debug)]
-pub struct RegistryError {
+pub struct PreCheckError {
     message: String,
 }
 
-impl std::fmt::Display for RegistryError {
+impl std::fmt::Display for PreCheckError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(&self.message)
     }
 }
 
-impl std::error::Error for RegistryError {}
+impl std::error::Error for PreCheckError {}
 
-pub trait RegistryClient {
+pub trait PreCheckRunner {
     fn version_exists<'a>(
         &'a self,
-        check: &'a PlannedRegistryCheck,
-    ) -> ExternalFuture<'a, Result<bool, RegistryError>>;
+        check: &'a PlannedPreCheck,
+        package: &'a PublishPackageContext,
+    ) -> ExternalFuture<'a, Result<bool, PreCheckError>>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -316,42 +318,149 @@ pub struct ForgeExecution<'a> {
 }
 
 #[derive(Default)]
-pub struct HttpRegistryClient {
+pub struct SystemPreCheckRunner {
     client: reqwest::Client,
 }
 
-impl RegistryClient for HttpRegistryClient {
+impl PreCheckRunner for SystemPreCheckRunner {
     fn version_exists<'a>(
         &'a self,
-        check: &'a PlannedRegistryCheck,
-    ) -> ExternalFuture<'a, Result<bool, RegistryError>> {
+        check: &'a PlannedPreCheck,
+        package: &'a PublishPackageContext,
+    ) -> ExternalFuture<'a, Result<bool, PreCheckError>> {
         Box::pin(async move {
-            let headers = check.extra_headers.iter().try_fold(
-                HeaderMap::new(),
-                |mut headers, (name, value)| {
+            match check {
+                PlannedPreCheck::Http { url, extra_headers } => {
+                    self.http_version_exists(url, extra_headers).await
+                }
+                PlannedPreCheck::Command {
+                    executable,
+                    args,
+                    environment,
+                    working_directory,
+                } => command_version_exists(
+                    executable,
+                    args,
+                    environment,
+                    working_directory.as_std_path(),
+                    package,
+                ),
+            }
+        })
+    }
+}
+
+impl SystemPreCheckRunner {
+    async fn http_version_exists(
+        &self,
+        url: &str,
+        extra_headers: &std::collections::BTreeMap<String, String>,
+    ) -> Result<bool, PreCheckError> {
+        let headers =
+            extra_headers
+                .iter()
+                .try_fold(HeaderMap::new(), |mut headers, (name, value)| {
                     let name =
-                        HeaderName::from_bytes(name.as_bytes()).map_err(|error| RegistryError {
+                        HeaderName::from_bytes(name.as_bytes()).map_err(|error| PreCheckError {
                             message: format!("invalid registry header name: {error}"),
                         })?;
-                    let value = HeaderValue::from_str(value).map_err(|error| RegistryError {
+                    let value = HeaderValue::from_str(value).map_err(|error| PreCheckError {
                         message: format!("invalid registry header value: {error}"),
                     })?;
                     headers.insert(name, value);
-                    Ok::<_, RegistryError>(headers)
-                },
-            )?;
-            let response = self
-                .client
-                .get(&check.url)
-                .headers(headers)
-                .send()
-                .await
-                .map_err(|error| RegistryError {
-                    message: format!("registry preflight failed: {error}"),
+                    Ok::<_, PreCheckError>(headers)
                 })?;
-            Ok(response.status() == reqwest::StatusCode::OK)
-        })
+        let response = self
+            .client
+            .get(url)
+            .headers(headers)
+            .send()
+            .await
+            .map_err(|error| PreCheckError {
+                message: format!("registry preflight failed: {error}"),
+            })?;
+        classify_http_pre_check_status(response.status())
     }
+}
+
+fn classify_http_pre_check_status(status: reqwest::StatusCode) -> Result<bool, PreCheckError> {
+    match status {
+        reqwest::StatusCode::OK => Ok(true),
+        reqwest::StatusCode::NOT_FOUND => Ok(false),
+        status => Err(PreCheckError {
+            message: format!("registry preflight returned unexpected HTTP status {status}"),
+        }),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommandPreCheckOutput {
+    exists: bool,
+}
+
+fn command_version_exists(
+    executable: &str,
+    args: &[String],
+    environment: &std::collections::BTreeMap<String, String>,
+    working_directory: &Path,
+    package: &PublishPackageContext,
+) -> Result<bool, PreCheckError> {
+    let mut input = serde_json::to_vec(package).map_err(|error| PreCheckError {
+        message: format!("failed to serialize command pre-check input: {error}"),
+    })?;
+    input.push(b'\n');
+    let mut child = Command::new(executable)
+        .args(args)
+        .envs(environment)
+        .current_dir(working_directory)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|error| PreCheckError {
+            message: format!("failed to run pre-check command {executable}: {error}"),
+        })?;
+    let mut stdin = child.stdin.take().ok_or_else(|| PreCheckError {
+        message: format!("pre-check command {executable} did not provide piped stdin"),
+    })?;
+    if let Err(error) = stdin.write_all(&input) {
+        drop(stdin);
+        let _ = child.wait();
+        return Err(PreCheckError {
+            message: format!("failed to write pre-check input for {executable}: {error}"),
+        });
+    }
+    drop(stdin);
+    let output = child.wait_with_output().map_err(|error| PreCheckError {
+        message: format!("failed to wait for pre-check command {executable}: {error}"),
+    })?;
+    if !output.status.success() {
+        return Err(PreCheckError {
+            message: format!(
+                "pre-check command {executable} exited with status {:?}",
+                output.status.code()
+            ),
+        });
+    }
+    let stdout = std::str::from_utf8(&output.stdout).map_err(|error| PreCheckError {
+        message: format!("pre-check command {executable} returned non-UTF-8 stdout: {error}"),
+    })?;
+    parse_command_pre_check_output(executable, stdout)
+}
+
+fn parse_command_pre_check_output(executable: &str, stdout: &str) -> Result<bool, PreCheckError> {
+    let trimmed = stdout.trim();
+    if trimmed.contains(['\n', '\r']) {
+        return Err(PreCheckError {
+            message: format!("pre-check command {executable} returned more than one line"),
+        });
+    }
+    let result: CommandPreCheckOutput =
+        serde_json::from_str(trimmed).map_err(|error| PreCheckError {
+            message: format!("pre-check command {executable} returned invalid JSON: {error}"),
+        })?;
+    Ok(result.exists)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -450,7 +559,7 @@ pub async fn execute_publish_plan<C, R>(
 ) -> Result<PublishReport, PublishExecutionError>
 where
     C: CommandRunner,
-    R: RegistryClient,
+    R: PreCheckRunner,
 {
     let mut report = PublishReport {
         packages: plan
@@ -477,7 +586,10 @@ where
         let Some(preflight) = &package.preflight else {
             continue;
         };
-        match registry_client.version_exists(preflight).await {
+        match registry_client
+            .version_exists(preflight, &package.context.package)
+            .await
+        {
             Ok(true) => {
                 package.skip_reason = Some(PublishSkipReason::RegistryVersionExists);
                 package_report.status =
@@ -620,17 +732,23 @@ mod tests {
         checked: Mutex<Vec<String>>,
     }
 
-    impl RegistryClient for StaticRegistry {
+    impl PreCheckRunner for StaticRegistry {
         fn version_exists<'a>(
             &'a self,
-            check: &'a PlannedRegistryCheck,
-        ) -> ExternalFuture<'a, Result<bool, RegistryError>> {
+            check: &'a PlannedPreCheck,
+            _package: &'a PublishPackageContext,
+        ) -> ExternalFuture<'a, Result<bool, PreCheckError>> {
             Box::pin(async move {
+                let PlannedPreCheck::Http { url, .. } = check else {
+                    return Err(PreCheckError {
+                        message: "unexpected command pre-check in test".to_string(),
+                    });
+                };
                 self.checked
                     .lock()
                     .expect("recording registry mutex is not poisoned")
-                    .push(check.url.clone());
-                Ok(self.existing.contains(&check.url))
+                    .push(url.clone());
+                Ok(self.existing.contains(url))
             })
         }
     }
@@ -735,7 +853,7 @@ mod tests {
                 repository: None,
                 ci: None,
             },
-            preflight: Some(PlannedRegistryCheck {
+            preflight: Some(PlannedPreCheck::Http {
                 url: id.to_string(),
                 extra_headers: Default::default(),
             }),
@@ -1161,6 +1279,46 @@ mod tests {
                 .lock()
                 .expect("recording forge mutex is not poisoned")
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn command_pre_check_output_requires_one_exact_json_object() {
+        assert!(parse_command_pre_check_output("check", "{\"exists\":true}\n").unwrap());
+        assert!(!parse_command_pre_check_output("check", "{\"exists\":false}").unwrap());
+        assert!(parse_command_pre_check_output("check", "true").is_err());
+        assert!(parse_command_pre_check_output("check", "{\"exists\":true,\"extra\":1}").is_err());
+        assert!(parse_command_pre_check_output("check", "{\"exists\":true}\nnoise").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_pre_check_receives_package_json_on_stdin() {
+        let package = package("core", false, Vec::new());
+        let result = command_version_exists(
+            "sh",
+            &[
+                "-c".to_string(),
+                "read input; case \"$input\" in *'\"name\":\"core\"'*) printf '{\"exists\":true}' ;; *) exit 9 ;; esac"
+                    .to_string(),
+            ],
+            &Default::default(),
+            Path::new("."),
+            &package.context.package,
+        )
+        .unwrap();
+
+        assert!(result);
+    }
+
+    #[test]
+    fn http_pre_check_distinguishes_missing_from_failed_requests() {
+        assert!(classify_http_pre_check_status(reqwest::StatusCode::OK).unwrap());
+        assert!(!classify_http_pre_check_status(reqwest::StatusCode::NOT_FOUND).unwrap());
+        assert!(classify_http_pre_check_status(reqwest::StatusCode::UNAUTHORIZED).is_err());
+        assert!(classify_http_pre_check_status(reqwest::StatusCode::TOO_MANY_REQUESTS).is_err());
+        assert!(
+            classify_http_pre_check_status(reqwest::StatusCode::INTERNAL_SERVER_ERROR).is_err()
         );
     }
 }

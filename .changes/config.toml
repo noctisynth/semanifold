@@ -46,6 +46,7 @@ resolver = "rust"
 channel = "rc"
 
 [resolver.rust.pre-check]
+type = "http"
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
 
 [resolver.rust.pre-check.extra-headers]
@@ -61,4 +62,5 @@ args = ["generate-lockfile"]
 dry-run = true
 
 [resolver.nodejs.pre-check]
+type = "http"
 url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"

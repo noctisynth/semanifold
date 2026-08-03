@@ -215,7 +215,7 @@ mod tests {
 
     fn resolver_config() -> ResolverConfig {
         ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: String::new(),
                 extra_headers: BTreeMap::new(),
             }),

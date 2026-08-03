@@ -427,7 +427,7 @@ mod tests {
         .unwrap();
         fs::write(
             directory.join(".changes/config.toml"),
-            "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages]\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+            "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages]\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n",
         )
         .unwrap();
         directory
@@ -465,7 +465,7 @@ mod tests {
         fs::write(
             config_path,
             format!(
-                "{}\n[resolver.nodejs.pre-check]\nurl = \"\"\n",
+                "{}\n[resolver.nodejs.pre-check]\ntype = \"http\"\nurl = \"\"\n",
                 fs::read_to_string(config_path).unwrap()
             ),
         )

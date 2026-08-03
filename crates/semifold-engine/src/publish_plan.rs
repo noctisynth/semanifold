@@ -48,7 +48,7 @@ pub struct PublishOptions {
 #[derive(Debug)]
 pub struct PackagePublish {
     pub context: PublishContext,
-    pub preflight: Option<PlannedRegistryCheck>,
+    pub preflight: Option<PlannedPreCheck>,
     pub commands: Vec<CommandSpec>,
     pub assets: Vec<AssetDeclaration>,
     pub forge: Option<PackageForgePlan>,
@@ -82,9 +82,17 @@ pub enum AssetDeclaration {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlannedRegistryCheck {
-    pub url: String,
-    pub extra_headers: BTreeMap<String, String>,
+pub enum PlannedPreCheck {
+    Http {
+        url: String,
+        extra_headers: BTreeMap<String, String>,
+    },
+    Command {
+        executable: String,
+        args: Vec<String>,
+        environment: BTreeMap<String, String>,
+        working_directory: Utf8PathBuf,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -225,7 +233,7 @@ pub async fn plan_publish(
             preflight: resolver_config
                 .pre_check
                 .as_ref()
-                .map(|preflight| render_preflight(preflight, &context))
+                .map(|preflight| render_preflight(preflight, &context, &working_directory))
                 .transpose()?,
             commands,
             assets: plan_assets(&package_config.assets)?,
@@ -294,22 +302,51 @@ fn validate_asset_path(path: &Path) -> Result<(), PublishPlanError> {
 fn render_preflight(
     preflight: &PreCheckConfig,
     context: &PublishContext,
-) -> Result<PlannedRegistryCheck, PublishPlanError> {
-    let url = render_template(&preflight.url, context)?;
-    let parsed =
-        reqwest::Url::parse(&url).map_err(|error| PublishPlanError::InvalidPreflightUrl {
-            url: url.clone(),
-            reason: error.to_string(),
-        })?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(PublishPlanError::UnsupportedPreflightScheme {
-            scheme: parsed.scheme().to_string(),
-        });
+    working_directory: &Utf8PathBuf,
+) -> Result<PlannedPreCheck, PublishPlanError> {
+    match preflight {
+        PreCheckConfig::Http { url, extra_headers } => {
+            let url = render_template(url, context)?;
+            let parsed = reqwest::Url::parse(&url).map_err(|error| {
+                PublishPlanError::InvalidPreflightUrl {
+                    url: url.clone(),
+                    reason: error.to_string(),
+                }
+            })?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                return Err(PublishPlanError::UnsupportedPreflightScheme {
+                    scheme: parsed.scheme().to_string(),
+                });
+            }
+            Ok(PlannedPreCheck::Http {
+                url,
+                extra_headers: extra_headers.clone(),
+            })
+        }
+        PreCheckConfig::Command {
+            command,
+            args,
+            extra_env,
+        } => {
+            let executable = render_template(command, context)?;
+            let args = args
+                .as_ref()
+                .map(|args| {
+                    args.iter()
+                        .map(|argument| render_template(argument, context))
+                        .collect::<Result<Vec<_>, PublishPlanError>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
+            validate_rendered_command(&executable, &args)?;
+            Ok(PlannedPreCheck::Command {
+                executable,
+                args,
+                environment: extra_env.clone(),
+                working_directory: working_directory.clone(),
+            })
+        }
     }
-    Ok(PlannedRegistryCheck {
-        url,
-        extra_headers: preflight.extra_headers.clone(),
-    })
 }
 
 fn render_command(
@@ -319,9 +356,6 @@ fn render_command(
     phase: CommandPhase,
 ) -> Result<CommandSpec, PublishPlanError> {
     let executable = render_template(&command.command, context)?;
-    if executable.is_empty() {
-        return Err(PublishPlanError::EmptyCommand);
-    }
     let args = command
         .args
         .as_ref()
@@ -331,14 +365,7 @@ fn render_command(
                 .collect::<Result<Vec<_>, PublishPlanError>>()
         })
         .transpose()?;
-    if executable.contains('\0')
-        || args
-            .iter()
-            .flatten()
-            .any(|argument| argument.contains('\0'))
-    {
-        return Err(PublishPlanError::CommandContainsNull);
-    }
+    validate_rendered_command(&executable, args.as_deref().unwrap_or_default())?;
 
     Ok(CommandSpec {
         executable,
@@ -350,6 +377,16 @@ fn render_command(
         stderr: stdio_policy(command.stderr),
         run_in_dry_run: command.dry_run.unwrap_or(false),
     })
+}
+
+fn validate_rendered_command(executable: &str, args: &[String]) -> Result<(), PublishPlanError> {
+    if executable.is_empty() {
+        return Err(PublishPlanError::EmptyCommand);
+    }
+    if executable.contains('\0') || args.iter().any(|argument| argument.contains('\0')) {
+        return Err(PublishPlanError::CommandContainsNull);
+    }
+    Ok(())
 }
 
 const fn stdio_policy(stdio: StdioType) -> StdioPolicy {
@@ -456,7 +493,7 @@ mod tests {
 
     fn resolver(pre_check: &str) -> ResolverConfig {
         ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: pre_check.to_string(),
                 extra_headers: BTreeMap::new(),
             }),
@@ -535,10 +572,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["core", "app"]
         );
-        assert_eq!(
-            plan.packages[0].preflight.as_ref().unwrap().url,
-            "https://registry.test/core/1.2.3"
-        );
+        assert!(matches!(
+            plan.packages[0].preflight.as_ref().unwrap(),
+            PlannedPreCheck::Http { url, .. }
+                if url == "https://registry.test/core/1.2.3"
+        ));
         assert_eq!(plan.packages[0].commands[0].args[1], "--tag=core-v1.2.3");
         fs::remove_dir_all(root).unwrap();
     }
@@ -588,6 +626,36 @@ mod tests {
             .await
             .is_err()
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn publish_plan_renders_command_pre_check_for_each_package() {
+        let root = temporary_root();
+        write_workspace(&root);
+        let mut config = config("https://registry.test/unused");
+        config
+            .resolver
+            .get_mut(&ResolverType::Rust)
+            .expect("Rust resolver exists in test config")
+            .pre_check = Some(PreCheckConfig::Command {
+            command: "check-{{ package.name }}".to_string(),
+            args: Some(vec!["--version={{ package.version }}".to_string()]),
+            extra_env: BTreeMap::from([("READ_ONLY".to_string(), "1".to_string())]),
+        });
+
+        let plan = plan_publish(&root, &config, &PublishOptions::default())
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            plan.packages[0].preflight.as_ref().unwrap(),
+            PlannedPreCheck::Command { executable, args, environment, working_directory }
+                if executable == "check-core"
+                    && args == &["--version=1.2.3"]
+                    && environment.get("READ_ONLY").map(String::as_str) == Some("1")
+                    && working_directory.ends_with("core")
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 

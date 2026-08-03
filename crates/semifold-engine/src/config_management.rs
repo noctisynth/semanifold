@@ -27,6 +27,7 @@ pub fn plan_config_migration(
     let mut document = parse_document(&path, content)?;
     let mut migrated = BTreeSet::new();
     migrate_snake_case_fields(document.as_table_mut(), &mut migrated)?;
+    migrate_pre_check_types(document.as_table_mut(), &mut migrated);
     let packages = document
         .get_mut("packages")
         .and_then(Item::as_table_mut)
@@ -69,6 +70,28 @@ pub fn plan_config_migration(
         content,
         packages: migrated.into_iter().collect(),
     })
+}
+
+fn migrate_pre_check_types(document: &mut Table, migrated: &mut BTreeSet<String>) {
+    let Some(resolvers) = document
+        .get_mut("resolver")
+        .and_then(Item::as_table_like_mut)
+    else {
+        return;
+    };
+    for (name, resolver) in resolvers.iter_mut() {
+        let Some(pre_check) = resolver
+            .as_table_like_mut()
+            .and_then(|resolver| resolver.get_mut("pre-check"))
+            .and_then(Item::as_table_like_mut)
+        else {
+            continue;
+        };
+        if !pre_check.contains_key("type") && pre_check.contains_key("url") {
+            pre_check.insert("type", value("http"));
+            migrated.insert(format!("resolver.{name}.pre-check"));
+        }
+    }
 }
 
 pub fn plan_channel_update(
@@ -401,5 +424,25 @@ github-release = false
             error,
             ConfigMutationError::SnakeCaseConflict { .. }
         ));
+    }
+
+    #[test]
+    fn migrates_legacy_http_pre_check_to_explicit_type() {
+        let plan = plan_config_migration(
+            Utf8PathBuf::from("config.toml"),
+            r#"
+[packages]
+
+[resolver.rust.pre-check]
+url = "https://registry.test/{{ package.name }}/{{ package.version }}"
+"#,
+        )
+        .expect("legacy HTTP pre-check must migrate");
+
+        assert!(plan.content.contains("type = \"http\""));
+        assert!(
+            plan.packages
+                .contains(&"resolver.rust.pre-check".to_string())
+        );
     }
 }

@@ -134,7 +134,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
     )]);
     match resolver {
         ResolverType::Rust => ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
                     .to_string(),
                 extra_headers: user_agent,
@@ -144,7 +144,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             post_version: vec![command("cargo", &["generate-lockfile"], Some(true))],
         },
         ResolverType::Nodejs => ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
                     .to_string(),
                 extra_headers: BTreeMap::new(),
@@ -158,7 +158,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             post_version: vec![],
         },
         ResolverType::Python => ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
                     .to_string(),
                 extra_headers: user_agent,
@@ -168,7 +168,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             post_version: vec![],
         },
         ResolverType::Cpp => ResolverConfig {
-            pre_check: Some(PreCheckConfig {
+            pre_check: Some(PreCheckConfig::Http {
                 url: String::new(),
                 extra_headers: BTreeMap::new(),
             }),

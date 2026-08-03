@@ -54,7 +54,7 @@ fn run_smif(root: &Path, arguments: &[&str]) -> Output {
 
 fn config(package: &str) -> String {
     format!(
-        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\n# keep this comment\npath = \".\"\nresolver = \"rust\"\n{package}\n\n[resolver.rust.pre-check]\nurl = \"\"\n"
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\n# keep this comment\npath = \".\"\nresolver = \"rust\"\n{package}\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n"
     )
 }
 
@@ -62,7 +62,7 @@ fn config(package: &str) -> String {
 fn status_reports_the_complete_dependency_cycle() {
     let root = temporary_project(
         "dependency-cycle",
-        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages.a]\npath = \"a\"\nresolver = \"rust\"\n\n[packages.b]\npath = \"b\"\nresolver = \"rust\"\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n\n[packages.a]\npath = \"a\"\nresolver = \"rust\"\n\n[packages.b]\npath = \"b\"\nresolver = \"rust\"\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n",
     );
     fs::remove_file(root.join("Cargo.toml")).unwrap();
     fs::remove_file(root.join(".changes/feature.md")).unwrap();
@@ -149,7 +149,7 @@ fn dry_run_validates_the_planned_changelog_without_writing_files() {
 fn dry_run_version_handles_a_node_changeset_in_a_mixed_workspace() {
     let root = temporary_project(
         "mixed-version",
-        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\npath = \".\"\nresolver = \"rust\"\n\n[packages.node-lib]\npath = \"node\"\nresolver = \"nodejs\"\n\n[resolver.rust.pre-check]\nurl = \"\"\n",
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\npath = \".\"\nresolver = \"rust\"\n\n[packages.node-lib]\npath = \"node\"\nresolver = \"nodejs\"\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n",
     );
     let node_manifest = root.join("node/package.json");
     fs::create_dir_all(node_manifest.parent().unwrap()).unwrap();

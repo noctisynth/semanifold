@@ -234,6 +234,7 @@ template = "Release {{ package.next_version }}"
 changeset-template = "Change {{ changeset.summary }}"
 
 [resolver.rust.pre-check]
+type = "http"
 url = ""
 
 [release]

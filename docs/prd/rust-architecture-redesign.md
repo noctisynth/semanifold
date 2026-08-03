@@ -128,7 +128,7 @@ A → B → C
 ### 4.2 非目标
 
 - 不在第一阶段重新设计 CLI。
-- 不替换 TOML/JSON 容器格式；字段命名统一为 kebab-case。
+- Semifold 配置只保留 TOML 容器格式；字段命名统一为 kebab-case。
 - 不为每个小模块创建独立 crate。
 - 不在第一阶段引入动态插件或 WASM resolver。
 - 不尝试回滚已经完成的外部 registry 发布。
@@ -455,6 +455,36 @@ pub struct PublishPackageContext {
 ```
 
 Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem adapter 中。它们由 engine 根据统一包模型和用户配置组装。
+
+pre-check 是 publish 前对“目标 package version 是否已经存在”的只读探测，不承担首次发布历史
+查询。配置使用带 `type` 判别字段的强类型结构：
+
+```toml
+[resolver.rust.pre-check]
+type = "http"
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+
+[resolver.rust.pre-check.extra-headers]
+User-Agent = "Semifold 0.2.0"
+```
+
+HTTP pre-check 只有 `200 OK` 表示目标版本已存在，`404 Not Found` 表示不存在；鉴权、限流、服务端
+错误及其他状态均视为 preflight 失败，不得推断为可发布。
+
+需要自定义 registry 或本地策略时可配置 command pre-check：
+
+```toml
+[resolver.rust.pre-check]
+type = "command"
+command = "./scripts/version-exists"
+args = []
+```
+
+command pre-check 在 package 工作目录中运行，stdin 接收单行 JSON `PublishPackageContext`，其后附加
+换行；stdout 必须只返回单行 JSON `{"exists": true}` 或 `{"exists": false}`。进程退出码必须为
+0；非零退出、无法启动、无效 JSON、额外非空 stdout 内容均为 preflight 失败，stderr 继承以保留
+诊断信息。pre-check 在普通 publish 和全局 dry-run 中都执行，必须由用户保证只读。它不复用发布
+命令的 `stdout`、`stderr` 或 `dry-run` 配置，因为协议要求 stdin/stdout 固定为 pipe。
 
 `PublishPlan` 在 publish 进程中根据当前 `WorkspaceSnapshot`、强类型配置、显式
 `PublishOptions` 和
@@ -1273,7 +1303,10 @@ marker 缺失配对、嵌套、重复开始或版本无效必须作为 changelog
 
 ### 13.1 目标
 
-Semifold 的 TOML 与 JSON 配置字段统一使用 kebab-case。所有 Rust 字段名中包含下划线的
+Semifold 的运行时配置仅支持 TOML；`config.json` 不再是可加载或可保存的 Semifold 配置，发现
+该文件时必须返回明确的 `UnsupportedConfigFormat`，并提示迁移为 `config.toml`。生态 manifest
+中的 JSON（例如 `package.json`、`vcpkg.json`）不受此限制。所有 TOML 配置字段统一使用
+kebab-case。所有 Rust 字段名中包含下划线的
 配置键必须映射为连字符形式，例如 `dry-run`、`extra-env`、`extra-headers`、`pre-check`、
 `post-version`、`channel-bump`、`depends-on` 与 `changeset-template`。本次格式切换不为 snake_case 字段提供 alias
 或迁移兼容；仓库自带配置、初始化模板、文档示例和测试 fixture 必须同时切换。Rust 内部字段名
@@ -1326,7 +1359,9 @@ smif config sync --resolver rust --resolver nodejs
 - `--dry-run` 输出将要应用的完整 `ConfigPlan`，但不写文件，退出码不表示配置漂移；
 - `--check` 用于断言配置已经同步，发现任何需要修改的内容时返回非零退出码。
 
-第一版只更新 `.changes/config.toml` 或 `.changesets/config.toml`。如果当前项目使用 JSON 配置，命令返回明确的 `UnsupportedConfigFormat`，避免 JSON 重写造成无关格式变化。未来如需支持 JSON，应单独定义格式保留策略。
+只更新 `.changes/config.toml` 或 `.changesets/config.toml`。如果当前项目使用 JSON 配置，所有运行
+入口和配置命令都返回明确的 `UnsupportedConfigFormat`；`config migrate` 不读取或重写 JSON，用户
+必须先将配置转换为 TOML。
 
 ### 13.2.1 旧配置迁移
 
@@ -1346,6 +1381,8 @@ smif config migrate --check
 - 将已知 snake_case 配置字段原位重命名为对应 kebab-case，包括 `version_mode`、
   `channel_bump`、`depends_on`、`pre_check`、`post_version`、`extra_headers`、`extra_env` 和
   `dry_run`；字段值、注释、table/array-of-tables 顺序及其他未知字段保持不变；
+- 旧的 `[resolver.*.pre-check]` 仅含 `url` 且缺少 `type` 时补充 `type = "http"`；运行时 loader
+  不接受缺少判别字段的旧结构；
 - 同一 table 同时存在 snake_case 与目标 kebab-case 字段时停止并报告冲突，不覆盖任一值；
 - loader 不接受 snake_case alias；旧配置必须先运行 `config migrate`，该迁移支持不等于运行时兼容；
 - JSON 配置返回明确的不支持错误；
@@ -2067,7 +2104,7 @@ adapter 暴露旧 `ResolvedPackage`。
 7. 各生态至少有单包、workspace、内部依赖和版本重写 fixture。
 8. CLI、CI 和 MCP 使用同一 application service，不复制发布计算。
 9. 无任何发布计算依赖 `RefCell` 或处理顺序中逐步填充的全局 map。
-10. 保持现有 CLI 主要用法；TOML/JSON 配置字段统一为 kebab-case，不兼容 snake_case 字段。
+10. 保持现有 CLI 主要用法；Semifold 配置仅支持 TOML，所有配置字段统一为 kebab-case，不兼容 snake_case 字段。
 11. `smif config sync` 能增量同步工作区包，并保留 TOML 注释、顺序、未知字段和手工配置。
 12. 缺失包默认不删除，只有完整扫描成功且显式指定 `--prune` 时才允许删除。
 13. `smif config sync --check` 可用于 CI 检测配置漂移。
@@ -2093,9 +2130,10 @@ adapter 暴露旧 `ResolvedPackage`。
 4. [已决定] `PackageId` 全局唯一但不自动添加 namespace；跨生态同名 manifest 由已有配置的稳定 ID 区分，首次发现无法唯一落盘时报告冲突。
 5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
 6. [已决定] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`，并保留可诊断的收集错误。
-7. `config sync` 是否需要在后续版本支持 JSON 配置，还是正式将可编辑配置限定为 TOML。
+7. [已决定] Semifold 运行时和配置编辑只支持 TOML；JSON 配置不再维护，发现时返回明确错误。
 8. 未启用 resolver 但发现对应生态 manifest 时，是提示用户启用，还是允许 `--resolver` 自动创建默认 resolver 配置。
-9. rename 后是否提供独立 `--rewrite-changesets` 选项更新尚未消费的 changeset，默认行为仍是不修改。
+9. [已决定] 当前不提供 `--rewrite-changesets`。rename 继续报告未消费 changeset 中的旧 PackageId，
+   由用户显式确认并修改，避免同步命令隐式改写发布意图。
 10. [已决定] Rust `package.version.workspace = true` 以 manifest 派生的共享
     `VersionSourceId` 表示；组内取最高 bump，要求 channel 与 `channel-bump` 一致，全部成员进入
     版本闭包，private 成员参与计算但跳过 publish，并只编辑一次
@@ -2105,7 +2143,10 @@ adapter 暴露旧 `ResolvedPackage`。
 
 manifest 中的版本不足以可靠判断 package 是否已经发布。长期可以引入 `PackageReleaseState`，由 engine 通过 registry package metadata 获取 `Unpublished` 或 `Published` 状态，再作为纯 `ReleasePlanner` 的输入。该查询与发布前“目标版本是否已存在”的 `version_exists` pre-check 是两个不同语义；网络失败、鉴权失败或无 registry 配置时不得推断为 `Unpublished`。
 
-该能力不阻塞当前架构重构，具体状态模型、离线行为、registry port 和各生态实现留待后续决策。`semifold-core` 首次发布暂时将 manifest 版本设为 `0.0.0`，使现有 minor changeset 在 alpha 通道生成 `0.1.0-alpha.0`，在 stable 通道生成 `0.1.0`。这是当前仓库的过渡措施，不定义为所有新 package 的长期通用规则。
+该能力不阻塞当前架构重构，当前明确延期，不在 pre-check 中复用或隐式实现。具体状态模型、离线
+行为、registry port 和各生态实现等到出现真实首次发布规划需求后再决策。`semifold-core` 首次发布
+暂时将 manifest 版本设为 `0.0.0`，使现有 minor changeset 在 alpha 通道生成 `0.1.0-alpha.0`，在
+stable 通道生成 `0.1.0`。这是当前仓库的过渡措施，不定义为所有新 package 的长期通用规则。
 
 ## 20. 推荐的第一个实施切片
 

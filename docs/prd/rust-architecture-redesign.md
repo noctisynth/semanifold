@@ -1270,6 +1270,9 @@ Semifold 的 TOML 与 JSON 配置字段统一使用 kebab-case。所有 Rust 字
 
 `init` 只负责首次创建 Semifold 配置。工作区在后续开发中新增、删除、移动或重命名包时，不应要求用户重复执行 `init`，也不应覆盖已经手工维护的发布命令、assets、version mode 和跨生态依赖。
 
+初始化 Rust resolver 时，内置 `post-version` 命令为 `cargo generate-lockfile`，并允许在 dry-run 中执行。
+该默认命令不得附加 `--offline`，以便依赖解析在本地索引或缓存不足时正常访问 registry；用户仍可在生成配置后按项目需要自行加入离线参数。
+
 新增配置同步入口：
 
 ```text

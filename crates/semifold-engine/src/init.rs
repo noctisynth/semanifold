@@ -141,11 +141,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             }),
             prepublish: vec![],
             publish: vec![command("cargo", &["publish"], None)],
-            post_version: vec![command(
-                "cargo",
-                &["generate-lockfile", "--offline"],
-                Some(true),
-            )],
+            post_version: vec![command("cargo", &["generate-lockfile"], Some(true))],
         },
         ResolverType::Nodejs => ResolverConfig {
             pre_check: Some(PreCheckConfig {
@@ -285,5 +281,18 @@ mod tests {
     fn invalid_workflow_template_returns_an_error() {
         let error = render_workflow("{{ missing }}", "main", &[]).unwrap_err();
         assert_eq!(error.kind(), minijinja::ErrorKind::UndefinedError);
+    }
+
+    #[test]
+    fn rust_init_generates_lockfile_without_forcing_offline_mode() {
+        let config = resolver_config(ResolverType::Rust, "1.2.3");
+
+        assert_eq!(config.post_version.len(), 1);
+        assert_eq!(config.post_version[0].command, "cargo");
+        assert_eq!(
+            config.post_version[0].args.as_deref(),
+            Some(["generate-lockfile".to_string()].as_slice())
+        );
+        assert_eq!(config.post_version[0].dry_run, Some(true));
     }
 }

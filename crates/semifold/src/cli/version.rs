@@ -30,7 +30,8 @@ pub(crate) async fn prepare_and_apply_release(
                 repository: repository_context(),
             },
         )
-        .await?;
+        .await
+        .map_err(|error| anyhow::anyhow!(t!("cli.version.prepare_failed", error = error)))?;
     render_release_plan_activity(&plan, dry_run);
     service
         .apply_release(

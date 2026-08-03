@@ -116,7 +116,8 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
                 repository: repository_context(),
             },
         )
-        .await?;
+        .await
+        .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_prepare_failed", error = error)))?;
     let semifold_engine::ApplyReport {
         changelogs: changelogs_map,
         file_edits,

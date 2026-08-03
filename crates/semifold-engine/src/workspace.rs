@@ -229,6 +229,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("cpp-app".to_string(), package("cpp/app", ResolverType::Cpp)),
                 (
@@ -336,6 +337,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("node-binding".to_string(), binding),
                 (
@@ -377,6 +379,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([("node-binding".to_string(), binding)]),
             resolver: BTreeMap::new(),
         };
@@ -415,6 +418,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("node-binding".to_string(), node),
                 ("rust-core".to_string(), rust),
@@ -453,6 +457,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("first".to_string(), package("first", ResolverType::Rust)),
                 ("second".to_string(), package("second", ResolverType::Rust)),

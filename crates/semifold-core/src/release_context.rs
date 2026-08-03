@@ -141,6 +141,8 @@ pub struct RepositoryContext {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CommitContext {
     pub sha: String,
+    pub short_sha: String,
+    pub author: Option<String>,
     pub web_url: Option<String>,
 }
 
@@ -263,6 +265,7 @@ pub enum ReleasePackageContextError {
 pub struct ChangesetContext {
     pub id: ChangesetId,
     pub summary: String,
+    pub summary_paragraphs: Vec<Vec<String>>,
     pub commit: Option<CommitContext>,
     pub pull_request: Option<PullRequestContext>,
 }

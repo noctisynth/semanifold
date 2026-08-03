@@ -243,6 +243,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 (
                     "old-name".to_string(),

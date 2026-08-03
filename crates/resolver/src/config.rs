@@ -15,6 +15,15 @@ pub struct BranchesConfig {
     pub release: String,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct ChangelogConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changeset_template: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AssetConfig {
     pub path: PathBuf,
@@ -230,10 +239,17 @@ pub struct Config {
     pub branches: BranchesConfig,
     /// Tag configuration.
     pub tags: BTreeMap<String, String>,
+    /// Changelog template configuration.
+    #[serde(default, skip_serializing_if = "is_default_changelog_config")]
+    pub changelog: ChangelogConfig,
     /// Package configuration.
     pub packages: BTreeMap<String, PackageConfig>,
     /// Resolver configuration.
     pub resolver: BTreeMap<resolver::ResolverType, ResolverConfig>,
+}
+
+fn is_default_changelog_config(config: &ChangelogConfig) -> bool {
+    config.template.is_none() && config.changeset_template.is_none()
 }
 
 pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
@@ -308,7 +324,35 @@ mod tests {
 
     use semifold_core::PackageId;
 
-    use super::{ChannelBump, CommandConfig, PackageConfig, ReleaseChannel};
+    use super::{ChangelogConfig, ChannelBump, CommandConfig, PackageConfig, ReleaseChannel};
+
+    #[test]
+    fn changelog_templates_round_trip_with_kebab_case_fields() {
+        let config: ChangelogConfig = toml_edit::de::from_str(
+            r#"
+template = "Release {{ package.next_version }}"
+changeset-template = "Change {{ changeset.summary }}"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.template.as_deref(),
+            Some("Release {{ package.next_version }}")
+        );
+        assert_eq!(
+            config.changeset_template.as_deref(),
+            Some("Change {{ changeset.summary }}")
+        );
+
+        let rendered = toml_edit::ser::to_string(&config).unwrap();
+        assert!(rendered.contains("changeset-template"));
+        assert!(!rendered.contains("changeset_template"));
+
+        let json = serde_json::to_string(&config).unwrap();
+        let reparsed: ChangelogConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(reparsed.template, config.template);
+        assert_eq!(reparsed.changeset_template, config.changeset_template);
+    }
 
     #[test]
     fn missing_and_explicit_stable_channels_are_equivalent() {

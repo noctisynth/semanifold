@@ -2129,13 +2129,16 @@ dependencies = [
 name = "semifold-changelog"
 version = "0.3.0-rc.0"
 dependencies = [
- "anyhow",
  "git2",
+ "minijinja",
  "octocrab",
  "pathdiff",
  "semifold-core",
  "semifold-resolver",
  "semver",
+ "serde",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

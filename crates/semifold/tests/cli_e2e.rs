@@ -244,6 +244,57 @@ fn version_applies_manifest_and_changelog_edits_together() {
 }
 
 #[test]
+fn version_renders_custom_release_and_changeset_templates() {
+    let root = temporary_project(
+        "custom-changelog-templates",
+        &format!(
+            "{}\n[changelog]\ntemplate = '''Release {{{{ package.next_version }}}}\n{{% for section in sections %}}[{{{{ section.name }}}}]\n{{% for entry in section.entries %}}{{{{ entry.content }}}}{{% endfor %}}{{% endfor %}}'''\nchangeset-template = '''* {{{{ changeset.id }}}}: {{{{ changeset.summary }}}}'''\n",
+            config("channel = \"stable\"")
+        ),
+    );
+    let changelog = root.join("CHANGELOG.md");
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    assert_eq!(
+        fs::read_to_string(changelog).unwrap(),
+        concat!(
+            "# Changelog\n\n",
+            "<!-- semifold:release version=1.0.1 -->\n",
+            "Release 1.0.1\n",
+            "[Chores]\n",
+            "* feature: Exercise the CLI.\n",
+            "<!-- semifold:release:end -->\n",
+        )
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn dry_run_rejects_invalid_changelog_templates_without_side_effects() {
+    let root = temporary_project(
+        "invalid-changelog-template",
+        &format!(
+            "{}\n[changelog]\nchangeset-template = \"{{{{ changeset.unknown }}}}\"\n",
+            config("channel = \"stable\"")
+        ),
+    );
+    let manifest = root.join("Cargo.toml");
+    let changeset = root.join(".changes/feature.md");
+    let manifest_before = fs::read_to_string(&manifest).unwrap();
+    let changeset_before = fs::read_to_string(&changeset).unwrap();
+
+    let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+
+    assert!(!version.status.success(), "{version:?}");
+    assert_eq!(fs::read_to_string(manifest).unwrap(), manifest_before);
+    assert_eq!(fs::read_to_string(changeset).unwrap(), changeset_before);
+    assert!(!root.join("CHANGELOG.md").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn version_renders_multiline_changesets_as_single_list_items() {
     let root = temporary_project(
         "version-multiline-changelog",

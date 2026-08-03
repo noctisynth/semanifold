@@ -487,6 +487,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
@@ -556,6 +557,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("private".to_string(), package("crates/private")),
                 ("public".to_string(), package("crates/public")),
@@ -608,6 +610,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 (
                     "node-binding".to_string(),
@@ -663,6 +666,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
@@ -712,6 +716,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("app".to_string(), node_package("app", &[])),
                 ("core".to_string(), node_package("core", &[])),
@@ -757,6 +762,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("app-id".to_string(), package("app")),
                 ("core-id".to_string(), package("core")),
@@ -818,6 +824,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([("native-example".to_string(), python_package("."))]),
             resolver: BTreeMap::new(),
         };
@@ -857,6 +864,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([("example".to_string(), package)]),
             resolver: BTreeMap::new(),
         };

@@ -256,6 +256,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages,
             resolver: BTreeMap::new(),
         }

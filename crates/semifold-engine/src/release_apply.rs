@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use semifold_changelog::{ChangelogSource, generate_changelog, utils::render_changelog};
+use semifold_changelog::{
+    ChangelogRenderer, ChangelogSource, GenerateChangelogError, generate_changelog,
+    utils::render_changelog,
+};
 use semifold_core::{
     ChangesetId, DependencyUpdateContext, EditSource, FileEdit, FileEditExpectation, FileHash,
     PackageId, ReleaseContext, ReleasePackageContext, ReleasePackageContextError, ReleasePlan,
@@ -102,11 +105,22 @@ pub async fn prepare_release(
         })?;
     let workspace = load_workspace_graph(project.root.as_std_path(), &project.config)?;
     let release_context = ReleaseContext::from_plan(&release);
+    let changelog_renderer = release
+        .order()
+        .first()
+        .map(|package| ChangelogRenderer::new(&project.config.changelog, package))
+        .transpose()
+        .map_err(GenerateChangelogError::from)?;
     let mut file_edits = release.file_edits().to_vec();
     let mut changelogs = BTreeMap::new();
     let mut remote_metadata_failures = Vec::new();
 
     for package_id in release.order() {
+        let renderer = changelog_renderer.as_ref().ok_or_else(|| {
+            ReleasePrepareError::ChangelogRendererMissing {
+                package: package_id.clone(),
+            }
+        })?;
         let package_name = package_id.as_str();
         let package_config = project.config.packages.get(package_name).ok_or_else(|| {
             ReleasePrepareError::ConfiguredPackageMissing {
@@ -140,6 +154,7 @@ pub async fn prepare_release(
         })?;
         let package_context = ReleasePackageContext::from_snapshot(&release_context, snapshot)?;
         let changelog = generate_changelog(
+            renderer,
             &ChangelogSource {
                 repo_root: project.root.as_std_path(),
                 tags: &project.config.tags,
@@ -160,6 +175,8 @@ pub async fn prepare_release(
             package_config,
             package_id,
             &changelog.content,
+            &package_release.next_version.to_string(),
+            changelog.requires_marker,
         )?);
         changelogs.insert(package_id.clone(), changelog.content);
     }
@@ -337,6 +354,8 @@ fn plan_changelog_edit(
     package_config: &PackageConfig,
     package: &PackageId,
     entry: &str,
+    version: &str,
+    require_marker: bool,
 ) -> Result<FileEdit, ReleasePrepareError> {
     let relative_path = Utf8PathBuf::from_path_buf(package_config.path.join("CHANGELOG.md"))
         .map_err(|path| ReleasePrepareError::NonUtf8Path { path })?;
@@ -358,7 +377,14 @@ fn plan_changelog_edit(
                 hash: FileHash::from_bytes(content.as_bytes()),
             }
         });
-    let new_content = render_changelog(&absolute_path, content.as_deref(), entry)?;
+    let new_content = render_changelog(
+        &absolute_path,
+        content.as_deref(),
+        entry,
+        version,
+        require_marker,
+    )
+    .map_err(GenerateChangelogError::from)?;
 
     Ok(FileEdit {
         path: relative_path,
@@ -436,7 +462,9 @@ pub enum ReleasePrepareError {
     #[error(transparent)]
     ReleaseContext(#[from] ReleasePackageContextError),
     #[error("failed to generate changelog")]
-    Changelog(#[from] ResolveError),
+    Changelog(#[from] GenerateChangelogError),
+    #[error("changelog renderer is unavailable for planned package {package}")]
+    ChangelogRendererMissing { package: PackageId },
     #[error("failed to read changelog {path}")]
     ReadChangelog {
         path: Utf8PathBuf,
@@ -544,17 +572,30 @@ mod tests {
             .expect("temporary test directory must be valid UTF-8");
         let package = package_config();
 
-        let new_edit = plan_changelog_edit(root, &package, &PackageId::new("app"), "## v1.0.0")
-            .expect("new changelog edit must be planned");
+        let new_edit = plan_changelog_edit(
+            root,
+            &package,
+            &PackageId::new("app"),
+            "## v1.0.0",
+            "1.0.0",
+            false,
+        )
+        .expect("new changelog edit must be planned");
         assert_eq!(new_edit.path.as_str(), "package/CHANGELOG.md");
         assert_eq!(new_edit.expected, FileEditExpectation::Missing);
         assert_eq!(new_edit.new_content, "# Changelog\n\n## v1.0.0\n");
 
         fs::write(root.join("package/CHANGELOG.md"), "# Changelog\n")
             .expect("existing changelog fixture must be written");
-        let existing_edit =
-            plan_changelog_edit(root, &package, &PackageId::new("app"), "## v1.0.0")
-                .expect("existing changelog edit must be planned");
+        let existing_edit = plan_changelog_edit(
+            root,
+            &package,
+            &PackageId::new("app"),
+            "## v1.0.0",
+            "1.0.0",
+            false,
+        )
+        .expect("existing changelog edit must be planned");
         assert!(matches!(
             existing_edit.expected,
             FileEditExpectation::Existing { .. }

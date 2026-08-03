@@ -229,6 +229,10 @@ release = "release"
 
 [tags]
 
+[changelog]
+template = "Release {{ package.next_version }}"
+changeset-template = "Change {{ changeset.summary }}"
+
 [resolver.rust.pre-check]
 url = ""
 
@@ -308,6 +312,8 @@ custom = "preserved"
 
         assert!(rendered.contains("# top-level comment"));
         assert!(rendered.contains("# release policy must remain untouched"));
+        assert!(rendered.contains("template = \"Release {{ package.next_version }}\""));
+        assert!(rendered.contains("changeset-template = \"Change {{ changeset.summary }}\""));
         assert!(rendered.contains("[[release.units]]\nname = \"all\""));
         assert!(rendered.contains("[packages.renamed-package]"));
         assert!(rendered.contains("# retain this comment and every manual field"));

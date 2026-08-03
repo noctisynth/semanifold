@@ -5,9 +5,12 @@ use octocrab::Octocrab;
 
 use semifold_resolver::error::ResolveError;
 
+use crate::{RELEASE_MARKER_END, RELEASE_MARKER_PREFIX};
+
 #[derive(Debug)]
 pub struct CommitInfo {
     pub oid: Oid,
+    pub author: Option<String>,
     pub message: String,
 }
 
@@ -89,6 +92,7 @@ pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<Comm
             if tree.get_path(std::path::Path::new(path)).is_ok() {
                 return Some(CommitInfo {
                     oid,
+                    author: commit.author().name().map(ToOwned::to_owned),
                     message: commit.message()?.to_string(),
                 });
             }
@@ -106,6 +110,7 @@ pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<Comm
             if diff.deltas().len() > 0 {
                 return Some(CommitInfo {
                     oid,
+                    author: commit.author().name().map(ToOwned::to_owned),
                     message: commit.message()?.to_string(),
                 });
             }
@@ -119,6 +124,8 @@ pub fn render_changelog<P: AsRef<Path>>(
     path: P,
     content: Option<&str>,
     new_entry: &str,
+    version: &str,
+    require_marker: bool,
 ) -> Result<String, ResolveError> {
     let path = path.as_ref();
     let header = "# Changelog";
@@ -126,22 +133,66 @@ pub fn render_changelog<P: AsRef<Path>>(
     let content = content
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| format!("{header}\n\n"));
+    if content.lines().next() != Some(header) {
+        return Err(ResolveError::InvalidChangelog {
+            path: path.to_path_buf(),
+            reason: "Invalid changelog: missing `# Changelog` root header".to_string(),
+        });
+    }
 
-    let insert_pos = content.find(header).ok_or(ResolveError::InvalidChangelog {
-        path: path.to_path_buf(),
-        reason: "No `# Changelog` header found in file".to_string(),
-    })?;
+    let header_positions = content
+        .match_indices(header)
+        .filter(|(index, _)| {
+            let before_is_boundary = *index == 0
+                || content
+                    .as_bytes()
+                    .get(index.saturating_sub(1))
+                    .is_some_and(|byte| *byte == b'\n');
+            let after_index = index + header.len();
+            let after_is_boundary = content
+                .as_bytes()
+                .get(after_index)
+                .is_none_or(|byte| *byte == b'\n' || *byte == b'\r');
+            before_is_boundary && after_is_boundary
+        })
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let Some(insert_pos) = header_positions.first().copied() else {
+        return Err(ResolveError::InvalidChangelog {
+            path: path.to_path_buf(),
+            reason: "No `# Changelog` header found in file".to_string(),
+        });
+    };
+    if header_positions.len() != 1 {
+        return Err(ResolveError::InvalidChangelog {
+            path: path.to_path_buf(),
+            reason: "Multiple `# Changelog` headers found in file".to_string(),
+        });
+    }
+    let has_markers = validate_release_markers(path, &content)?;
+    let use_marker = require_marker || has_markers;
 
     let after_header_pos = insert_pos + header.len();
-
     let before = &content[..after_header_pos].trim_end_matches('\n');
     let after = &content[after_header_pos..].trim_start_matches('\n');
-    let new_entry = new_entry.trim_start();
+    let new_entry = if use_marker {
+        let version =
+            semver::Version::parse(version).map_err(|error| ResolveError::InvalidChangelog {
+                path: path.to_path_buf(),
+                reason: format!("Invalid release marker version {version}: {error}"),
+            })?;
+        format!(
+            "{RELEASE_MARKER_PREFIX}{version} -->\n{}\n{RELEASE_MARKER_END}",
+            new_entry.trim_matches('\n')
+        )
+    } else {
+        new_entry.trim_start().to_string()
+    };
 
     let mut new_content = String::with_capacity(content.len() + new_entry.len() + 4);
     new_content.push_str(before);
     new_content.push_str("\n\n");
-    new_content.push_str(new_entry);
+    new_content.push_str(&new_entry);
     if !after.is_empty() {
         if new_entry.ends_with('\n') {
             new_content.push('\n');
@@ -155,9 +206,61 @@ pub fn render_changelog<P: AsRef<Path>>(
     Ok(new_content)
 }
 
+pub(crate) fn validate_release_markers(path: &Path, content: &str) -> Result<bool, ResolveError> {
+    let mut open = false;
+    let mut found = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(version) = release_marker_version(trimmed) {
+            if open {
+                return Err(invalid_marker(path, "Nested release marker"));
+            }
+            semver::Version::parse(version).map_err(|error| {
+                invalid_marker(
+                    path,
+                    &format!("Invalid release marker version {version}: {error}"),
+                )
+            })?;
+            open = true;
+            found = true;
+        } else if trimmed == RELEASE_MARKER_END {
+            if !open {
+                return Err(invalid_marker(
+                    path,
+                    "Release end marker has no matching start",
+                ));
+            }
+            open = false;
+        } else if trimmed.starts_with("<!-- semifold:release") {
+            return Err(invalid_marker(path, "Malformed release marker"));
+        }
+    }
+    if open {
+        return Err(invalid_marker(
+            path,
+            "Release start marker has no matching end",
+        ));
+    }
+    Ok(found)
+}
+
+pub(crate) fn release_marker_version(line: &str) -> Option<&str> {
+    line.strip_prefix(RELEASE_MARKER_PREFIX)
+        .and_then(|value| value.strip_suffix(" -->"))
+}
+
+fn invalid_marker(path: &Path, reason: &str) -> ResolveError {
+    ResolveError::InvalidChangelog {
+        path: path.to_path_buf(),
+        reason: reason.to_string(),
+    }
+}
+
 pub async fn insert_changelog<P: AsRef<Path>>(
     path: P,
     new_entry: &str,
+    version: &str,
+    require_marker: bool,
 ) -> Result<(), ResolveError> {
     let path = path.as_ref();
     let content = if path.exists() {
@@ -165,7 +268,8 @@ pub async fn insert_changelog<P: AsRef<Path>>(
     } else {
         None
     };
-    let new_content = render_changelog(path, content.as_deref(), new_entry)?;
+    let new_content =
+        render_changelog(path, content.as_deref(), new_entry, version, require_marker)?;
     std::fs::write(path, new_content)?;
     Ok(())
 }

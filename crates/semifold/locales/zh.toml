@@ -83,6 +83,7 @@ skip_post_version = "由于处于模拟运行模式，跳过包 %{package} 的�
 run_post_version = "为包 %{package} 运行后版本钩子命令 %{command}"
 post_version_recovery = "包 %{package} 的后版本命令 %{command} 在应用 %{files} 后失败。变更集仍被保留：%{changesets}。请修复命令后重新运行 version：%{error}"
 changelog_metadata_degraded = "无法获取包 %{package} 的拉取请求元数据；将继续生成不含拉取请求详情的变更日志"
+prepare_failed = "无法准备发布：%{error}"
 no_resolver_config = "没有为解析器 %{resolver} 找到配置，无法为包 %{package} 运行后版本钩子"
 edit_path_invalid = "计划的文件修改路径 %{path} 位于项目根目录之外"
 duplicate_edit = "多个计划的文件修改指向 %{path}"
@@ -141,6 +142,7 @@ no_changesets_publish = "未找到变更集，将发布当前版本。"
 no_existing_pr = "未找到现有 PR，创建新的 PR。"
 existing_pr_found = "找到现有 PR #%{number}，跳过创建新 PR。"
 release_branch_invalid = "无法渲染有效的发布分支：%{error}"
+release_prepare_failed = "无法准备发布：%{error}"
 
 [cli.mcp]
 create_failed = "创建变更集失败：%{error}"

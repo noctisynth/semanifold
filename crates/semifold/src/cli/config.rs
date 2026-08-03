@@ -1040,6 +1040,7 @@ resolver = "rust"
                     release: "release".to_string(),
                 },
                 tags: Default::default(),
+                changelog: Default::default(),
                 packages: Default::default(),
                 resolver: Default::default(),
             },

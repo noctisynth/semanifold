@@ -156,6 +156,7 @@ mod tests {
                     release: "release".to_string(),
                 },
                 tags: BTreeMap::from([("feat".to_string(), "Features".to_string())]),
+                changelog: Default::default(),
                 packages: BTreeMap::from([(
                     "app".to_string(),
                     PackageConfig {

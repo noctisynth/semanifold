@@ -65,6 +65,7 @@ pub fn plan_init(
             release: options.release_branch,
         },
         tags: options.tags,
+        changelog: Default::default(),
         packages,
         resolver,
     };

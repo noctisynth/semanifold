@@ -481,6 +481,7 @@ mod tests {
                 release: "release".to_string(),
             },
             tags: BTreeMap::new(),
+            changelog: Default::default(),
             packages: BTreeMap::from([
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
@@ -664,6 +665,52 @@ mod tests {
         assert_eq!(forge.release.tag, "core-v1.2.3");
         assert_eq!(forge.release.title, "core v1.2.3");
         assert_eq!(forge.release.body, "## v1.2.3\n\n- Changes");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn forge_release_uses_the_latest_marker_wrapped_custom_changelog() {
+        let root = temporary_root();
+        write_workspace(&root);
+        fs::write(
+            root.join("core/CHANGELOG.md"),
+            concat!(
+                "# Changelog\n\n",
+                "<!-- semifold:release version=1.2.3 -->\n",
+                "Custom release body without a version heading.\n",
+                "<!-- semifold:release:end -->\n\n",
+                "## v1.2.2\n\nLegacy body\n",
+            ),
+        )
+        .unwrap();
+        let repository = RepositoryContext {
+            host: "https://github.com".to_string(),
+            owner: "semifold".to_string(),
+            name: "semifold".to_string(),
+            web_url: "https://github.com/semifold/semifold".to_string(),
+            commit: None,
+        };
+
+        let plan = plan_publish(
+            &root,
+            &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository),
+            },
+        )
+        .await
+        .expect("Forge publish plan must read marker-wrapped changelogs");
+
+        let forge = plan.packages[0]
+            .forge
+            .as_ref()
+            .expect("core package must contain a Forge plan");
+        assert_eq!(forge.release.title, "core v1.2.3");
+        assert_eq!(
+            forge.release.body,
+            "Custom release body without a version heading."
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

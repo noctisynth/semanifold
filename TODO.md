@@ -205,6 +205,13 @@
 - [x] 为依赖传播自动加入发布闭包的 package 生成 `Dependencies` changelog 条目
 - [x] 将 Rust/Node changelog 修改表示为 `FileEdit`
 - [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`
+- [x] 新增 workspace 级 `[changelog]`、`template` 和 `changeset-template` 配置，缺省时使用内置默认模板
+- [x] 扩展 `CommitContext` 的 `short_sha`、commit author 以及 `ChangesetContext.summary_paragraphs`
+- [x] 使用 strict MiniJinja 两阶段渲染 changeset 和 package release block，并保持默认输出兼容
+- [x] 为整体模板暴露原始 changesets、依赖更新以及带预渲染 content 的稳定 section 视图
+- [x] 使用 Semifold release marker 插入和读取任意格式 block，并兼容解析旧 `##` changelog
+- [x] 在 `prepare_release` 和 dry-run 中完成模板编译、渲染与结构校验，失败时保持零文件副作用
+- [x] 为配置、模板作用域、空白、多段 summary、metadata、marker、兼容解析和 CLI 路径建立回归测试
 
 ### 接入 `version`
 
@@ -314,6 +321,7 @@
 - [x] 分支模板只暴露 `release.*`
 - [x] changelog 与 version 包级模板暴露 `release.*`、`package.*`；publish 模板只暴露可从当前 package 重建的 `package.*`
 - [x] 使用 MiniJinja 严格未定义变量模式
+- [x] changelog 整体与单条模板使用 MiniJinja 严格未定义变量模式，并返回带 package/changeset 的结构化错误
 - [x] 在渲染后校验 branch ref、Git tag 和命令参数
 - [x] workspace 模板中不暴露 `release.tag` 或 `release.version`；`common_version = None` 时引用它必须返回配置错误
 - [x] 以 `ReleaseContext` 渲染 `branches.release`，并保持无模板语法的现有字面量配置
@@ -399,6 +407,8 @@
   `clippy::indexing_slicing`，生产代码不存在可识别的 panic 路径
 - [x] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
 - [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
+- [x] changelog 默认模板保持现有输出，自定义模板可控制 release block 和单条 changeset 的渲染格式
+- [x] publish 能读取 marker 包围的自定义 changelog，并对无 marker 的旧格式保持兼容
 - [x] 现有 CLI 主要用法保持稳定；所有 TOML/JSON 配置字段使用 kebab-case，snake_case 不兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容

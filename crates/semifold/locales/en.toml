@@ -83,6 +83,7 @@ skip_post_version = "Skipping post-version command %{command} for %{package} due
 run_post_version = "Running post-version command %{command} for %{package}"
 post_version_recovery = "Post-version command %{command} for %{package} failed after applying %{files}. Changesets remain: %{changesets}. Fix the command and rerun version: %{error}"
 changelog_metadata_degraded = "Could not fetch pull request metadata for %{package}; continuing with a changelog that omits pull request details"
+prepare_failed = "Failed to prepare release: %{error}"
 no_resolver_config = "No resolver config found for %{resolver}, failed to run post-version for %{package}"
 edit_path_invalid = "Planned file edit path %{path} is outside the project root"
 duplicate_edit = "Multiple planned edits target %{path}"
@@ -141,6 +142,7 @@ no_changesets_publish = "No changesets found, will publish the current version."
 no_existing_pr = "No existing PR found, create a new one."
 existing_pr_found = "Existing PR #%{number} found, skip creating a new one."
 release_branch_invalid = "Failed to render a valid release branch: %{error}"
+release_prepare_failed = "Failed to prepare release: %{error}"
 
 [cli.mcp]
 create_failed = "Failed to create changeset: %{error}"

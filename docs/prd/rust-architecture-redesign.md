@@ -646,8 +646,16 @@ pub struct ChangelogContext<'a> {
 pub struct ChangesetContext {
     pub id: ChangesetId,
     pub summary: String,
+    pub summary_paragraphs: Vec<Vec<String>>,
     pub commit: Option<CommitContext>,
     pub pull_request: Option<PullRequestContext>,
+}
+
+pub struct CommitContext {
+    pub sha: String,
+    pub short_sha: String,
+    pub author: Option<String>,
+    pub web_url: Option<String>,
 }
 
 pub struct PackageChangesetContext {
@@ -668,9 +676,14 @@ pub struct DependencyUpdateContext {
 
 changelog 收集层从原始 `Changeset` 构造只读 `ChangesetContext`。一条 changeset 本身没有
 唯一 tag；tag 和 bump 属于其中的 package 条目。对当前 package 收集 changelog 时，将 tag
-通过 `[tags]` 解析为最终展示栏目 `section`，并构造 `PackageChangesetContext`；formatter
+通过 `[tags]` 解析为最终展示栏目 `section`，并构造 `PackageChangesetContext`；renderer
 不读取原始 tag 配置。未指定或未配置 tag 时使用兼容栏目 `Changes`。bump 已由
-`ReleasePlan` 消费且 formatter 不展示，因此不进入 changelog context。
+`ReleasePlan` 消费且 renderer 不展示，因此不进入 changelog context。
+
+`summary` 保留 changeset 原文；`summary_paragraphs` 是内容中立的结构化投影，以一个或多个
+空行划分段落，并保留每段内物理行的顺序，供默认模板在不公开 Markdown 专用 filter 的情况下
+重现现有多段列表项格式。`CommitContext.sha` 是完整 Git object ID，`short_sha` 是其确定性的
+前 7 个字符，`author` 是 Git commit author name；不得把 author email 暴露给模板。
 
 `ChangelogContext` 是一个实际发布 package 的完整聚合输入，而不是单条 changeset 的别名。
 commit 和 pull request 与其来源 changeset 保持在同一个 `ChangesetContext` 内；依赖传播
@@ -686,13 +699,17 @@ commit 和 pull request 与其来源 changeset 保持在同一个 `ChangesetCont
   `PublishContext`，只暴露当前 manifest 可重建的 `package.*` 以及可选 repository/CI
   事实，不暴露或伪造 `release.*`。
 - changelog 额外暴露 `changesets[*].changeset.*`、对应的 `section`、changeset 内可选的
-  `commit` / `pull_request`，以及 `dependency_updates[*]`。
+  `commit` / `pull_request`，以及 `dependency_updates[*]`。单条 changeset 模板以
+  `release.*`、`package.*`、`section` 和 `changeset.*` 为根变量；整体 changelog 模板以
+  `release.*`、`package.*`、`changesets[*]`、`dependency_updates[*]` 和 renderer 生成的
+  `sections[*].{name,entries}` 为根变量，其中 `entries[*]` 同时包含原始 `changeset`、`section`
+  与单条模板生成的 `content`。
 - workspace 级不提供 `release.version` 或 `release.tag`。需要共同版本时显式引用
   `release.plan.common_version`；需要具体 package 版本时按 `PackageId` 显式访问
   `release.plan.packages`。
 
-MiniJinja 必须使用严格未定义变量模式，并在渲染后验证 branch ref、Git tag 和
-命令参数的目标格式。`common_version = None` 时引用该字段必须返回配置错误，
+MiniJinja 必须使用严格未定义变量模式，并在渲染后验证 branch ref、Git tag、
+命令参数和 changelog release block。`common_version = None` 时引用该字段必须返回配置错误，
 不渲染为空字符串。现有 pre-check 和 publish command 的 `package.name`、
 `package.version`、`package.path` 与 `package.private` 字段在迁移期保持兼容。
 version 阶段的 `package.version` 为 `package.next_version` 的兼容别名；publish 阶段的
@@ -1140,11 +1157,84 @@ Post-version 子进程不可能真正纳入跨进程事务。在执行前应尽�
 Changelog 生成应分为两部分：
 
 1. 可选元数据收集：从 Git 和 Forge 获取 commit、PR 和 author；
-2. 纯格式化：根据 changeset、版本和元数据生成 Markdown。
+2. 纯模板渲染：根据 changeset、版本和元数据生成当前 package 的 release block。
 
-格式化器接收 `ChangelogContext` 或其序列化后的模板视图，不应持有 `Context`、`git2::Repository` 或自行创建 `Octocrab`。GitHub PR 元数据查询失败时记录诊断并降级为不含 PR 信息的 changelog，不中断 `version`；该策略必须在收集层实现，不能成为格式化函数的隐式行为。
+renderer 接收 `ChangelogContext` 的只读模板视图，不应持有全局 `Context`、
+`git2::Repository` 或自行创建 `Octocrab`。GitHub PR 元数据查询失败时记录诊断并降级为
+不含 PR 信息的 changelog，不中断 `version`；该策略必须在收集层实现，不能成为模板渲染的
+隐式行为。
 
-每个用户 changeset 必须渲染为一个独立的 Markdown 列表项。只有单段 summary 时，连续列表项保持紧凑。summary 以一个或多个空行划分段落；每个续段必须以一个空行与前段分隔，并将该段的每个物理行统一缩进四个空格，使其保持在同一列表项内。同一段内因源文件行宽产生的硬换行必须保持连续，不得被扩展成多个段落；空行也不得生成仅含缩进空格的伪段落。最后一个续段后必须保留一个空行，再渲染下一个列表项。必须保留所有非空行的原有顺序。commit 与 PR 元数据属于该 changeset 的列表项标题，必须附在第一行，不能落到最后一个续段之后。例如：
+配置新增可选 workspace 级 changelog 模板：
+
+```toml
+[changelog]
+template = """
+## {{ package.next_version }}
+
+{% for section in sections %}
+### {{ section.name }}
+
+{% for entry in section.entries %}
+{{ entry.content }}
+{% endfor %}
+{% endfor %}
+"""
+
+changeset-template = """
+- {{ changeset.summary }}
+"""
+```
+
+配置模型为：
+
+```rust
+pub struct ChangelogConfig {
+    pub template: Option<String>,
+    pub changeset_template: Option<String>,
+}
+```
+
+`template` 渲染一个 package 本次发布的完整 release block；`changeset-template` 渲染一条
+`PackageChangesetContext`。首版只支持配置内的字符串模板，不支持模板文件，也不支持 package
+级覆盖。任一字段缺省时使用对应的内置默认模板；两者都缺省时，生成结果必须与引入模板能力前
+字节级兼容。初始化配置不主动写出空的 `[changelog]`。
+
+renderer 必须分两阶段执行：先以 `release`、`package`、`section` 和 `changeset` 为根变量渲染
+每一条 changeset，再按 `section` 和 changeset ID 的既有稳定顺序形成仅存在于 renderer 内部的
+`RenderedSection` / `RenderedChangeset`，最后以 `release`、`package`、原始 `changesets`、
+`dependency_updates` 和 `sections` 渲染整体模板。整体模板通过
+`sections[*].entries[*].content` 消费单条模板结果；如果用户选择直接遍历原始 `changesets`，
+则视为显式绕过 `changeset-template`。这些中间结果不是领域事实，不进入 `semifold-core`，也不
+写回 `ChangelogContext`。
+
+两个模板必须在一次 `prepare_release` 中以 MiniJinja strict undefined 模式各编译一次并复用于
+全部 package。任一模板编译失败、引用未定义字段、单条结果为空、整体结果为空或包含 Semifold
+保留 marker 时，必须在产生任何文件副作用前返回包含 package、changeset（适用时）、模板种类和
+模板位置的结构化错误。`version --dry-run` 同样编译、渲染并校验模板，但仍不收集远程 PR 元数据。
+
+Semifold 继续拥有 `CHANGELOG.md` 文档骨架和历史内容，用户整体模板只拥有当前 release block。
+为避免把 `##` 标题结构作为隐含模板约束，写入层必须在用户模板结果外添加不可见的稳定边界：
+
+```markdown
+<!-- semifold:release version=1.2.0 -->
+用户模板生成的任意内容
+<!-- semifold:release:end -->
+```
+
+模板不得生成或覆盖上述保留 marker。缺失 changelog 时，Semifold 仍创建包含
+`# Changelog` 根标题的文件；已有文件必须包含唯一可定位的根标题，新 block 插入根标题之后并
+保留全部历史。为同时满足缺省配置的字节级兼容，只有任一用户模板已配置，或目标文件已经包含
+Semifold marker 时，新 block 才添加 marker；从未启用模板且没有 marker 历史的文件继续使用原格式。
+文件一旦包含 marker，后续即使移除自定义模板也继续为新 block 添加 marker，避免最新版本重新变成
+不可可靠定位的无标记内容。`read_latest_changelog` 优先从第一组完整 marker 读取版本和正文，返回正文时排除
+marker；没有 marker 的旧文件继续回退到现有 `# Changelog` 加首个 `## ` 标题的解析方式。
+marker 缺失配对、嵌套、重复开始或版本无效必须作为 changelog 解析错误，不得猜测恢复。
+
+内置默认 changeset 模板保持现有行为：每个用户 changeset 渲染为独立 Markdown 列表项。
+只有单段 summary 时，连续列表项保持紧凑。summary 以一个或多个空行划分段落；每个续段以
+一个空行与前段分隔，并将该段每个物理行统一缩进四个空格，使其保持在同一列表项内。同一段内
+因源文件行宽产生的硬换行保持连续，不扩展成多个段落；空行不生成只含缩进空格的伪段落。
+最后一个续段后保留一个空行，再渲染下一个列表项。commit 与 PR 元数据附在第一行。例如：
 
 ```markdown
 - First line ([#42](https://example.com/pull/42) by @author)
@@ -1156,7 +1246,9 @@ Changelog 生成应分为两部分：
 - Another changeset
 ```
 
-依赖传播而自动加入发布闭包的 package 仍会被发布，不能生成空 changelog。规划器必须为它记录 `ReleaseReason::DependencyPropagation { dependency, next_version }`；格式化器将该原因渲染为独立的 `Dependencies` 区段，例如：
+依赖传播而自动加入发布闭包的 package 仍会被发布，不能生成空 changelog。规划器必须为它记录
+`ReleaseReason::DependencyPropagation { dependency, next_version }`；内置默认整体模板将该原因
+渲染为独立的 `Dependencies` 区段，例如：
 
 ```markdown
 ### Dependencies
@@ -1172,7 +1264,7 @@ Changelog 生成应分为两部分：
 
 Semifold 的 TOML 与 JSON 配置字段统一使用 kebab-case。所有 Rust 字段名中包含下划线的
 配置键必须映射为连字符形式，例如 `dry-run`、`extra-env`、`extra-headers`、`pre-check`、
-`post-version`、`channel-bump` 与 `depends-on`。本次格式切换不为 snake_case 字段提供 alias
+`post-version`、`channel-bump`、`depends-on` 与 `changeset-template`。本次格式切换不为 snake_case 字段提供 alias
 或迁移兼容；仓库自带配置、初始化模板、文档示例和测试 fixture 必须同时切换。Rust 内部字段名
 不受影响，模板变量与 locale key 也不属于配置字段，不随此规则改名。
 

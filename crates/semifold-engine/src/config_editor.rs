@@ -249,6 +249,7 @@ path = "crates/app"
 resolver = "rust"
 channel = "stable"
 assets = ["README.md"]
+github-release = true
 depends-on = ["core"]
 plugin-option = true
 
@@ -319,6 +320,7 @@ custom = "preserved"
         assert!(rendered.contains("# retain this comment and every manual field"));
         assert!(rendered.contains("channel = \"stable\""));
         assert!(rendered.contains("assets = [\"README.md\"]"));
+        assert!(rendered.contains("github-release = true"));
         assert!(rendered.contains("depends-on = [\"core\"]"));
         assert!(rendered.contains("plugin-option = true"));
         assert!(rendered.contains("path = \"crates/new-location\""));

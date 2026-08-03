@@ -150,10 +150,11 @@ fn parse_document(path: &Utf8PathBuf, content: &str) -> Result<DocumentMut, Conf
         })
 }
 
-const SNAKE_CASE_FIELDS: [(&str, &str); 8] = [
+const SNAKE_CASE_FIELDS: [(&str, &str); 9] = [
     ("version_mode", "version-mode"),
     ("channel_bump", "channel-bump"),
     ("depends_on", "depends-on"),
+    ("github_release", "github-release"),
     ("pre_check", "pre-check"),
     ("post_version", "post-version"),
     ("extra_headers", "extra-headers"),
@@ -174,7 +175,7 @@ fn migrate_snake_case_fields(
                 rename_table_fields(
                     package,
                     &format!("packages.{name}"),
-                    &SNAKE_CASE_FIELDS[..3],
+                    &SNAKE_CASE_FIELDS[..4],
                     migrated,
                 )?;
             }
@@ -190,7 +191,7 @@ fn migrate_snake_case_fields(
                 continue;
             };
             let scope = format!("resolver.{name}");
-            rename_table_fields(resolver, &scope, &SNAKE_CASE_FIELDS[3..5], migrated)?;
+            rename_table_fields(resolver, &scope, &SNAKE_CASE_FIELDS[4..6], migrated)?;
             if let Some(pre_check) = resolver
                 .get_mut("pre-check")
                 .and_then(Item::as_table_like_mut)
@@ -198,7 +199,7 @@ fn migrate_snake_case_fields(
                 rename_table_fields(
                     pre_check,
                     &format!("{scope}.pre-check"),
-                    &SNAKE_CASE_FIELDS[5..6],
+                    &SNAKE_CASE_FIELDS[6..7],
                     migrated,
                 )?;
             }
@@ -223,7 +224,7 @@ fn migrate_command_fields(
                 rename_table_fields(
                     command,
                     &format!("{scope}[{index}]"),
-                    &SNAKE_CASE_FIELDS[6..],
+                    &SNAKE_CASE_FIELDS[7..],
                     migrated,
                 )?;
             }
@@ -234,14 +235,14 @@ fn migrate_command_fields(
                     rename_table_fields(
                         command,
                         &format!("{scope}[{index}]"),
-                        &SNAKE_CASE_FIELDS[6..],
+                        &SNAKE_CASE_FIELDS[7..],
                         migrated,
                     )?;
                 }
             }
         }
         Item::Table(command) => {
-            rename_table_fields(command, scope, &SNAKE_CASE_FIELDS[6..], migrated)?;
+            rename_table_fields(command, scope, &SNAKE_CASE_FIELDS[7..], migrated)?;
         }
         _ => {}
     }
@@ -349,4 +350,56 @@ pub enum ConfigMutationError {
     PackageNotConfigured { package: String },
     #[error("configuration is invalid after editing")]
     InvalidResult(#[source] ResolveError),
+}
+
+#[cfg(test)]
+mod tests {
+    use camino::Utf8PathBuf;
+
+    use super::{ConfigMutationError, plan_config_migration};
+
+    #[test]
+    fn migrates_package_github_release_to_kebab_case() {
+        let plan = plan_config_migration(
+            Utf8PathBuf::from("config.toml"),
+            r#"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[packages.app]
+path = "."
+resolver = "rust"
+github_release = true
+
+[resolver.rust]
+"#,
+        )
+        .expect("Package GitHub Release policy must migrate");
+
+        assert!(plan.content.contains("github-release = true"));
+        assert!(!plan.content.contains("github_release"));
+    }
+
+    #[test]
+    fn rejects_conflicting_package_github_release_fields() {
+        let error = plan_config_migration(
+            Utf8PathBuf::from("config.toml"),
+            r#"
+[packages.app]
+path = "."
+resolver = "rust"
+github_release = true
+github-release = false
+"#,
+        )
+        .expect_err("Conflicting GitHub Release policies must fail");
+
+        assert!(matches!(
+            error,
+            ConfigMutationError::SnakeCaseConflict { .. }
+        ));
+    }
 }

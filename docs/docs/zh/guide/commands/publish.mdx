@@ -13,7 +13,7 @@ smif publish [选项]
 `publish` 命令将包发布到各自的注册表。它会：
 
 1. **预检查**：验证版本是否已存在于注册表中
-2. **跳过私有包**：跳过标记为私有的包
+2. **跳过私有包的 Registry 发布**：私有包跳过 Registry 检查和命令，但可通过 `github-release = true` 显式启用 GitHub Release
 3. **运行 prepublish 命令**：执行任何配置的预发布步骤
 4. **发布包**：运行配置的发布命令（如 `cargo publish`、`npm publish`）
 5. **创建 GitHub Release**：在 CI 环境中创建带有变更日志的 GitHub release

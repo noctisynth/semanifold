@@ -186,6 +186,7 @@ mod tests {
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
+            github_release: None,
             depends_on: vec![],
         }
     }

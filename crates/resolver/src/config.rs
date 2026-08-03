@@ -118,6 +118,9 @@ pub struct PackageConfig {
     /// Assets to publish.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assets: Vec<Asset>,
+    /// Whether to create a GitHub Release for this package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github_release: Option<bool>,
     /// Supplemental internal dependency edges keyed by stable package ID.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends_on: Vec<PackageId>,
@@ -136,6 +139,8 @@ struct PackageConfigInput {
     legacy_version_mode: Option<VersionMode>,
     #[serde(default)]
     assets: Vec<Asset>,
+    #[serde(default)]
+    github_release: Option<bool>,
     #[serde(default)]
     depends_on: Vec<PackageId>,
 }
@@ -156,8 +161,16 @@ impl<'de> Deserialize<'de> for PackageConfig {
             channel,
             channel_bump: input.channel_bump,
             assets: input.assets,
+            github_release: input.github_release,
             depends_on: input.depends_on,
         })
+    }
+}
+
+impl PackageConfig {
+    #[must_use]
+    pub fn github_release_enabled(&self, publishable: bool) -> bool {
+        self.github_release.unwrap_or(publishable)
     }
 }
 
@@ -434,6 +447,43 @@ depends-on = ["rust-core", "native-runtime"]
         );
         let rendered = toml_edit::ser::to_string(&config).unwrap();
         assert!(rendered.contains("depends-on = [\"rust-core\", \"native-runtime\"]"));
+    }
+
+    #[test]
+    fn github_release_policy_defaults_to_publishability_and_allows_overrides() {
+        let default: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+"#,
+        )
+        .unwrap();
+        assert!(default.github_release_enabled(true));
+        assert!(!default.github_release_enabled(false));
+
+        let enabled: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+github-release = true
+"#,
+        )
+        .unwrap();
+        assert!(enabled.github_release_enabled(false));
+
+        let disabled: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+github-release = false
+"#,
+        )
+        .unwrap();
+        assert!(!disabled.github_release_enabled(true));
+
+        let rendered = toml_edit::ser::to_string(&enabled).unwrap();
+        assert!(rendered.contains("github-release = true"));
+        assert!(!rendered.contains("github_release"));
     }
 
     #[test]

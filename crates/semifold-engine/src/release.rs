@@ -345,6 +345,7 @@ mod tests {
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
+            github_release: None,
             depends_on: vec![],
         }
     }
@@ -356,6 +357,7 @@ mod tests {
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
+            github_release: None,
             depends_on: vec![],
         }
     }
@@ -367,6 +369,7 @@ mod tests {
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
+            github_release: None,
             depends_on: depends_on.iter().copied().map(PackageId::new).collect(),
         }
     }

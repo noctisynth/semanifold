@@ -298,8 +298,10 @@
 - [x] asset 在计划中仅保留已校验声明，package 命令成功后才展开 glob 并生成稳定
   `ReleaseAsset`，不得遗漏命令生成的产物
 - [x] 基于 `WorkspaceGraph` 生成确定性发布顺序
-- [x] 为 private package 和已发布版本提供显式 skip reason
-- [x] 缺失 `CHANGELOG.md` 的 publishable package 以 `MissingChangelog` 跳过全部发布流程
+- [x] 为 private package 的 registry 发布和已发布版本提供显式 skip reason
+- [x] 缺失 `CHANGELOG.md` 的 package 以 `MissingChangelog` 跳过全部发布流程
+- [x] 增加 package 级 `github-release` 三态策略；保持 public/private 缺省行为，并允许显式控制
+  private package 的 GitHub Release 与 asset upload
 
 ### 外部能力
 

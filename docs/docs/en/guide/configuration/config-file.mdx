@@ -91,6 +91,7 @@ Defines all packages in the workspace that Semifold manages.
 | `resolver` | string | Yes | Resolver type (`rust`, `nodejs`, `python`, `cpp`) |
 | `version-mode` | string | No | Version mode (`semantic` or `pre-release`) |
 | `assets` | array | No | Assets to upload during publish |
+| `github-release` | boolean | No | Override GitHub Release creation for this package; defaults to enabled for public packages and disabled for private packages |
 
 ### Version Modes
 
@@ -114,6 +115,7 @@ assets = [
   { path = "dist/bundle.js", name = "bundle.js" },
   "build/*.wasm"
 ]
+github-release = true
 ```
 
 ---

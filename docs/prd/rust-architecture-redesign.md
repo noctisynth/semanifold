@@ -461,23 +461,31 @@ Registry pre-check、发布命令和 GitHub release 不应存在于 ecosystem ad
 `WorkspaceGraph` 重新构造，不依赖已被 version 消费的 changeset，也不持久化或恢复
 `ReleaseContext`。`PublishContext` 是单个 package 的只读模板快照；pre-check、
 prepublish、publish、asset 和 package GitHub Release 只消费 `package.*` 以及可选的
-repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中的 package；private package
-和 registry 中已存在的版本通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan`
-推断本次发布集合。
+repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中的 package；registry 中已存在的
+版本和缺失 changelog 通过显式 `skip_reason` 表示，而不是借助历史 `ReleasePlan` 推断本次发布
+集合。private package 只跳过 registry preflight 与发布命令，不作为 package 级 skip reason；
+它是否创建 GitHub Release 由 package 发布策略独立决定。
 
-`create_forge_release = true` 时必须同时提供 `RepositoryContext`；engine 在规划阶段读取并验证
-最新 changelog，将完整 `PackageForgePlan` 固化到对应 `PackagePublish`。不创建 Forge release 时
-不读取 changelog 正文，但 publishable package 仍必须通过 changelog 存在性检查。项目根目录作为
-不可变执行事实保存在 application 层 `PublishPlan`，只用于命令工作目录和延迟 asset 解析，不进入
-package 模板 context。
+`PackageConfig` 新增可选的 kebab-case 字段 `github-release`。该字段缺省时保持兼容策略：
+publishable package 默认创建 GitHub Release，private package 默认不创建；显式 `true` 允许任意
+package 创建，显式 `false` 禁止任意 package 创建。最终行为同时受运行入口的全局开关约束：
+`PublishOptions.create_forge_release = false` 始终禁止创建，不能被 package 配置覆盖。
 
-publishable package 必须存在 `<package.path>/CHANGELOG.md` 才能进入 registry preflight、命令或
-Forge release 流程。缺失时以 `PublishSkipReason::MissingChangelog` 显式跳过；private 的 skip
-优先于 changelog 检查。存在但无法解析的 changelog 是计划错误，不允许先发布 package 后才发现
-无法创建 release。
+`create_forge_release = true` 时必须同时提供 `RepositoryContext`；engine 对全局开关与 package
+`github-release` 策略都允许的 package，在规划阶段读取并验证最新 changelog，将完整
+`PackageForgePlan` 固化到对应 `PackagePublish`。不创建 Forge release 时不读取 changelog 正文，
+但所有 package 仍必须通过 changelog 存在性检查。项目根目录作为不可变执行事实保存在
+application 层 `PublishPlan`，只用于命令工作目录和延迟 asset 解析，不进入 package 模板 context。
+
+所有 package 都必须存在 `<package.path>/CHANGELOG.md` 才能进入 registry preflight、命令或
+Forge release 流程。缺失时以 `PublishSkipReason::MissingChangelog` 显式跳过，优先级高于 private
+registry skip。存在但无法解析的 changelog 是计划错误，不允许先发布 package 后才发现无法创建
+release。
 
 publisher 在执行任何 package 命令前先完成所有非 private、未跳过 package 的 registry
-preflight。preflight 失败时不启动任何命令；版本已存在则以
+preflight；private package 不执行 registry preflight 或 package 发布命令，但如果其有效
+`github-release` 策略为 true，仍继续创建 GitHub Release 并上传 asset。preflight 失败时不启动
+任何命令；版本已存在则以
 `PublishSkipReason::RegistryVersionExists` 跳过。随后按 `PublishPlan.packages` 的拓扑顺序逐包
 执行命令、创建 package release 并上传 asset，任一阶段失败即停止后续 package。`PublishPlan`
 只保存已经过语法和路径校验的 `AssetDeclaration`，不得在命令执行前展开 glob 或过滤不存在文件；

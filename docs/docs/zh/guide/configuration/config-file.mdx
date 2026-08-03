@@ -91,6 +91,7 @@ refactor = "Refactors"
 | `resolver` | string | 是 | 解析器类型（`rust`、`nodejs`、`python`、`cpp`） |
 | `version-mode` | string | 否 | 版本模式（`semantic` 或 `pre-release`） |
 | `assets` | array | 否 | 发布时要上传的资源 |
+| `github-release` | boolean | 否 | 覆盖该包的 GitHub Release 创建策略；public 包默认启用，private 包默认禁用 |
 
 ### 版本模式
 
@@ -114,6 +115,7 @@ assets = [
   { path = "dist/bundle.js", name = "bundle.js" },
   "build/*.wasm"
 ]
+github-release = true
 ```
 
 ---

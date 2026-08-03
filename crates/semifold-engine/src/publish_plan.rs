@@ -186,9 +186,7 @@ pub async fn plan_publish(
             }))
             .collect::<Result<Vec<_>, PublishPlanError>>()?;
 
-        let skip_reason = if context.package.private {
-            Some(PublishSkipReason::Private)
-        } else if !root
+        let skip_reason = if !root
             .join(context.package.path.as_std_path())
             .join("CHANGELOG.md")
             .is_file()
@@ -197,7 +195,10 @@ pub async fn plan_publish(
         } else {
             None
         };
-        let forge = if options.create_forge_release && skip_reason.is_none() {
+        let forge = if options.create_forge_release
+            && package_config.github_release_enabled(snapshot.publishable)
+            && skip_reason.is_none()
+        {
             let repository = options
                 .repository
                 .as_ref()
@@ -448,6 +449,7 @@ mod tests {
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
+            github_release: None,
             depends_on: Vec::new(),
         }
     }
@@ -665,6 +667,92 @@ mod tests {
         assert_eq!(forge.release.tag, "core-v1.2.3");
         assert_eq!(forge.release.title, "core v1.2.3");
         assert_eq!(forge.release.body, "## v1.2.3\n\n- Changes");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn private_package_forge_release_requires_explicit_package_opt_in() {
+        let root = temporary_root();
+        write_workspace(&root);
+        fs::write(
+            root.join("core/Cargo.toml"),
+            "[package]\nname = \"core\"\nversion = \"1.2.3\"\npublish = false\n",
+        )
+        .unwrap();
+        let repository = RepositoryContext {
+            host: "https://github.com".to_string(),
+            owner: "semifold".to_string(),
+            name: "semifold".to_string(),
+            web_url: "https://github.com/semifold/semifold".to_string(),
+            commit: None,
+        };
+        let mut config = config("https://registry.test/{{ package.name }}/{{ package.version }}");
+
+        let default_plan = plan_publish(
+            &root,
+            &config,
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository.clone()),
+            },
+        )
+        .await
+        .expect("Private package default publish plan must be created");
+        assert!(default_plan.packages[0].context.package.private);
+        assert!(default_plan.packages[0].forge.is_none());
+
+        config
+            .packages
+            .get_mut("core")
+            .expect("core package configuration must exist")
+            .github_release = Some(true);
+        let enabled_plan = plan_publish(
+            &root,
+            &config,
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository.clone()),
+            },
+        )
+        .await
+        .expect("Explicitly enabled private package Forge plan must be created");
+        assert!(enabled_plan.packages[0].forge.is_some());
+
+        config
+            .packages
+            .get_mut("core")
+            .expect("core package configuration must exist")
+            .github_release = Some(false);
+        config
+            .packages
+            .get_mut("app")
+            .expect("app package configuration must exist")
+            .github_release = Some(false);
+        let disabled_plan = plan_publish(
+            &root,
+            &config,
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository),
+            },
+        )
+        .await
+        .expect("Explicitly disabled package publish plan must be created");
+        assert!(
+            disabled_plan
+                .packages
+                .iter()
+                .all(|package| package.forge.is_none())
+        );
+
+        fs::remove_file(root.join("core/CHANGELOG.md")).unwrap();
+        let missing_changelog_plan = plan_publish(&root, &config, &PublishOptions::default())
+            .await
+            .expect("Missing private package changelog must produce a skip plan");
+        assert_eq!(
+            missing_changelog_plan.packages[0].skip_reason,
+            Some(PublishSkipReason::MissingChangelog)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

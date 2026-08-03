@@ -467,11 +467,11 @@ where
     };
 
     for (package, package_report) in plan.packages.iter_mut().zip(&mut report.packages) {
-        if let Some(
-            skip_reason @ (PublishSkipReason::Private | PublishSkipReason::MissingChangelog),
-        ) = package.skip_reason
-        {
+        if let Some(skip_reason @ PublishSkipReason::MissingChangelog) = package.skip_reason {
             package_report.status = PublishStatus::Skipped(skip_reason);
+            continue;
+        }
+        if package.context.package.private {
             continue;
         }
         let Some(preflight) = &package.preflight else {
@@ -496,26 +496,28 @@ where
         if matches!(package_report.status, PublishStatus::Skipped(_)) {
             continue;
         }
-        for command in &package.commands {
-            if dry_run && !command.run_in_dry_run {
+        if !package.context.package.private {
+            for command in &package.commands {
+                if dry_run && !command.run_in_dry_run {
+                    package_report.commands.push(CommandReport {
+                        phase: command.phase,
+                        executable: command.executable.clone(),
+                        disposition: CommandDisposition::SkippedDryRun,
+                    });
+                    continue;
+                }
+                if let Err(error) = command_runner.run(command) {
+                    package_report.status =
+                        PublishStatus::Failed(PublishFailureStage::Command(command.phase));
+                    package_report.error = Some(error.to_string());
+                    return Err(PublishExecutionError { report });
+                }
                 package_report.commands.push(CommandReport {
                     phase: command.phase,
                     executable: command.executable.clone(),
-                    disposition: CommandDisposition::SkippedDryRun,
+                    disposition: CommandDisposition::Executed,
                 });
-                continue;
             }
-            if let Err(error) = command_runner.run(command) {
-                package_report.status =
-                    PublishStatus::Failed(PublishFailureStage::Command(command.phase));
-                package_report.error = Some(error.to_string());
-                return Err(PublishExecutionError { report });
-            }
-            package_report.commands.push(CommandReport {
-                phase: command.phase,
-                executable: command.executable.clone(),
-                disposition: CommandDisposition::Executed,
-            });
         }
         if let Some(forge) = &forge
             && let Some(forge_plan) = &package.forge
@@ -573,7 +575,11 @@ where
                 }
             }
         }
-        package_report.status = PublishStatus::Succeeded;
+        package_report.status = if package.context.package.private && package.forge.is_none() {
+            PublishStatus::Skipped(PublishSkipReason::Private)
+        } else {
+            PublishStatus::Succeeded
+        };
     }
 
     Ok(report)
@@ -736,7 +742,7 @@ mod tests {
             commands,
             assets: Vec::new(),
             forge: None,
-            skip_reason: private.then_some(PublishSkipReason::Private),
+            skip_reason: None,
         }
     }
 
@@ -901,6 +907,81 @@ mod tests {
                 .lock()
                 .expect("recording command mutex is not poisoned")
                 .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn private_package_skips_registry_commands_but_creates_forge_release_with_assets() {
+        let forge = RecordingForge {
+            created: Mutex::new(Vec::new()),
+            uploaded: Mutex::new(Vec::new()),
+        };
+        let file_system = StaticFileSystem;
+        let asset_resolver = StaticAssetResolver;
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let registry = StaticRegistry {
+            existing: Vec::new(),
+            checked: Mutex::new(Vec::new()),
+        };
+        let mut plan = publish_plan(vec![package(
+            "private",
+            true,
+            vec![command("must-not-run", false)],
+        )]);
+        plan.packages[0].forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "private-v1.0.0".to_string(),
+                title: "private v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
+        plan.packages[0].assets = vec![AssetDeclaration::Glob {
+            pattern: "artifact*.tar.gz".to_string(),
+        }];
+
+        let report = execute_publish_plan(
+            &mut plan,
+            &runner,
+            &registry,
+            Some(ForgeExecution {
+                client: &forge,
+                file_system: &file_system,
+                asset_resolver: &asset_resolver,
+                root: Path::new("."),
+            }),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(report.packages[0].status, PublishStatus::Succeeded);
+        assert_eq!(report.packages[0].forge, ForgeDisposition::Created);
+        assert!(
+            registry
+                .checked
+                .lock()
+                .expect("recording registry mutex is not poisoned")
+                .is_empty()
+        );
+        assert!(
+            runner
+                .commands
+                .lock()
+                .expect("recording command mutex is not poisoned")
+                .is_empty()
+        );
+        assert_eq!(
+            *forge
+                .uploaded
+                .lock()
+                .expect("recording forge mutex is not poisoned"),
+            ["artifact.tar.gz"]
         );
     }
 

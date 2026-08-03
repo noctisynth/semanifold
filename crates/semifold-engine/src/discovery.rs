@@ -35,6 +35,7 @@ impl PackageDiscovery {
                 channel: ReleaseChannel::Stable,
                 channel_bump: None,
                 assets: vec![],
+                github_release: None,
                 depends_on: vec![],
             };
             if configs.insert(package.id.to_string(), config).is_some() {

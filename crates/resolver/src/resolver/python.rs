@@ -155,6 +155,7 @@ impl PythonResolver {
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
+            github_release: None,
             depends_on: vec![],
         }
     }
@@ -896,6 +897,7 @@ mod tests {
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
+            github_release: None,
             depends_on: vec![],
         }
     }

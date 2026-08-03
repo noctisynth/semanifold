@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.0-rc.1
+
+### New Features
+
+- [`2f843f3`](https://github.com/noctisynth/semifold/commit/2f843f38b196bf61cffd41daa6ae07cdccd6fe94): Allow workspace owners to customize complete changelog release blocks and individual changeset entries with strict MiniJinja templates. Template contexts now expose structured summaries and commit metadata, while stable release markers let publish consume arbitrary rendered formats without breaking legacy changelogs.
+
 ## v0.1.0-rc.0
 
 ### New Features

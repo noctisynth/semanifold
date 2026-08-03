@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "aho-corasick"
-version = "1.1.4"
+version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
 dependencies = [
  "memchr",
 ]
@@ -1069,9 +1069,9 @@ dependencies = [
 
 [[package]]
 name = "ignore"
-version = "0.4.31"
+version = "0.4.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8a7b8211e695a1d0cd91cace480d4d0bd57667ab10277cc412c5f7f4884f83"
+checksum = "0b17771570a2b94107741a7b033f19132c2eee21d59d21b24d2ced26500bd66e"
 dependencies = [
  "crossbeam-deque",
  "globset",
@@ -2094,7 +2094,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.3.0-rc.0"
+version = "0.3.0-rc.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-changelog"
-version = "0.3.0-rc.0"
+version = "0.3.0-rc.1"
 dependencies = [
  "git2",
  "minijinja",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-core"
-version = "0.1.0-rc.0"
+version = "0.1.0-rc.1"
 dependencies = [
  "camino",
  "semver",
@@ -2155,7 +2155,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-engine"
-version = "0.2.0-rc.0"
+version = "0.2.0-rc.1"
 dependencies = [
  "bytes",
  "camino",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.4.0-rc.0"
+version = "0.4.0-rc.1"
 dependencies = [
  "camino",
  "clap",

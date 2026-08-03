@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.0-rc.1
+
+### Bug Fixes
+
+- [`b4871b3`](https://github.com/noctisynth/semifold/commit/b4871b3749d814ddb9b7ca38e84c0e2f46d78e37): Stop forcing Cargo offline mode in the Rust resolver's default post-version lockfile generation command.
+
+### New Features
+
+- [`2f843f3`](https://github.com/noctisynth/semifold/commit/2f843f38b196bf61cffd41daa6ae07cdccd6fe94): Allow workspace owners to customize complete changelog release blocks and individual changeset entries with strict MiniJinja templates. Template contexts now expose structured summaries and commit metadata, while stable release markers let publish consume arbitrary rendered formats without breaking legacy changelogs.
+- [`42f88c9`](https://github.com/noctisynth/semifold/commit/42f88c9302f8d974c8351aaa30297b0aff2fb002): Write the built-in release and changeset changelog templates into newly initialized configuration files so users can discover and customize them immediately, while retaining the same templates as fallbacks for older configurations.
+- [`145ccec`](https://github.com/noctisynth/semifold/commit/145ccecb196b51bbe40d1123c6b7ad6f4678aa25): Add an optional per-package `github-release` policy. Public packages keep GitHub Releases enabled by
+    default, private packages keep them disabled by default, and either default can now be overridden
+    explicitly without changing registry publishability.
+
 ## v0.3.0-rc.0
 
 ### Bug Fixes

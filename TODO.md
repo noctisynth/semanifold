@@ -393,6 +393,56 @@
 - [x] CLI、CI 和 MCP 不复制业务编排
 - [x] 发布计算中不存在 `RefCell` 或隐式全局可变 map
 
+## 阶段 7：向 CI/CD 暴露版本化工作流输出
+
+### 输出契约
+
+- [ ] 确定 `version` / `publish` 的 GitHub Actions output key、启用方式和 schema 兼容周期
+- [ ] 定义带 `schema-version` 的 version workflow DTO，覆盖 plan fingerprint、release branch 和
+  实际发布 package 的稳定版本事实
+- [ ] 定义带 `schema-version` 的 publish workflow DTO，覆盖 package 发布状态和部分失败恢复事实
+- [ ] 确定 dry-run、publish 失败及 output 写入失败的优先级和退出语义
+- [ ] 建立敏感字段 allowlist，禁止输出 header、环境变量、token、命令配置和 author email
+
+### 应用与 GitHub Actions 边界
+
+- [ ] 从 version 使用的同一个 `ReleaseContext` 派生 workflow output，不在 changeset 消费后重新推断
+- [ ] 从 `PublishPlan` 与 `PublishReport` 派生 publish workflow output，并保留 succeeded、skipped、
+  failed 和 not-started 状态
+- [ ] 抽取 workflow output writer port，在 CLI 最外层实现 GitHub Actions 安全多行输出格式
+- [ ] 非 GitHub Actions 环境不写额外文件，也不改变现有终端输出
+- [ ] 让 `smif version` 与 `smif publish` 通过同一个 application output 契约提供后续 step/job 数据
+
+### 阶段完成条件
+
+- [ ] 后续 GitHub Actions job 无需重新读取 changeset，即可取得 version 阶段的确定性发布事实
+- [ ] publish 部分失败时仍能取得完整结构化恢复状态
+- [ ] workflow output schema 具有兼容性测试，且敏感字段不会进入输出
+
+## 阶段 8：可扩展 ecosystem 插件
+
+### 协议与身份
+
+- [ ] 决定首版使用 JavaScript、Lua 或同时支持二者，并确定沙箱、capability、资源限制与超时策略
+- [ ] 决定插件分发、版本锁定、协议兼容周期，以及首版版本模型是否限定为 SemVer
+- [ ] 将闭集 `Ecosystem` / `ResolverType` 演进为稳定 `EcosystemId`，同时保留内置生态固定 ID
+- [ ] 定义带 schema version 的插件元数据及 discover、inspect、plan-edits 序列化协议
+- [ ] 定义插件结构化诊断，携带插件、操作、package 和相关路径
+
+### Host 与 adapter 集成
+
+- [ ] 实现脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
+- [ ] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
+- [ ] 为插件提供显式文件读取 capability；禁止其直接写文件、运行发布命令、访问 registry 或 Forge
+- [ ] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
+- [ ] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID
+
+### 阶段完成条件
+
+- [ ] 至少一个仓库外脚本插件完成单包、workspace、内部依赖和版本修改 fixture
+- [ ] 同一插件输入重复运行产生稳定结果，越界路径、非法 edit、超时和协议不兼容均返回结构化错误
+- [ ] ecosystem 插件不改变 publish/pre-check/Forge 的既有应用层职责边界
+
 ## 最终验收
 
 - [x] `cargo fmt --all --check` 通过
@@ -415,6 +465,8 @@
 - [x] 现有 CLI 主要用法保持稳定；所有 TOML 配置字段使用 kebab-case，snake_case 不兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
+- [ ] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
+- [ ] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning
 
 ## 实施前需要确认的决策
 
@@ -435,3 +487,5 @@
 - [x] 将 publish pre-check 改为带 `type` 的 `http` / `command` 强类型配置
 - [x] HTTP pre-check 仅将 200 视为存在、404 视为不存在，其他状态均失败
 - [x] command pre-check 实现固定 JSON Lines stdin/stdout 契约，并在 dry-run 中照常执行
+- [ ] 决定旧 HTTP pre-check 缺少 `type` 时是否默认按 HTTP 解析；若继续严格解析，则将
+  `config migrate` 调整到严格 `Project` 加载之前执行

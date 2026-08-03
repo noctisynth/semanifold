@@ -975,6 +975,34 @@ depends-on = ["rust-core"]
   的独立任务定义；
 - 新增 package 或执行 `config sync` 时不自动生成 `depends-on`，已有字段和顺序必须保留。
 
+### 7.4 可扩展 ecosystem 插件（后续阶段）
+
+Rust、Node.js、Python 与 C++ 之外的特定领域项目可能具有私有 manifest、版本来源和依赖规则。
+后续应允许使用 JavaScript、Lua 或最终选定的受支持脚本运行时实现 ecosystem 插件，而不要求将
+领域逻辑编译进 Semifold 主程序。该能力是内置 `EcosystemAdapter` 的扩展边界，不恢复旧的全局
+resolver 职责。
+
+脚本插件不能直接实现 Rust trait；host 应提供稳定、带 schema version 的序列化协议，将插件调用
+映射为与 `EcosystemAdapter` 等价的 `discover`、`inspect` 和 `plan-edits` 能力。插件返回
+`PackageInspection`、依赖声明和候选 `FileEdit`，由 host 继续执行路径规范化、PackageId 唯一性、
+依赖图、文件 hash、冲突和项目根边界校验。插件不得直接写文件、运行发布命令、访问 registry 或
+创建 Forge release；publish hook、pre-check 与外部副作用仍由 engine 的既有端口统一编排。
+
+为支持动态生态，现有闭集 `Ecosystem` / `ResolverType` 最终需要引入稳定的动态
+`EcosystemId`，同时为四个内置生态保留固定 ID。插件注册、配置同步与 package 配置必须引用该
+稳定 ID，不能依赖插件加载顺序。插件协议至少需要覆盖：
+
+- 插件元数据、协议版本和生态 ID；
+- package discovery、manifest inspection、依赖提取和版本来源；
+- 基于完整 `VersionMap` 的确定性 edit 规划；
+- 结构化诊断，包含插件、操作、package 和相关路径；
+- 显式声明的文件读取范围及其他 host capability。
+
+插件输入必须是不可变快照，输出必须可序列化和确定性排序。同一输入重复执行应产生相同结果；
+host 不信任插件返回的路径、文件内容或依赖关系，所有结果都必须经过与内置 adapter 相同的验证。
+运行时选择（JavaScript、Lua、二者或其他沙箱形式）、插件分发与锁定方式、权限模型、超时/资源
+限制、脚本 API 的兼容策略，以及首版是否只支持 SemVer，均在实现前单独决策。
+
 ## 8. Crate 和模块边界
 
 建议使用四层结构，避免过度拆分：
@@ -1869,6 +1897,32 @@ pub struct ChangesetPackageInput {
 }
 ```
 
+### 14.4 GitHub Actions 工作流输出
+
+部分项目的构建、签名、制品组装或发布只能在 CI/CD 的后续 job 中完成，无法由本地 CLI 的
+prepublish/publish hook 在一个进程内闭环。`smif version` 与 `smif publish` 后续应支持将经过筛选
+的发布事实写入 GitHub Actions 提供的 output 文件，使 workflow 可以把 Semifold 的计划和执行
+结果传递给后续 step 或映射为 job output。
+
+该能力不得直接序列化内部 `ReleaseContext`、`PublishContext` 或 error 类型。application 层应从
+这些模型派生稳定、带 `schema-version` 的 workflow DTO，再由 GitHub Actions output adapter
+负责写入。这样内部 context 可以继续演进，而 workflow 消费方只依赖显式兼容契约。
+
+version 输出至少需要表达本次 plan fingerprint、release branch，以及每个实际进入发布计划的
+package 的稳定 ID、manifest name、当前版本、目标版本、tag 和相对路径。它来源于 version 使用的
+同一个 `ReleaseContext`，不得在 changeset 被消费后重新推断。publish 输出至少需要表达每个
+package 的 ID、名称、版本、tag、相对路径、private 状态，以及最终 succeeded、skipped、failed
+或 not-started disposition；发生部分失败时，结构化 `PublishReport` 中已经完成和未启动的状态仍
+应可供后续恢复步骤消费。
+
+workflow DTO 不得包含 registry header、环境变量值、命令配置、token、author email 或其他秘密。
+非 GitHub Actions 环境默认不写入任何额外文件，也不改变现有终端输出。output writer 是独立外部
+端口，不能进入 core，且必须使用 GitHub Actions 支持的安全多行写入格式，避免换行或用户内容
+破坏 output 边界。
+
+具体 output key、JSON schema、是否需要显式 CLI 开关、dry-run 是否写 planned output、publish
+失败时 output 写入失败与原始发布失败的优先级，以及 schema 的兼容周期，在实现前单独确定。
+
 ## 15. 错误模型
 
 `anyhow` 适合 CLI 最外层补充上下文，但 core、ecosystems 和 engine 内应返回分层错误：
@@ -2138,6 +2192,13 @@ adapter 暴露旧 `ResolvedPackage`。
     `VersionSourceId` 表示；组内取最高 bump，要求 channel 与 `channel-bump` 一致，全部成员进入
     版本闭包，private 成员参与计算但跳过 publish，并只编辑一次
     `[workspace.package].version`。该关系不从 `ReleaseContext` 推导。
+11. 旧 HTTP pre-check 缺少 `type` 但包含 `url` 时，运行时 loader 是否应默认按 HTTP 解析。若保持
+    当前严格判别字段规则，则 `config migrate` 必须在严格 `Project` 加载前读取并迁移原始 TOML；
+    若允许默认 HTTP，则只对旧 `url` 结构兼容，command pre-check 仍必须显式声明 `type`。
+12. GitHub Actions workflow output 的 key、版本化 JSON schema、启用方式、dry-run/失败路径语义
+    和写入失败优先级。
+13. ecosystem 插件首版选择 JavaScript、Lua 或同时支持二者；同时确定运行时沙箱、capability、
+    资源限制、插件分发/锁定、ABI 兼容周期，以及版本模型是否限定为 SemVer。
 
 ### 19.1 低优先级优化：首次发布状态
 

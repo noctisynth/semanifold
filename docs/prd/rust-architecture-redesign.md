@@ -1883,6 +1883,13 @@ CLI 与 MCP 提交 changeset 时都先将各自的参数或交互结果映射为
 名称规范化、重复文件检查、package/tag 校验和写入；入口层不得直接构造或提交 resolver
 `Changeset`：
 
+从磁盘加载 changeset 时必须执行与创建路径一致的领域校验。当前生成格式使用位于文件开头和
+YAML front matter 结尾的两个独占一行的 `---`；加载器同时兼容不含开头 marker、仅以一个 `---`
+结束 front matter 的旧格式。除此之外的缺失、重复或出现在正文中的独立分隔符必须拒绝。front
+matter 必须包含至少一个已配置 package，分隔符之后必须包含非空 summary；空 package 集合和空
+summary 必须在 changeset 加载阶段返回结构化错误，不得延迟到 release planning 或 changelog 渲染
+阶段。`status` 可以继续只构造纯 `ReleasePlan`，但其输入必须已经通过上述完整校验。
+
 ```rust
 pub struct ChangesetDraft {
     pub name: String,

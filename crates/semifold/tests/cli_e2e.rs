@@ -93,6 +93,27 @@ fn status_reports_the_complete_dependency_cycle() {
 }
 
 #[test]
+fn status_rejects_an_empty_changeset_summary() {
+    let root = temporary_project("empty-changeset-summary", &config("channel = \"stable\""));
+    fs::write(
+        root.join(".changes/feature.md"),
+        "app: patch:chore\n---\n\n",
+    )
+    .unwrap();
+
+    let status = run_smif(&root, &["status"]);
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(output.contains("failed to load changesets"), "{output}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn status_and_dry_run_version_leave_the_workspace_unchanged() {
     let root = temporary_project("status-version", &config("channel = \"stable\""));
     let manifest = root.join("Cargo.toml");

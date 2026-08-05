@@ -70,17 +70,37 @@ impl Changeset {
 
     pub fn from_file(config: &Config, path: &PathBuf) -> Result<Self, ResolveError> {
         let changeset_str = std::fs::read_to_string(path)?;
-        let separator = "---";
+        let separators = changeset_str
+            .split_inclusive('\n')
+            .scan(0, |offset, line| {
+                let start = *offset;
+                *offset += line.len();
+                Some((start, *offset, line))
+            })
+            .filter(|(_, _, line)| line.trim_end_matches(['\r', '\n']) == "---")
+            .map(|(start, end, _)| (start, end))
+            .collect::<Vec<_>>();
+        let (front_matter_start, summary_marker_start, summary_start) = match separators.as_slice()
+        {
+            [(summary_marker_start, summary_start)] if *summary_marker_start != 0 => {
+                (0, *summary_marker_start, *summary_start)
+            }
+            [
+                (opening_marker_start, front_matter_start),
+                (summary_marker_start, summary_start),
+            ] if *opening_marker_start == 0 => {
+                (*front_matter_start, *summary_marker_start, *summary_start)
+            }
+            _ => {
+                return Err(ResolveError::InvalidChangeset {
+                    path: path.to_path_buf(),
+                    reason: "Changeset must contain one front matter separator, with an optional opening `---` marker".to_string(),
+                });
+            }
+        };
 
-        let sep_idx = changeset_str
-            .rfind(separator)
-            .ok_or(ResolveError::InvalidChangeset {
-                path: path.to_path_buf(),
-                reason: "Invalid changeset".to_string(),
-            })?;
-
-        let (left_part, right_part) = changeset_str.split_at(sep_idx);
-        let fm = Yaml::load_from_str(left_part).map_err(|e| ResolveError::InvalidChangeset {
+        let front_matter = &changeset_str[front_matter_start..summary_marker_start];
+        let fm = Yaml::load_from_str(front_matter).map_err(|e| ResolveError::InvalidChangeset {
             path: path.to_path_buf(),
             reason: format!("Failed to parse changeset front matter: {e}"),
         })?;
@@ -131,8 +151,20 @@ impl Changeset {
                 Ok(())
             })?;
         }
+        if packages.is_empty() {
+            return Err(ResolveError::InvalidChangeset {
+                path: path.to_path_buf(),
+                reason: "Changeset must contain at least one package".to_string(),
+            });
+        }
 
-        let summary = right_part[3..].trim().to_string();
+        let summary = changeset_str[summary_start..].trim().to_string();
+        if summary.is_empty() {
+            return Err(ResolveError::InvalidChangeset {
+                path: path.to_path_buf(),
+                reason: "Changeset summary must not be empty".to_string(),
+            });
+        }
 
         Ok(Self {
             name: path
@@ -320,6 +352,62 @@ mod tests {
         let error = Changeset::from_file(&config_with_packages(&["api"]), &path).unwrap_err();
 
         assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_missing_repeated_or_misplaced_separators() {
+        let root = temp_dir("invalid-separators");
+        let config = config_with_packages(&["api"]);
+        for (name, content) in [
+            ("missing", "api: patch\n\nSummary.\n"),
+            ("missing-closing", "---\napi: patch\nSummary.\n"),
+            (
+                "legacy-with-trailing-marker",
+                "api: patch\n---\n\nSummary.\n---\n",
+            ),
+            ("repeated", "---\napi: patch\n---\n\nSummary.\n---\n"),
+        ] {
+            let path = root.join(format!("{name}.md"));
+            fs::write(&path, content).unwrap();
+
+            assert!(matches!(
+                Changeset::from_file(&config, &path),
+                Err(ResolveError::InvalidChangeset { .. })
+            ));
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn accepts_legacy_changesets_without_an_opening_marker() {
+        let root = temp_dir("legacy-without-opening-marker");
+        let path = root.join("legacy.md");
+        fs::write(&path, "api: patch\n---\n\nSummary.\n").unwrap();
+
+        let changeset = Changeset::from_file(&config_with_packages(&["api"]), &path).unwrap();
+
+        assert_eq!(changeset.summary, "Summary.");
+        assert_eq!(changeset.packages.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_empty_packages_and_summary_when_loading() {
+        let root = temp_dir("empty-fields");
+        let config = config_with_packages(&["api"]);
+        for (name, content) in [
+            ("empty-packages", "---\n{}\n---\n\nSummary.\n"),
+            ("empty-summary", "---\napi: patch\n---\n\n"),
+        ] {
+            let path = root.join(format!("{name}.md"));
+            fs::write(&path, content).unwrap();
+
+            assert!(matches!(
+                Changeset::from_file(&config, &path),
+                Err(ResolveError::InvalidChangeset { .. })
+            ));
+        }
         fs::remove_dir_all(root).unwrap();
     }
 

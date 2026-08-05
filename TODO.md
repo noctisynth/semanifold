@@ -342,6 +342,7 @@
 
 ### 项目加载
 
+- [x] 从磁盘加载 changeset 时严格校验 front matter 分隔符、非空 package 集合和非空 summary
 - [x] 定义字段完整的 `Project`
 - [x] 为 `init` 定义独立 `ProjectLocation`
 - [x] 定义结构化 `ProjectLoadError`

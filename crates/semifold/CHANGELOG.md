@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0-rc.2
+
+### New Features
+
+- [`c90d417`](https://github.com/noctisynth/semifold/commit/c90d4173d28e04e951183b3f10bc28905df0df2a): Make HTTP publish pre-checks inject an overridable runtime User-Agent, retry transient failures
+    using configured delays and Retry-After, and report bounded response details for registry errors.
+- [`7ca5d48`](https://github.com/noctisynth/semifold/commit/7ca5d48f26c5de2f888d89c4b45d8650165b9b74): Limit Semifold configuration to TOML and add typed HTTP or command publish pre-checks. Command
+    pre-checks exchange package metadata and existence results through a strict JSON Lines protocol,
+    while HTTP checks now fail safely on statuses other than 200 and 404.
+
 ## v0.3.0-rc.1
 
 ### Bug Fixes

@@ -1,18 +1,5 @@
 # Changelog
 
-## v0.4.0-rc.2
-
-### Bug Fixes
-
-- [`dc12a58`](https://github.com/noctisynth/semifold/commit/dc12a58bbd728e84196d0aaef27a61cf76467d3a): Reject malformed changeset separators, empty package lists, and empty summaries while loading
-    changesets so status reports invalid input before changelog rendering.
-
-### New Features
-
-- [`7ca5d48`](https://github.com/noctisynth/semifold/commit/7ca5d48f26c5de2f888d89c4b45d8650165b9b74): Limit Semifold configuration to TOML and add typed HTTP or command publish pre-checks. Command
-    pre-checks exchange package metadata and existence results through a strict JSON Lines protocol,
-    while HTTP checks now fail safely on statuses other than 200 and 404.
-
 ## v0.4.0-rc.1
 
 ### New Features

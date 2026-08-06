@@ -26,7 +26,6 @@ pub struct InitOptions {
     pub tags: BTreeMap<String, String>,
     pub base_branch: String,
     pub release_branch: String,
-    pub application_version: String,
     pub workflows: Option<InitWorkflowTemplates>,
 }
 
@@ -58,7 +57,7 @@ pub fn plan_init(
     let packages = discovery
         .default_package_configs()
         .map_err(InitPlanningError::Discovery)?;
-    let resolver = resolver_configs(&resolvers, &options.application_version);
+    let resolver = resolver_configs(&resolvers);
     let config = config::Config {
         branches: BranchesConfig {
             base: options.base_branch.clone(),
@@ -116,28 +115,23 @@ fn render_workflow(
     )
 }
 
-fn resolver_configs(
-    resolvers: &[ResolverType],
-    application_version: &str,
-) -> BTreeMap<ResolverType, ResolverConfig> {
+fn resolver_configs(resolvers: &[ResolverType]) -> BTreeMap<ResolverType, ResolverConfig> {
     resolvers
         .iter()
         .copied()
-        .map(|resolver| (resolver, resolver_config(resolver, application_version)))
+        .map(|resolver| (resolver, resolver_config(resolver)))
         .collect()
 }
 
-fn resolver_config(resolver: ResolverType, application_version: &str) -> ResolverConfig {
-    let user_agent = BTreeMap::from([(
-        "User-Agent".to_string(),
-        format!("Semifold {application_version}"),
-    )]);
+fn resolver_config(resolver: ResolverType) -> ResolverConfig {
+    let retry = || vec![2, 5, 15, 30];
     match resolver {
         ResolverType::Rust => ResolverConfig {
             pre_check: Some(PreCheckConfig::Http {
                 url: "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
                     .to_string(),
-                extra_headers: user_agent,
+                extra_headers: BTreeMap::new(),
+                retry: retry(),
             }),
             prepublish: vec![],
             publish: vec![command("cargo", &["publish"], None)],
@@ -148,6 +142,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
                 url: "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
                     .to_string(),
                 extra_headers: BTreeMap::new(),
+                retry: retry(),
             }),
             prepublish: vec![],
             publish: vec![command(
@@ -161,7 +156,8 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             pre_check: Some(PreCheckConfig::Http {
                 url: "https://pypi.org/pypi/{{ package.name }}/{{ package.version }}/json"
                     .to_string(),
-                extra_headers: user_agent,
+                extra_headers: BTreeMap::new(),
+                retry: retry(),
             }),
             prepublish: vec![],
             publish: vec![],
@@ -171,6 +167,7 @@ fn resolver_config(resolver: ResolverType, application_version: &str) -> Resolve
             pre_check: Some(PreCheckConfig::Http {
                 url: String::new(),
                 extra_headers: BTreeMap::new(),
+                retry: retry(),
             }),
             prepublish: vec![],
             publish: vec![],
@@ -246,7 +243,6 @@ mod tests {
                 tags: BTreeMap::new(),
                 base_branch: "main".to_string(),
                 release_branch: "release".to_string(),
-                application_version: "1.2.3".to_string(),
                 workflows: Some(InitWorkflowTemplates {
                     release: "base={{ base_branch }}{% for resolver in resolvers %} {{ resolver }}{% endfor %}".to_string(),
                     status: "{{ base_branch }}".to_string(),
@@ -271,11 +267,19 @@ mod tests {
         assert!(config.content.contains("[changelog]"));
         assert!(config.content.contains("changeset-template"));
         assert!(config.content.contains("template = \"\"\""));
+        assert!(!config.content.contains("User-Agent"));
         let parsed: config::Config = toml_edit::de::from_str(&config.content).unwrap();
         assert_eq!(
             parsed.changelog,
             semifold_changelog::default_changelog_config()
         );
+        assert!(matches!(
+            parsed
+                .resolver
+                .get(&ResolverType::Nodejs)
+                .and_then(|resolver| resolver.pre_check.as_ref()),
+            Some(PreCheckConfig::Http { retry, .. }) if retry == &[2, 5, 15, 30]
+        ));
         assert!(
             plan.files
                 .iter()
@@ -293,7 +297,7 @@ mod tests {
 
     #[test]
     fn rust_init_generates_lockfile_without_forcing_offline_mode() {
-        let config = resolver_config(ResolverType::Rust, "1.2.3");
+        let config = resolver_config(ResolverType::Rust);
 
         assert_eq!(config.post_version.len(), 1);
         assert_eq!(config.post_version[0].command, "cargo");
@@ -302,5 +306,15 @@ mod tests {
             Some(["generate-lockfile".to_string()].as_slice())
         );
         assert_eq!(config.post_version[0].dry_run, Some(true));
+        let Some(PreCheckConfig::Http {
+            extra_headers,
+            retry,
+            ..
+        }) = config.pre_check
+        else {
+            panic!("Rust init must generate an HTTP pre-check");
+        };
+        assert!(extra_headers.is_empty());
+        assert_eq!(retry, vec![2, 5, 15, 30]);
     }
 }

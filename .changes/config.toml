@@ -48,9 +48,7 @@ channel = "rc"
 [resolver.rust.pre-check]
 type = "http"
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
-
-[resolver.rust.pre-check.extra-headers]
-User-Agent = "Semifold 0.2.0"
+retry = [2, 5, 15, 30]
 
 [[resolver.rust.publish]]
 command = "cargo"
@@ -64,3 +62,4 @@ dry-run = true
 [resolver.nodejs.pre-check]
 type = "http"
 url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+retry = [2, 5, 15, 30]

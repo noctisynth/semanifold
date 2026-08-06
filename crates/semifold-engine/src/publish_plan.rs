@@ -86,6 +86,7 @@ pub enum PlannedPreCheck {
     Http {
         url: String,
         extra_headers: BTreeMap<String, String>,
+        retry: Vec<u64>,
     },
     Command {
         executable: String,
@@ -305,7 +306,11 @@ fn render_preflight(
     working_directory: &Utf8PathBuf,
 ) -> Result<PlannedPreCheck, PublishPlanError> {
     match preflight {
-        PreCheckConfig::Http { url, extra_headers } => {
+        PreCheckConfig::Http {
+            url,
+            extra_headers,
+            retry,
+        } => {
             let url = render_template(url, context)?;
             let parsed = reqwest::Url::parse(&url).map_err(|error| {
                 PublishPlanError::InvalidPreflightUrl {
@@ -321,6 +326,7 @@ fn render_preflight(
             Ok(PlannedPreCheck::Http {
                 url,
                 extra_headers: extra_headers.clone(),
+                retry: retry.clone(),
             })
         }
         PreCheckConfig::Command {
@@ -496,6 +502,7 @@ mod tests {
             pre_check: Some(PreCheckConfig::Http {
                 url: pre_check.to_string(),
                 extra_headers: BTreeMap::new(),
+                retry: Vec::new(),
             }),
             prepublish: Vec::new(),
             publish: vec![CommandConfig {
@@ -556,14 +563,19 @@ mod tests {
     async fn publish_plan_is_rebuilt_from_current_packages_in_topological_order() {
         let root = temporary_root();
         write_workspace(&root);
+        let mut config = config("https://registry.test/{{ package.name }}/{{ package.version }}");
+        let Some(PreCheckConfig::Http { retry, .. }) = config
+            .resolver
+            .get_mut(&ResolverType::Rust)
+            .and_then(|resolver| resolver.pre_check.as_mut())
+        else {
+            panic!("Rust resolver must use an HTTP pre-check");
+        };
+        *retry = vec![2, 5, 15, 30];
 
-        let plan = plan_publish(
-            &root,
-            &config("https://registry.test/{{ package.name }}/{{ package.version }}"),
-            &PublishOptions::default(),
-        )
-        .await
-        .unwrap();
+        let plan = plan_publish(&root, &config, &PublishOptions::default())
+            .await
+            .unwrap();
 
         assert_eq!(
             plan.packages
@@ -574,8 +586,8 @@ mod tests {
         );
         assert!(matches!(
             plan.packages[0].preflight.as_ref().unwrap(),
-            PlannedPreCheck::Http { url, .. }
-                if url == "https://registry.test/core/1.2.3"
+            PlannedPreCheck::Http { url, retry, .. }
+                if url == "https://registry.test/core/1.2.3" && retry == &[2, 5, 15, 30]
         ));
         assert_eq!(plan.packages[0].commands[0].args[1], "--tag=core-v1.2.3");
         fs::remove_dir_all(root).unwrap();

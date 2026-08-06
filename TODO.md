@@ -318,6 +318,7 @@
 ### 执行与报告
 
 - [x] 在执行发布前完成所有可执行的 preflight
+- [x] HTTP pre-check 运行时注入可覆盖的默认 User-Agent，并支持显式 retry 延迟与有界响应诊断
 - [x] 定义 `ReleasePackageContext`、`PublishContext`、`ChangelogContext` 和按场景构造的只读模板视图
 - [x] 定义 changelog 专用 `ChangesetContext`、`PackageChangesetContext` 和 `DependencyUpdateContext`
 - [x] `ChangelogContext` 按 package 聚合 changesets 和依赖更新；tag 在收集层解析为 section，不进入 `ChangesetContext`

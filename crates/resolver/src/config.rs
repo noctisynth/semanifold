@@ -227,6 +227,8 @@ pub enum PreCheckConfig {
         url: String,
         #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
         extra_headers: BTreeMap<String, String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        retry: Vec<u64>,
     },
     Command {
         command: String,
@@ -389,7 +391,18 @@ changeset-template = "Change {{ changeset.summary }}"
         let http: PreCheckConfig =
             toml_edit::de::from_str("type = \"http\"\nurl = \"https://registry.test/pkg/1.0.0\"\n")
                 .unwrap();
-        assert!(matches!(http, PreCheckConfig::Http { .. }));
+        assert!(matches!(
+            http,
+            PreCheckConfig::Http { retry, .. } if retry.is_empty()
+        ));
+        let http: PreCheckConfig = toml_edit::de::from_str(
+            "type = \"http\"\nurl = \"https://registry.test/pkg/1.0.0\"\nretry = [2, 5, 15, 30]\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            http,
+            PreCheckConfig::Http { retry, .. } if retry == [2, 5, 15, 30]
+        ));
         assert!(
             toml_edit::de::from_str::<PreCheckConfig>("url = \"https://registry.test\"").is_err()
         );

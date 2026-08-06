@@ -1,12 +1,14 @@
 use std::{
+    collections::BTreeMap,
     future::Future,
     io::Write,
     path::Path,
     pin::Pin,
     process::{Command, Stdio},
+    time::{Duration, SystemTime},
 };
 
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, RETRY_AFTER, USER_AGENT};
 use semifold_core::PackageId;
 
 use crate::publish_plan::{
@@ -322,6 +324,13 @@ pub struct SystemPreCheckRunner {
     client: reqwest::Client,
 }
 
+const DEFAULT_USER_AGENT: &str = concat!(
+    "semifold-engine/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/noctisynth/semifold)"
+);
+const MAX_ERROR_BODY_BYTES: usize = 4 * 1024;
+
 impl PreCheckRunner for SystemPreCheckRunner {
     fn version_exists<'a>(
         &'a self,
@@ -330,9 +339,11 @@ impl PreCheckRunner for SystemPreCheckRunner {
     ) -> ExternalFuture<'a, Result<bool, PreCheckError>> {
         Box::pin(async move {
             match check {
-                PlannedPreCheck::Http { url, extra_headers } => {
-                    self.http_version_exists(url, extra_headers).await
-                }
+                PlannedPreCheck::Http {
+                    url,
+                    extra_headers,
+                    retry,
+                } => self.http_version_exists(url, extra_headers, retry).await,
                 PlannedPreCheck::Command {
                     executable,
                     args,
@@ -354,43 +365,136 @@ impl SystemPreCheckRunner {
     async fn http_version_exists(
         &self,
         url: &str,
-        extra_headers: &std::collections::BTreeMap<String, String>,
+        extra_headers: &BTreeMap<String, String>,
+        retry: &[u64],
     ) -> Result<bool, PreCheckError> {
-        let headers =
-            extra_headers
-                .iter()
-                .try_fold(HeaderMap::new(), |mut headers, (name, value)| {
-                    let name =
-                        HeaderName::from_bytes(name.as_bytes()).map_err(|error| PreCheckError {
-                            message: format!("invalid registry header name: {error}"),
-                        })?;
-                    let value = HeaderValue::from_str(value).map_err(|error| PreCheckError {
-                        message: format!("invalid registry header value: {error}"),
-                    })?;
-                    headers.insert(name, value);
-                    Ok::<_, PreCheckError>(headers)
-                })?;
-        let response = self
-            .client
-            .get(url)
-            .headers(headers)
-            .send()
-            .await
-            .map_err(|error| PreCheckError {
-                message: format!("registry preflight failed: {error}"),
-            })?;
-        classify_http_pre_check_status(response.status())
+        let headers = pre_check_headers(extra_headers)?;
+        let mut retry_delays = retry.iter();
+        loop {
+            let response = self.client.get(url).headers(headers.clone()).send().await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) => {
+                    let Some(delay) = retry_delays.next() else {
+                        return Err(PreCheckError {
+                            message: format!("registry preflight failed: {error}"),
+                        });
+                    };
+                    tokio::time::sleep(Duration::from_secs(*delay)).await;
+                    continue;
+                }
+            };
+            match response.status() {
+                reqwest::StatusCode::OK => return Ok(true),
+                reqwest::StatusCode::NOT_FOUND => return Ok(false),
+                status if retryable_http_status(status) => {
+                    let Some(configured_delay) = retry_delays.next() else {
+                        return Err(unexpected_http_response(response).await);
+                    };
+                    let delay = retry_after_delay(response.headers(), SystemTime::now())
+                        .unwrap_or_else(|| Duration::from_secs(*configured_delay));
+                    tokio::time::sleep(delay).await;
+                }
+                _ => return Err(unexpected_http_response(response).await),
+            }
+        }
     }
 }
 
-fn classify_http_pre_check_status(status: reqwest::StatusCode) -> Result<bool, PreCheckError> {
-    match status {
-        reqwest::StatusCode::OK => Ok(true),
-        reqwest::StatusCode::NOT_FOUND => Ok(false),
-        status => Err(PreCheckError {
-            message: format!("registry preflight returned unexpected HTTP status {status}"),
-        }),
+fn pre_check_headers(extra_headers: &BTreeMap<String, String>) -> Result<HeaderMap, PreCheckError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(USER_AGENT, HeaderValue::from_static(DEFAULT_USER_AGENT));
+    for (name, value) in extra_headers {
+        let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| PreCheckError {
+            message: format!("invalid registry header name: {error}"),
+        })?;
+        let value = HeaderValue::from_str(value).map_err(|error| PreCheckError {
+            message: format!("invalid registry header value: {error}"),
+        })?;
+        headers.insert(name, value);
     }
+    Ok(headers)
+}
+
+fn retryable_http_status(status: reqwest::StatusCode) -> bool {
+    matches!(
+        status,
+        reqwest::StatusCode::REQUEST_TIMEOUT
+            | reqwest::StatusCode::TOO_EARLY
+            | reqwest::StatusCode::TOO_MANY_REQUESTS
+            | reqwest::StatusCode::INTERNAL_SERVER_ERROR
+            | reqwest::StatusCode::BAD_GATEWAY
+            | reqwest::StatusCode::SERVICE_UNAVAILABLE
+            | reqwest::StatusCode::GATEWAY_TIMEOUT
+    )
+}
+
+fn retry_after_delay(headers: &HeaderMap, now: SystemTime) -> Option<Duration> {
+    let value = headers.get(RETRY_AFTER)?.to_str().ok()?;
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+    let retry_at = httpdate::parse_http_date(value).ok()?;
+    Some(retry_at.duration_since(now).unwrap_or(Duration::ZERO))
+}
+
+async fn unexpected_http_response(mut response: reqwest::Response) -> PreCheckError {
+    let status = response.status();
+    let retry_after = response
+        .headers()
+        .get(RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned);
+    let request_ids = ["x-request-id", "request-id", "x-amzn-requestid", "cf-ray"]
+        .into_iter()
+        .filter_map(|name| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| format!("{name}={value}"))
+        })
+        .collect::<Vec<_>>();
+    let body = read_limited_response_body(&mut response).await;
+    let mut message = format!("registry preflight returned unexpected HTTP status {status}");
+    if let Some(retry_after) = retry_after {
+        message.push_str(&format!("; Retry-After: {retry_after}"));
+    }
+    if !request_ids.is_empty() {
+        message.push_str(&format!("; request ID: {}", request_ids.join(", ")));
+    }
+    match body {
+        Ok((body, truncated)) if !body.trim().is_empty() => {
+            message.push_str(&format!("; response body: {}", body.trim()));
+            if truncated {
+                message.push_str(" [truncated]");
+            }
+        }
+        Ok(_) => {}
+        Err(error) => message.push_str(&format!("; failed to read response body: {error}")),
+    }
+    PreCheckError { message }
+}
+
+async fn read_limited_response_body(
+    response: &mut reqwest::Response,
+) -> Result<(String, bool), reqwest::Error> {
+    let limit_with_probe = MAX_ERROR_BODY_BYTES.saturating_add(1);
+    let mut body = Vec::with_capacity(limit_with_probe.min(1024));
+    while let Some(chunk) = response.chunk().await? {
+        let remaining = limit_with_probe.saturating_sub(body.len());
+        if chunk.len() > remaining {
+            body.extend_from_slice(&chunk[..remaining]);
+            break;
+        }
+        body.extend_from_slice(&chunk);
+        if body.len() == limit_with_probe {
+            break;
+        }
+    }
+    let truncated = body.len() > MAX_ERROR_BODY_BYTES;
+    body.truncate(MAX_ERROR_BODY_BYTES);
+    Ok((String::from_utf8_lossy(&body).into_owned(), truncated))
 }
 
 #[derive(serde::Deserialize)]
@@ -699,13 +803,44 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{Mutex, mpsc},
+        thread,
+    };
 
     use camino::Utf8PathBuf;
     use semifold_core::{Ecosystem, PackageId};
 
     use super::*;
     use crate::publish_plan::{PackagePublish, PublishContext, PublishPackageContext, PublishPlan};
+
+    fn serve_http_responses(responses: Vec<String>) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            for response in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0_u8; 1024];
+                loop {
+                    let read = stream.read(&mut buffer).unwrap();
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..read]);
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let _ = sender.send(String::from_utf8_lossy(&request).into_owned());
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        (format!("http://{address}"), receiver)
+    }
 
     struct RecordingRunner {
         commands: Mutex<Vec<String>>,
@@ -856,6 +991,7 @@ mod tests {
             preflight: Some(PlannedPreCheck::Http {
                 url: id.to_string(),
                 extra_headers: Default::default(),
+                retry: Vec::new(),
             }),
             commands,
             assets: Vec::new(),
@@ -1312,13 +1448,106 @@ mod tests {
     }
 
     #[test]
-    fn http_pre_check_distinguishes_missing_from_failed_requests() {
-        assert!(classify_http_pre_check_status(reqwest::StatusCode::OK).unwrap());
-        assert!(!classify_http_pre_check_status(reqwest::StatusCode::NOT_FOUND).unwrap());
-        assert!(classify_http_pre_check_status(reqwest::StatusCode::UNAUTHORIZED).is_err());
-        assert!(classify_http_pre_check_status(reqwest::StatusCode::TOO_MANY_REQUESTS).is_err());
-        assert!(
-            classify_http_pre_check_status(reqwest::StatusCode::INTERNAL_SERVER_ERROR).is_err()
+    fn http_pre_check_classifies_only_transient_statuses_as_retryable() {
+        for status in [
+            reqwest::StatusCode::REQUEST_TIMEOUT,
+            reqwest::StatusCode::TOO_EARLY,
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            reqwest::StatusCode::BAD_GATEWAY,
+            reqwest::StatusCode::SERVICE_UNAVAILABLE,
+            reqwest::StatusCode::GATEWAY_TIMEOUT,
+        ] {
+            assert!(retryable_http_status(status));
+        }
+        for status in [
+            reqwest::StatusCode::BAD_REQUEST,
+            reqwest::StatusCode::UNAUTHORIZED,
+            reqwest::StatusCode::FORBIDDEN,
+            reqwest::StatusCode::NOT_FOUND,
+        ] {
+            assert!(!retryable_http_status(status));
+        }
+    }
+
+    #[test]
+    fn http_pre_check_parses_both_retry_after_formats() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("12"));
+        assert_eq!(
+            retry_after_delay(&headers, now),
+            Some(Duration::from_secs(12))
         );
+
+        let retry_at = now + Duration::from_secs(30);
+        headers.insert(
+            RETRY_AFTER,
+            HeaderValue::from_str(&httpdate::fmt_http_date(retry_at)).unwrap(),
+        );
+        assert_eq!(
+            retry_after_delay(&headers, now),
+            Some(Duration::from_secs(30))
+        );
+    }
+
+    #[tokio::test]
+    async fn http_pre_check_injects_default_user_agent_and_allows_override() {
+        for (configured, expected) in [
+            (BTreeMap::new(), DEFAULT_USER_AGENT),
+            (
+                BTreeMap::from([("user-agent".to_string(), "custom-agent".to_string())]),
+                "custom-agent",
+            ),
+        ] {
+            let (url, requests) = serve_http_responses(vec![
+                "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    .to_string(),
+            ]);
+            let exists = SystemPreCheckRunner::default()
+                .http_version_exists(&url, &configured, &[])
+                .await
+                .unwrap();
+            assert!(!exists);
+            let request = requests.recv().unwrap().to_ascii_lowercase();
+            assert!(request.contains(&format!("user-agent: {}", expected.to_ascii_lowercase())));
+        }
+    }
+
+    #[tokio::test]
+    async fn http_pre_check_retries_transient_failures_and_reports_final_response() {
+        let (url, requests) = serve_http_responses(vec![
+            "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 0\r\nContent-Length: 9\r\nConnection: close\r\n\r\ntry later"
+                .to_string(),
+            "HTTP/1.1 403 Forbidden\r\nX-Request-Id: request-123\r\nContent-Length: 6\r\nConnection: close\r\n\r\ndenied"
+                .to_string(),
+        ]);
+
+        let error = SystemPreCheckRunner::default()
+            .http_version_exists(&url, &BTreeMap::new(), &[0])
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("403 Forbidden"));
+        assert!(error.to_string().contains("x-request-id=request-123"));
+        assert!(error.to_string().contains("response body: denied"));
+        assert_eq!(requests.iter().count(), 2);
+    }
+
+    #[tokio::test]
+    async fn http_pre_check_truncates_large_error_responses() {
+        let body = "x".repeat(MAX_ERROR_BODY_BYTES + 100);
+        let response = format!(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let (url, _) = serve_http_responses(vec![response]);
+
+        let error = SystemPreCheckRunner::default()
+            .http_version_exists(&url, &BTreeMap::new(), &[])
+            .await
+            .unwrap_err();
+
+        assert!(error.to_string().contains("[truncated]"));
     }
 }

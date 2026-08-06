@@ -131,7 +131,6 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
             tags,
             base_branch,
             release_branch,
-            application_version: env!("CARGO_PKG_VERSION").to_string(),
             workflows,
         },
     )?;

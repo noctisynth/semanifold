@@ -463,13 +463,22 @@ pre-check 是 publish 前对“目标 package version 是否已经存在”的�
 [resolver.rust.pre-check]
 type = "http"
 url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
-
-[resolver.rust.pre-check.extra-headers]
-User-Agent = "Semifold 0.2.0"
+retry = [2, 5, 15, 30]
 ```
 
 HTTP pre-check 只有 `200 OK` 表示目标版本已存在，`404 Not Found` 表示不存在；鉴权、限流、服务端
-错误及其他状态均视为 preflight 失败，不得推断为可发布。
+错误及其他状态均视为 preflight 失败，不得推断为可发布。HTTP runner 必须在运行时注入包含当前
+engine 版本与项目地址的默认 `User-Agent`；配置在 `extra-headers` 中显式提供的 `User-Agent`
+大小写不敏感地覆盖默认值，`init` 不得将运行时默认值固化到配置。
+
+HTTP pre-check 可配置以秒为单位的 `retry` 延迟数组。首次请求立即执行；传输错误以及 `408`、
+`425`、`429`、`500`、`502`、`503`、`504` 按数组顺序等待并重试，其他状态不重试。响应提供有效
+`Retry-After` 时优先使用该值；配置缺省为空数组且不重试，`init` 对 HTTP resolver 显式写入
+`[2, 5, 15, 30]`。计划必须保留已渲染 URL、headers 与 retry 延迟，执行器不得重新读取配置。
+
+非 `200`/`404` 的最终响应错误必须包含 status、有效的 `Retry-After`、常见 request ID 响应头以及
+最多 4 KiB 的 UTF-8 lossy 响应正文；正文超限时明确标记截断。错误不得输出请求 headers，避免把
+registry 凭据写入日志。读取错误响应正文失败时仍返回原 HTTP status 与可用响应头。
 
 需要自定义 registry 或本地策略时可配置 command pre-check：
 

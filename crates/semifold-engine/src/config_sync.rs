@@ -218,6 +218,7 @@ mod tests {
             pre_check: Some(PreCheckConfig::Http {
                 url: String::new(),
                 extra_headers: BTreeMap::new(),
+                retry: Vec::new(),
             }),
             prepublish: vec![],
             publish: vec![],

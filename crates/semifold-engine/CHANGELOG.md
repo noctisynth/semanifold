@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.0-rc.3
+
+### Bug Fixes
+
+- [`b31f342`](https://github.com/noctisynth/semifold/commit/b31f342ef8421d6a312b83099b20d31710ae10ca): Report post-version commands in their actual sequential execution order. Commands with captured
+    output show per-command progress, while commands inheriting the terminal only print a result after
+    their child process exits.
+
+### New Features
+
+- [`b52d510`](https://github.com/noctisynth/semifold/commit/b52d510607c00954cb647f7d3e8b70ee7095f1f5): Expose versioned, allowlisted GitHub Actions outputs from `smif version` and `smif publish`.
+    Version outputs preserve the release plan fingerprint, branch, and package versions, while publish
+    outputs retain complete package recovery states after partial failures without leaking command or
+    environment configuration.
+
 ## v0.2.0-rc.2
 
 ### New Features

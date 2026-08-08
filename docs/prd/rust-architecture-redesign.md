@@ -750,8 +750,8 @@ Unicode 与动态终端状态只存在于 CLI。
 - 以 inherited stdout/stderr 执行外部命令时，必须在整个子进程生命周期暂停动态区域；子进程退出后
   才可恢复 spinner 并渲染该阶段的最终状态，不能让定时 tick 覆盖子进程输出；
 - post-version 命令继续由 engine 按计划顺序执行，并通过 release-apply callback 报告逐命令的
-  started/finished 事件；CLI 在批次开始时明确说明顺序执行，并按实际顺序列出带 package 与命令的
-  完整执行队列，不能在执行前一次性渲染多条“正在运行”。
+  started/finished 事件；CLI 在批次开始时明确说明顺序执行，并以紧凑、去重且保持首次出现顺序的
+  package 列表说明执行范围，不能在执行前一次性渲染多条“正在运行”。
   当命令 stdout 与 stderr 均不继承终端时，为当前命令展示 spinner；任一流继承终端时不展示动态
   状态，仅在子进程退出后渲染该命令的成功或失败结果；
 - 表格与键值事实列必须按 Unicode 显示宽度计算 padding，不能使用 Rust 字符数量格式化宽字符标签；

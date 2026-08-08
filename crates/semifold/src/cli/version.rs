@@ -180,18 +180,20 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
         }
     }
     if !runnable.is_empty() {
-        terminal.line(t!("cli.version.post_version_batch", count = runnable.len()));
-        for (index, planned) in runnable.iter().enumerate() {
-            terminal.line(format!(
-                "  {}",
-                t!(
-                    "cli.version.post_version_queue_item",
-                    index = index + 1,
-                    package = planned.package.as_str().cyan(),
-                    command = format_command(planned).magenta()
-                )
-            ));
+        let mut packages = Vec::new();
+        for planned in runnable {
+            if !packages.contains(&planned.package.as_str()) {
+                packages.push(planned.package.as_str());
+            }
         }
+        terminal.line(t!(
+            "cli.version.post_version_batch",
+            packages = packages
+                .into_iter()
+                .map(|package| package.cyan().to_string())
+                .collect::<Vec<_>>()
+                .join(&t!("cli.version.post_version_package_separator"))
+        ));
     }
 }
 

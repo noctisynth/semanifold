@@ -222,9 +222,13 @@ fn inherited_post_version_output_precedes_each_completed_step() {
 
     assert!(version.status.success(), "{version:?}");
     let stdout = String::from_utf8(version.stdout).unwrap();
-    let first_queued = stdout.find("app — sh -c echo child-one >&2").unwrap();
-    let second_queued = stdout.find("app — sh -c echo child-two >&2").unwrap();
-    assert!(first_queued < second_queued, "{stdout}");
+    let scope_lines = stdout
+        .lines()
+        .filter(|line| line.contains("app") && !line.contains("1.0"))
+        .count();
+    assert_eq!(scope_lines, 1, "{stdout}");
+    assert!(!stdout.contains("echo child-one"), "{stdout}");
+    assert!(!stdout.contains("echo child-two"), "{stdout}");
     let stderr = String::from_utf8(version.stderr).unwrap();
     let child_one = stderr.find("child-one\n").unwrap();
     let completed_one = stderr.find("sh -c echo child-one >&2").unwrap();

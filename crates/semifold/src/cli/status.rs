@@ -1,9 +1,13 @@
 use std::{collections::BTreeSet, env};
 
 use anyhow::Context as _;
+use camino::Utf8Path;
 use clap::Parser;
 use colored::Colorize;
-use octocrab::Octocrab;
+use octocrab::{
+    Octocrab,
+    models::repos::{DiffEntry, DiffEntryStatus},
+};
 use rust_i18n::t;
 use semifold_core::{PackageRelease, PlanWarning, ReleasePlan, ReleaseReason};
 use semifold_engine::{Project, SemifoldService, SystemDependencies};
@@ -29,6 +33,7 @@ pub(crate) struct Repository {
 pub(crate) struct Branch {
     #[serde(rename = "ref")]
     pub ref_name: String,
+    pub sha: String,
     pub label: String,
     pub repo: Repository,
 }
@@ -178,17 +183,22 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
     if status.comment && is_matched {
         let issues = octocrab.issues(owner, repo_name);
 
-        let comments = issues.list_comments(pr_number).send().await?.take_items();
-        let commits = octocrab
-            .pulls(owner, repo_name)
-            .pr_commits(pr_number)
-            .send()
+        let comments = octocrab
+            .all_pages(issues.list_comments(pr_number).send().await?)
             .await?;
-        let last_commit = commits
-            .into_iter()
-            .last()
-            .ok_or_else(|| anyhow::anyhow!(t!("cli.status.comment_no_commits")))?;
-
+        let files = octocrab
+            .all_pages(
+                octocrab
+                    .pulls(owner, repo_name)
+                    .list_files(pr_number)
+                    .await?,
+            )
+            .await?;
+        let changeset_directory = project
+            .changeset_dir
+            .strip_prefix(&project.root)
+            .map_err(|_| anyhow::anyhow!(t!("cli.status.comment_changeset_path_invalid")))?;
+        let branch_changesets = pull_request_changesets(&files, changeset_directory);
         let existing = comments.iter().find(|comment| {
             comment.user.login == "github-actions[bot]"
                 && comment
@@ -199,8 +209,9 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
 
         let comment_body = render_github_comment(&GithubCommentModel::from_plan(
             &plan,
-            &last_commit.sha,
+            &event.pull_request.head.sha,
             &base_ref,
+            branch_changesets,
         ));
 
         if let Some(comment) = existing {
@@ -227,6 +238,7 @@ struct GithubCommentModel {
     sha: String,
     base_branch: String,
     changesets: usize,
+    branch_changesets: Vec<String>,
     packages: Vec<GithubCommentPackage>,
     warnings: Vec<String>,
 }
@@ -240,11 +252,17 @@ struct GithubCommentPackage {
 }
 
 impl GithubCommentModel {
-    fn from_plan(plan: &ReleasePlan, sha: &str, base_branch: &str) -> Self {
+    fn from_plan(
+        plan: &ReleasePlan,
+        sha: &str,
+        base_branch: &str,
+        branch_changesets: Vec<String>,
+    ) -> Self {
         Self {
             sha: sha.to_string(),
             base_branch: base_branch.to_string(),
             changesets: plan.consumed_changesets().len(),
+            branch_changesets,
             packages: plan
                 .packages()
                 .iter()
@@ -277,7 +295,7 @@ fn render_github_comment(model: &GithubCommentModel) -> String {
         t!("cli.status.comment_through", sha = model.sha).into_owned(),
     ];
 
-    if model.packages.is_empty() {
+    if model.branch_changesets.is_empty() {
         sections.push(format!(
             "> [!NOTE]\n> {}\n>\n> {}",
             t!("cli.status.comment_empty"),
@@ -287,6 +305,18 @@ fn render_github_comment(model: &GithubCommentModel) -> String {
             )
         ));
     } else {
+        sections.push(
+            t!(
+                "cli.status.comment_branch_changesets",
+                changesets = model
+                    .branch_changesets
+                    .iter()
+                    .map(|changeset| format!("`{}`", markdown_cell(changeset)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .into_owned(),
+        );
         sections.push(
             t!(
                 "cli.status.comment_summary",
@@ -361,6 +391,32 @@ fn is_semifold_comment_body(body: &str) -> bool {
     body.contains(COMMENT_MARKER) || body.starts_with(LEGACY_COMMENT_PREFIX)
 }
 
+fn pull_request_changesets(files: &[DiffEntry], changeset_directory: &Utf8Path) -> Vec<String> {
+    files
+        .iter()
+        .filter_map(|file| {
+            pull_request_changeset_id(&file.filename, &file.status, changeset_directory)
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn pull_request_changeset_id(
+    filename: &str,
+    status: &DiffEntryStatus,
+    changeset_directory: &Utf8Path,
+) -> Option<String> {
+    if status == &DiffEntryStatus::Removed {
+        return None;
+    }
+    let path = Utf8Path::new(filename);
+    if path.parent() != Some(changeset_directory) || path.extension() != Some("md") {
+        return None;
+    }
+    path.file_stem().map(str::to_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,6 +427,7 @@ mod tests {
             sha: "abc123".to_string(),
             base_branch: "main".to_string(),
             changesets: 0,
+            branch_changesets: Vec::new(),
             packages: Vec::new(),
             warnings: Vec::new(),
         });
@@ -387,6 +444,7 @@ mod tests {
             sha: "abc123".to_string(),
             base_branch: "main".to_string(),
             changesets: 2,
+            branch_changesets: vec!["feature".to_string()],
             packages: vec![GithubCommentPackage {
                 name: "app".to_string(),
                 current_version: "1.0.0".to_string(),
@@ -416,5 +474,40 @@ mod tests {
             "## Workspace change through: abc123"
         ));
         assert!(!is_semifold_comment_body("## Coverage report"));
+    }
+
+    #[test]
+    fn pull_request_changeset_detection_respects_path_extension_and_status() {
+        let directory = Utf8Path::new(".changes");
+        assert_eq!(
+            pull_request_changeset_id(".changes/feature.md", &DiffEntryStatus::Added, directory)
+                .as_deref(),
+            Some("feature")
+        );
+        assert_eq!(
+            pull_request_changeset_id(".changes/fix.md", &DiffEntryStatus::Modified, directory)
+                .as_deref(),
+            Some("fix")
+        );
+        assert!(
+            pull_request_changeset_id(".changes/removed.md", &DiffEntryStatus::Removed, directory)
+                .is_none()
+        );
+        assert!(
+            pull_request_changeset_id(
+                ".changes/config.toml",
+                &DiffEntryStatus::Modified,
+                directory
+            )
+            .is_none()
+        );
+        assert!(
+            pull_request_changeset_id(
+                ".changes/nested/feature.md",
+                &DiffEntryStatus::Added,
+                directory
+            )
+            .is_none()
+        );
     }
 }

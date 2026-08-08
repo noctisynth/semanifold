@@ -94,11 +94,12 @@ comment_failed = "Failed to update the release plan pull request comment: %{erro
 comment_title = "📦 Semifold release plan"
 comment_through = "Plan calculated through commit `%{sha}`."
 comment_summary = "**%{changesets} changesets · %{packages} packages**"
-comment_empty = "This pull request does not add any package version bumps."
+comment_branch_changesets = "Changesets introduced by this pull request: %{changesets}"
+comment_empty = "This pull request does not introduce any changesets."
 comment_empty_release = "After this pull request is merged into `%{branch}`, the release workflow will run and publish any prepared package versions that are not yet available in their registry."
 comment_warnings = "Warnings"
 comment_footer = "This comment updates automatically as the pull request changes."
-comment_no_commits = "The pull request has no commits to use for the release plan comment"
+comment_changeset_path_invalid = "The changeset directory is outside the project root"
 
 [cli.status.flags]
 comment = "Create GitHub pull request comments, only available in CI environment"

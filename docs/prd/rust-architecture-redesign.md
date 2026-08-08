@@ -764,10 +764,14 @@ Unicode 与动态终端状态只存在于 CLI。
 使用内存 writer 或 indicatif `TermLike`，不得依赖人工观察终端。
 
 `status` 的 GitHub PR comment 是独立 Markdown presentation：有发布计划时直接展示 changeset/package
-摘要以及包含当前版本、目标版本、bump 和原因的表格，不将主要信息折叠；无 package bump 时使用
-note 明确说明当前 PR 不新增版本提升，并说明合入目标分支后发布工作流仍会发布已完成版本准备但
+摘要以及包含当前版本、目标版本、bump 和原因的表格，不将主要信息折叠；当前 PR 未引入 changeset
+时使用 note 明确说明该事实，并说明合入目标分支后发布工作流仍会发布已完成版本准备但
 registry 中尚不存在的版本。comment 必须包含稳定的隐藏 marker，只更新 Semifold 自己创建的 bot
 comment；允许通过旧标题识别并迁移历史 Semifold comment，但不得更新其他 GitHub Actions 评论。
+PR 引入的 changeset 必须通过 GitHub PR Files API 相对 base 检测，不依赖可能为 shallow 的本地
+checkout；`.changes` 或 `.changesets` 根目录中非 removed 的 Markdown 文件视为当前 PR 引入或变更的
+changeset，并处理全部分页。comment 必须单独列出这些 changeset，空状态以该集合为空为准，不能将
+base 已有的 changeset 错误归因给当前 PR；全量 `ReleasePlan` 仍是版本表的事实来源。
 
 #### 分层模板变量作用域
 

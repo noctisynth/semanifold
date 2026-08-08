@@ -372,7 +372,7 @@ fn version_renders_multiline_changesets_as_single_list_items() {
     assert!(version.status.success(), "{version:?}");
     let content = fs::read_to_string(&changelog).unwrap();
     assert!(
-        content.contains("- First line\n\n    Second line\n    Third line\n\n"),
+        content.contains("- First line\n\n    Second line Third line\n\n"),
         "{content}"
     );
     assert!(!content.contains("\n    \n"), "{content}");

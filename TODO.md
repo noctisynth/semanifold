@@ -201,7 +201,7 @@
 - [x] 分离 Git/Forge 元数据收集与 Markdown 格式化
 - [x] 定义不可变 `ChangelogContext`
 - [x] 让 changelog 格式化成为纯函数
-- [x] 按空行划分 changeset summary 段落，将续段缩进在同一 Markdown 列表项内，并保留段内硬换行
+- [x] 按空行划分 changeset summary 段落，将续段缩进在同一 Markdown 列表项内，并将段内编辑换行规范化为空格
 - [x] 为依赖传播自动加入发布闭包的 package 生成 `Dependencies` changelog 条目
 - [x] 将 Rust/Node changelog 修改表示为 `FileEdit`
 - [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`

@@ -844,8 +844,9 @@ changelog 收集层从原始 `Changeset` 构造只读 `ChangesetContext`。一�
 `ReleasePlan` 消费且 renderer 不展示，因此不进入 changelog context。
 
 `summary` 保留 changeset 原文；`summary_paragraphs` 是内容中立的结构化投影，以一个或多个
-空行划分段落，并保留每段内物理行的顺序，供默认模板在不公开 Markdown 专用 filter 的情况下
-重现现有多段列表项格式。`CommitContext.sha` 是完整 Git object ID，`short_sha` 是其确定性的
+空行划分段落，并保留每段内物理行的顺序。内置默认模板将同一段的物理行用单个空格连接，避免
+源文件为了行宽产生的编辑换行泄漏到 release note；自定义模板仍可选择使用原文或逐行结构。
+`CommitContext.sha` 是完整 Git object ID，`short_sha` 是其确定性的
 前 7 个字符，`author` 是 Git commit author name；不得把 author email 暴露给模板。
 
 `ChangelogContext` 是一个实际发布 package 的完整聚合输入，而不是单条 changeset 的别名。
@@ -1426,9 +1427,9 @@ marker 缺失配对、嵌套、重复开始或版本无效必须作为 changelog
 
 内置默认 changeset 模板保持现有行为：每个用户 changeset 渲染为独立 Markdown 列表项。
 只有单段 summary 时，连续列表项保持紧凑。summary 以一个或多个空行划分段落；每个续段以
-一个空行与前段分隔，并将该段每个物理行统一缩进四个空格，使其保持在同一列表项内。同一段内
-因源文件行宽产生的硬换行保持连续，不扩展成多个段落；空行不生成只含缩进空格的伪段落。
-最后一个续段后保留一个空行，再渲染下一个列表项。commit 与 PR 元数据附在第一行。例如：
+一个空行与前段分隔，并缩进四个空格，使其保持在同一列表项内。同一段内因源文件行宽产生的
+物理换行必须规范化为单个空格，不能在 release note 中产生缩进续行；空行不生成只含缩进空格的
+伪段落。最后一个续段后保留一个空行，再渲染下一个列表项。commit 与 PR 元数据附在首段末尾。例如：
 
 ```markdown
 - First line ([#42](https://example.com/pull/42) by @author)

@@ -47,7 +47,7 @@ const DEFAULT_CHANGESET_TEMPLATE: &str = concat!(
     "{% if changeset.commit and changeset.commit.web_url %}",
     "[`{{ changeset.commit.short_sha }}`]({{ changeset.commit.web_url }}): ",
     "{% endif %}",
-    "{{ changeset.summary_paragraphs[0][0] }}",
+    "{{ changeset.summary_paragraphs[0] | join(\" \") }}",
     "{% if changeset.pull_request %}",
     " {% if changeset.pull_request.web_url %}",
     "([#{{ changeset.pull_request.number }}]({{ changeset.pull_request.web_url }})",
@@ -57,15 +57,7 @@ const DEFAULT_CHANGESET_TEMPLATE: &str = concat!(
     "{% if changeset.pull_request.author %} by @{{ changeset.pull_request.author }}{% endif %})",
     "{% endif %}",
     "{% for paragraph in changeset.summary_paragraphs %}",
-    "{% if loop.first %}",
-    "{% for summary_line in paragraph %}",
-    "{% if not loop.first %}\n    {{ summary_line }}{% endif %}",
-    "{% endfor %}",
-    "{% else %}\n\n    ",
-    "{% for summary_line in paragraph %}",
-    "{% if not loop.first %}\n    {% endif %}{{ summary_line }}",
-    "{% endfor %}",
-    "{% endif %}",
+    "{% if not loop.first %}\n\n    {{ paragraph | join(\" \") }}{% endif %}",
     "{% endfor %}",
     "{% if changeset.summary_paragraphs | length > 1 %}\n{% endif %}",
 );
@@ -658,7 +650,7 @@ mod tests {
 
         assert_eq!(
             render_default(&context),
-            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line\n    Third line\n\n- Another changeset"
+            "## v1.0.0\n\n### Changes\n\n- First line\n\n    Second line Third line\n\n- Another changeset"
         );
     }
 
@@ -679,7 +671,7 @@ mod tests {
 
         assert_eq!(
             render_default(&context),
-            "## v1.0.0\n\n### Changes\n\n- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so\n    long content wraps without displacing adjacent fields. Linked titles no longer include trailing\n    underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
+            "## v1.0.0\n\n### Changes\n\n- Keep resume item columns within predictable bounds\n\n    The default template now gives job titles, organizations, and dates independent grid columns so long content wraps without displacing adjacent fields. Linked titles no longer include trailing underline space, and a complete Chinese sample covers long-title wrapping and all resume sections.\n"
         );
     }
 
@@ -711,7 +703,7 @@ mod tests {
         };
         assert_eq!(
             render_default(&context),
-            "## v1.0.0\n\n### Changes\n\n- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line ([#42](https://github.com/semifold/semifold/pull/42) by @author)\n    Second line\n    Third line"
+            "## v1.0.0\n\n### Changes\n\n- [`1234567`](https://github.com/semifold/semifold/commit/1234567890abcdef): First line Second line Third line ([#42](https://github.com/semifold/semifold/pull/42) by @author)"
         );
     }
 

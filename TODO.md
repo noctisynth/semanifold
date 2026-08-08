@@ -429,6 +429,8 @@
 - [x] 建立 CLI-only `Terminal`、presentation model 与 `ProgressReporter` 边界
 - [x] 使用 `indicatif` 实现动态进度，并为非 TTY 提供稳定 plain 降级
 - [x] 让 logger 与动态进度共享输出协调机制，禁止日志破坏动态区域
+- [x] 外部命令继承终端输出时暂停动态进度，避免 spinner 覆盖子进程输出
+- [x] 键值事实与表格统一按 Unicode 显示宽度对齐
 - [x] 移除 debug 中的完整配置、GitHub event 和其他潜在敏感信息
 
 ### 核心命令

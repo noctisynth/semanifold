@@ -97,7 +97,7 @@ impl Terminal {
     }
 
     pub(crate) fn fact(&self, label: &str, value: impl std::fmt::Display) {
-        println!("  {:<14} {}", label.dimmed(), value);
+        println!("  {} {}", Self::cell(label, 14).dimmed(), value);
     }
 
     pub(crate) fn line(&self, message: impl std::fmt::Display) {
@@ -213,6 +213,14 @@ pub(crate) struct ProgressTask {
 }
 
 impl ProgressTask {
+    pub(crate) fn suspend<T>(&self, operation: impl FnOnce() -> T) -> T {
+        if self.plain {
+            operation()
+        } else {
+            self.bar.suspend(operation)
+        }
+    }
+
     pub(crate) fn finish(self, outcome: StepOutcome, message: impl Into<String>) {
         let message = message.into();
         let symbol = symbol(self.unicode, outcome);
@@ -265,5 +273,11 @@ mod tests {
         assert_eq!(terminal.symbol(StepOutcome::Success), "[ok]");
         assert_eq!(terminal.symbol(StepOutcome::Failed), "[failed]");
         assert_eq!(Terminal::cell("目标版本", 12), "目标版本    ");
+    }
+
+    #[test]
+    fn fact_labels_use_unicode_display_width() {
+        assert_eq!(Terminal::cell("变更集", 14), "变更集        ");
+        assert_eq!(Terminal::cell("计划指纹", 14), "计划指纹      ");
     }
 }

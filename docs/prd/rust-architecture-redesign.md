@@ -747,6 +747,9 @@ Unicode 与动态终端状态只存在于 CLI。
   事实，并给出可执行恢复建议；
 - 动态区域存在时，普通消息必须经 `ProgressBar::suspend` 或统一 progress manager 输出，不能破坏
   光标状态；
+- 以 inherited stdout/stderr 执行外部命令时，必须在整个子进程生命周期暂停动态区域；子进程退出后
+  才可恢复 spinner 并渲染该阶段的最终状态，不能让定时 tick 覆盖子进程输出；
+- 表格与键值事实列必须按 Unicode 显示宽度计算 padding，不能使用 Rust 字符数量格式化宽字符标签；
 - `--debug` 不得打印完整配置、GitHub event、header、环境变量、token、命令环境或其他敏感值。
 
 首个切片改造 `status`、`version` 与 `publish`：status 展示 changeset/package 数量、fingerprint、

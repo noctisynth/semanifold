@@ -79,14 +79,16 @@ pub(crate) async fn prepare_and_apply_release(
     } else {
         t!("cli.version.applying").into_owned()
     });
-    let apply_result = service.apply_release(
-        plan,
-        if dry_run {
-            ExecutionMode::DryRun
-        } else {
-            ExecutionMode::Apply
-        },
-    );
+    let apply_result = apply_progress.suspend(|| {
+        service.apply_release(
+            plan,
+            if dry_run {
+                ExecutionMode::DryRun
+            } else {
+                ExecutionMode::Apply
+            },
+        )
+    });
     let report = match apply_result {
         Ok(report) => report,
         Err(error) => {

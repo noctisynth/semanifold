@@ -755,6 +755,9 @@ Unicode 与动态终端状态只存在于 CLI。
   当命令 stdout 与 stderr 均不继承终端时，为当前命令展示 spinner；任一流继承终端时不展示动态
   状态，仅在子进程退出后渲染该命令的成功或失败结果；
 - 表格与键值事实列必须按 Unicode 显示宽度计算 padding，不能使用 Rust 字符数量格式化宽字符标签；
+- 面向交互终端的结果表必须在完成列宽计算后应用一致的语义颜色，避免 ANSI 控制序列破坏对齐；
+  package 标识使用强调色，版本使用版本色，succeeded、skipped、failed 与 not-started 分别使用
+  成功、提醒、失败与弱化色。非 TTY、`NO_COLOR` 与 `TERM=dumb` 下仍退化为内容完全相同的纯文本；
 - `--debug` 不得打印完整配置、GitHub event、header、环境变量、token、命令环境或其他敏感值。
 
 首个切片改造 `status`、`version` 与 `publish`：status 展示 changeset/package 数量、fingerprint、

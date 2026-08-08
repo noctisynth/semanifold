@@ -441,6 +441,7 @@
 - [x] 通过 GitHub PR Files API 检测并展示当前分支引入或变更的 changeset
 - [x] `version` 展示 plan/prepare/validate/apply/post-version/changeset 消费阶段与最终版本表
 - [x] `publish` 展示 preflight、命令、Forge、asset 与 succeeded/skipped/failed/not-started 摘要
+- [x] `publish` 结果表在列宽计算后按 package、版本与四态结果应用语义颜色
 - [x] dry-run 在开头和结尾明确标识未应用的副作用
 - [x] 部分失败展示已完成、失败、未开始事实和可执行恢复建议
 

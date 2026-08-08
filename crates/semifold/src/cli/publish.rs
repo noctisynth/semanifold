@@ -1,4 +1,5 @@
 use clap::Parser;
+use colored::Colorize;
 use rust_i18n::t;
 use semifold_engine::{
     AppError, ExecutionMode, Project, PublishOptions, PublishReport, PublishWorkflowOutput,
@@ -173,11 +174,19 @@ fn render_publish_report(
                 t!("cli.publish.detail_not_started"),
             ),
         };
+        let status = Terminal::cell(status, 14);
+        let detail = detail.into_owned();
+        let (status, detail) = match package.status {
+            PublishStatus::Succeeded => (status.green().bold(), detail.green()),
+            PublishStatus::Skipped(_) => (status.yellow().bold(), detail.yellow()),
+            PublishStatus::Failed(_) => (status.red().bold(), detail.red()),
+            PublishStatus::NotStarted => (status.dimmed(), detail.dimmed()),
+        };
         terminal.line(format!(
             "  {} {} {} {}",
-            Terminal::cell(package.package.as_str(), 24),
-            Terminal::cell(planned.context.package.version.to_string(), 16),
-            Terminal::cell(status, 14),
+            Terminal::cell(package.package.as_str(), 24).cyan().bold(),
+            Terminal::cell(planned.context.package.version.to_string(), 16).yellow(),
+            status,
             detail
         ));
     }

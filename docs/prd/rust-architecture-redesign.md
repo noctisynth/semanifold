@@ -763,6 +763,12 @@ Unicode 与动态终端状态只存在于 CLI。
 反馈。展示层必须有 TTY/非 TTY、dry-run、成功、skip、部分失败、宽字符和敏感信息回归测试；测试
 使用内存 writer 或 indicatif `TermLike`，不得依赖人工观察终端。
 
+`status` 的 GitHub PR comment 是独立 Markdown presentation：有发布计划时直接展示 changeset/package
+摘要以及包含当前版本、目标版本、bump 和原因的表格，不将主要信息折叠；无 package bump 时使用
+note 明确说明当前 PR 不新增版本提升，并说明合入目标分支后发布工作流仍会发布已完成版本准备但
+registry 中尚不存在的版本。comment 必须包含稳定的隐藏 marker，只更新 Semifold 自己创建的 bot
+comment；允许通过旧标题识别并迁移历史 Semifold comment，但不得更新其他 GitHub Actions 评论。
+
 #### 分层模板变量作用域
 
 模板渲染必须在 `ReleasePlan` 完成和必需事实收集后执行。不同场景使用不同的

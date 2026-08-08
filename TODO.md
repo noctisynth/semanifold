@@ -437,6 +437,7 @@
 ### 核心命令
 
 - [x] `status` 展示计划 fingerprint、bump、原因和明确完成摘要
+- [x] 优化 `status` GitHub PR comment，并为空计划解释合入后的未发布版本发布行为
 - [x] `version` 展示 plan/prepare/validate/apply/post-version/changeset 消费阶段与最终版本表
 - [x] `publish` 展示 preflight、命令、Forge、asset 与 succeeded/skipped/failed/not-started 摘要
 - [x] dry-run 在开头和结尾明确标识未应用的副作用

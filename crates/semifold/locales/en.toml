@@ -91,6 +91,14 @@ pre_release_warning = "%{package} is currently in a pre-release mode, but a non-
 pre_release_warning_header = "Warnings:"
 plan_failed = "Failed to build release plan: %{error}"
 comment_failed = "Failed to update the release plan pull request comment: %{error}"
+comment_title = "📦 Semifold release plan"
+comment_through = "Plan calculated through commit `%{sha}`."
+comment_summary = "**%{changesets} changesets · %{packages} packages**"
+comment_empty = "This pull request does not add any package version bumps."
+comment_empty_release = "After this pull request is merged into `%{branch}`, the release workflow will run and publish any prepared package versions that are not yet available in their registry."
+comment_warnings = "Warnings"
+comment_footer = "This comment updates automatically as the pull request changes."
+comment_no_commits = "The pull request has no commits to use for the release plan comment"
 
 [cli.status.flags]
 comment = "Create GitHub pull request comments, only available in CI environment"

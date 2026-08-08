@@ -1,18 +1,18 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    env,
-};
+use std::{collections::BTreeSet, env};
 
 use anyhow::Context as _;
 use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semifold_core::{PlanWarning, ReleaseReason};
+use semifold_core::{PackageRelease, PlanWarning, ReleasePlan, ReleaseReason};
 use semifold_engine::{Project, SemifoldService, SystemDependencies};
 use serde::{Deserialize, Serialize};
 
 use crate::cli::terminal::{StepOutcome, Terminal};
+
+const COMMENT_MARKER: &str = "<!-- semifold:release-plan -->";
+const LEGACY_COMMENT_PREFIX: &str = "## Workspace change through:";
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RepoOwner {
@@ -95,32 +95,20 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
     );
     terminal.blank();
 
-    let bump_map = plan
-        .packages()
-        .iter()
-        .map(|package| {
-            (
-                package.id.as_str(),
-                (
-                    package.bump,
-                    &package.current_version,
-                    &package.next_version,
-                ),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
     let warnings = plan
         .warnings()
         .iter()
         .map(|warning| match warning {
-            PlanWarning::NonPatchBumpOnPrerelease { package, .. } => t!(
-                "cli.status.pre_release_warning",
-                package = package.as_str().cyan()
-            ),
+            PlanWarning::NonPatchBumpOnPrerelease { package, .. } => {
+                t!(
+                    "cli.status.pre_release_warning",
+                    package = package.as_str().cyan()
+                )
+            }
         })
         .collect::<Vec<_>>();
 
-    if bump_map.is_empty() {
+    if plan.packages().is_empty() {
         terminal.summary(StepOutcome::Skipped, &t!("cli.status.no_packages"));
     } else {
         terminal.section(&t!("cli.status.packages"));
@@ -133,22 +121,7 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
             t!("cli.status.column_reason")
         ));
         for package in plan.packages() {
-            let reason = package
-                .reasons
-                .iter()
-                .map(|reason| match reason {
-                    ReleaseReason::Changeset { .. } => t!("cli.status.reason_changeset"),
-                    ReleaseReason::DependencyPropagation { .. } => {
-                        t!("cli.status.reason_dependency")
-                    }
-                    ReleaseReason::SharedVersionPropagation { .. } => {
-                        t!("cli.status.reason_shared_version")
-                    }
-                })
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>()
-                .join(", ");
+            let reason = render_reasons(package);
             terminal.line(format!(
                 "  {} {} {} {} {}",
                 Terminal::cell(package.id.as_str(), name_width)
@@ -214,42 +187,21 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
         let last_commit = commits
             .into_iter()
             .last()
-            .ok_or(anyhow::anyhow!("No commits found"))?;
+            .ok_or_else(|| anyhow::anyhow!(t!("cli.status.comment_no_commits")))?;
 
-        let existing = comments
-            .iter()
-            .find(|c| c.user.login == "github-actions[bot]");
+        let existing = comments.iter().find(|comment| {
+            comment.user.login == "github-actions[bot]"
+                && comment
+                    .body
+                    .as_deref()
+                    .is_some_and(is_semifold_comment_body)
+        });
 
-        let markdown_table = bump_map
-            .iter()
-            .map(|(k, (l, v, b))| format!("| {} | {} | {} | {} |", k, l, v, b))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let warnings_section = if !warnings.is_empty() {
-            let warnings_md = warnings
-                .iter()
-                .map(|w| format!("- {}", w))
-                .collect::<Vec<_>>()
-                .join("\n");
-            format!("\n### Warnings\n\n{}", warnings_md)
-        } else {
-            String::new()
-        };
-        let comment_body = format!(
-            "## Workspace change through: {}\n\n\
-            {} changesets found\n\n\
-            <details>\n\
-            <summary>Planned changes to release</summary>\n\n\
-            | Package | Bump Level | Current Version | Next Version |\n\
-            | ------- | ---------- | --------------- | ------------ |\n\
-            {}\n\
-            </details>\n\
-            {}",
-            last_commit.sha,
-            plan.consumed_changesets().len(),
-            markdown_table,
-            warnings_section,
-        );
+        let comment_body = render_github_comment(&GithubCommentModel::from_plan(
+            &plan,
+            &last_commit.sha,
+            &base_ref,
+        ));
 
         if let Some(comment) = existing {
             if let Err(e) = octocrab
@@ -269,4 +221,200 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
     }
 
     Ok(())
+}
+
+struct GithubCommentModel {
+    sha: String,
+    base_branch: String,
+    changesets: usize,
+    packages: Vec<GithubCommentPackage>,
+    warnings: Vec<String>,
+}
+
+struct GithubCommentPackage {
+    name: String,
+    current_version: String,
+    next_version: String,
+    bump: String,
+    reasons: String,
+}
+
+impl GithubCommentModel {
+    fn from_plan(plan: &ReleasePlan, sha: &str, base_branch: &str) -> Self {
+        Self {
+            sha: sha.to_string(),
+            base_branch: base_branch.to_string(),
+            changesets: plan.consumed_changesets().len(),
+            packages: plan
+                .packages()
+                .iter()
+                .map(|package| GithubCommentPackage {
+                    name: package.id.as_str().to_string(),
+                    current_version: package.current_version.to_string(),
+                    next_version: package.next_version.to_string(),
+                    bump: format!("{:?}", package.bump).to_lowercase(),
+                    reasons: render_reasons(package),
+                })
+                .collect(),
+            warnings: plan
+                .warnings()
+                .iter()
+                .map(|warning| match warning {
+                    PlanWarning::NonPatchBumpOnPrerelease { package, .. } => {
+                        t!("cli.status.pre_release_warning", package = package.as_str())
+                            .into_owned()
+                    }
+                })
+                .collect(),
+        }
+    }
+}
+
+fn render_github_comment(model: &GithubCommentModel) -> String {
+    let mut sections = vec![
+        COMMENT_MARKER.to_string(),
+        format!("## {}", t!("cli.status.comment_title")),
+        t!("cli.status.comment_through", sha = model.sha).into_owned(),
+    ];
+
+    if model.packages.is_empty() {
+        sections.push(format!(
+            "> [!NOTE]\n> {}\n>\n> {}",
+            t!("cli.status.comment_empty"),
+            t!(
+                "cli.status.comment_empty_release",
+                branch = model.base_branch
+            )
+        ));
+    } else {
+        sections.push(
+            t!(
+                "cli.status.comment_summary",
+                changesets = model.changesets,
+                packages = model.packages.len()
+            )
+            .into_owned(),
+        );
+        let mut table = vec![
+            format!(
+                "| {} | {} | {} | {} | {} |",
+                t!("cli.status.column_package"),
+                t!("cli.status.column_current"),
+                t!("cli.status.column_next"),
+                t!("cli.status.column_bump"),
+                t!("cli.status.column_reason")
+            ),
+            "| --- | --- | --- | --- | --- |".to_string(),
+        ];
+        table.extend(model.packages.iter().map(|package| {
+            format!(
+                "| `{}` | `{}` | `{}` | **{}** | {} |",
+                markdown_cell(&package.name),
+                markdown_cell(&package.current_version),
+                markdown_cell(&package.next_version),
+                markdown_cell(&package.bump),
+                markdown_cell(&package.reasons)
+            )
+        }));
+        sections.push(table.join("\n"));
+    }
+
+    if !model.warnings.is_empty() {
+        sections.push(format!(
+            "> [!WARNING]\n> **{}**\n{}",
+            t!("cli.status.comment_warnings"),
+            model
+                .warnings
+                .iter()
+                .map(|warning| format!("> - {}", markdown_cell(warning)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ));
+    }
+
+    sections.push(format!("_{}_", t!("cli.status.comment_footer")));
+    sections.join("\n\n")
+}
+
+fn render_reasons(package: &PackageRelease) -> String {
+    package
+        .reasons
+        .iter()
+        .map(|reason| match reason {
+            ReleaseReason::Changeset { .. } => t!("cli.status.reason_changeset"),
+            ReleaseReason::DependencyPropagation { .. } => t!("cli.status.reason_dependency"),
+            ReleaseReason::SharedVersionPropagation { .. } => {
+                t!("cli.status.reason_shared_version")
+            }
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn markdown_cell(value: &str) -> String {
+    value.replace('|', "\\|").replace(['\r', '\n'], " ")
+}
+
+fn is_semifold_comment_body(body: &str) -> bool {
+    body.contains(COMMENT_MARKER) || body.starts_with(LEGACY_COMMENT_PREFIX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_github_comment_explains_post_merge_publishing() {
+        let body = render_github_comment(&GithubCommentModel {
+            sha: "abc123".to_string(),
+            base_branch: "main".to_string(),
+            changesets: 0,
+            packages: Vec::new(),
+            warnings: Vec::new(),
+        });
+
+        assert!(body.starts_with(COMMENT_MARKER));
+        assert!(body.contains("> [!NOTE]"));
+        assert!(body.contains("`main`"));
+        assert!(!body.contains("| --- |"));
+    }
+
+    #[test]
+    fn populated_github_comment_keeps_release_details_visible() {
+        let body = render_github_comment(&GithubCommentModel {
+            sha: "abc123".to_string(),
+            base_branch: "main".to_string(),
+            changesets: 2,
+            packages: vec![GithubCommentPackage {
+                name: "app".to_string(),
+                current_version: "1.0.0".to_string(),
+                next_version: "1.1.0".to_string(),
+                bump: "minor".to_string(),
+                reasons: "changeset".to_string(),
+            }],
+            warnings: vec!["check prerelease".to_string()],
+        });
+
+        assert!(body.contains("| `app` | `1.0.0` | `1.1.0` | **minor** | changeset |"));
+        assert!(body.contains("> [!WARNING]"));
+        assert!(!body.contains("<details>"));
+    }
+
+    #[test]
+    fn markdown_cells_cannot_break_the_table() {
+        assert_eq!(markdown_cell("a|b\nc"), "a\\|b c");
+    }
+
+    #[test]
+    fn comment_marker_does_not_claim_unrelated_bot_comments() {
+        assert!(is_semifold_comment_body(&format!(
+            "{COMMENT_MARKER}\n## release"
+        )));
+        assert!(is_semifold_comment_body(
+            "## Workspace change through: abc123"
+        ));
+        assert!(!is_semifold_comment_body("## Coverage report"));
+    }
 }

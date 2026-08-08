@@ -162,7 +162,7 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
             package = package.as_str()
         ));
     }
-    let mut runnable = 0;
+    let mut runnable = Vec::new();
     for planned in &plan.post_version_commands {
         let command = format!(
             "{} {}",
@@ -176,11 +176,22 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
                 package = planned.package.as_str().cyan()
             ));
         } else {
-            runnable += 1;
+            runnable.push(planned);
         }
     }
-    if runnable > 0 {
-        terminal.line(t!("cli.version.post_version_batch", count = runnable));
+    if !runnable.is_empty() {
+        terminal.line(t!("cli.version.post_version_batch", count = runnable.len()));
+        for (index, planned) in runnable.iter().enumerate() {
+            terminal.line(format!(
+                "  {}",
+                t!(
+                    "cli.version.post_version_queue_item",
+                    index = index + 1,
+                    package = planned.package.as_str().cyan(),
+                    command = format_command(planned).magenta()
+                )
+            ));
+        }
     }
 }
 

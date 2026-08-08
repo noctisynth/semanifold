@@ -431,7 +431,7 @@
 - [x] 让 logger 与动态进度共享输出协调机制，禁止日志破坏动态区域
 - [x] 外部命令继承终端输出时暂停动态进度，避免 spinner 覆盖子进程输出
 - [x] 键值事实与表格统一按 Unicode 显示宽度对齐
-- [x] 通过 release-apply callback 按顺序展示 post-version 命令，并依据 stdio 策略选择动态或静态反馈
+- [x] 通过 release-apply callback 展示 post-version 执行队列与逐命令状态，并依据 stdio 策略选择动态或静态反馈
 - [x] 移除 debug 中的完整配置、GitHub event 和其他潜在敏感信息
 
 ### 核心命令

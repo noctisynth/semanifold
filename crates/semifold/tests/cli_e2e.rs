@@ -221,6 +221,10 @@ fn inherited_post_version_output_precedes_each_completed_step() {
     let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
 
     assert!(version.status.success(), "{version:?}");
+    let stdout = String::from_utf8(version.stdout).unwrap();
+    let first_queued = stdout.find("app — sh -c echo child-one >&2").unwrap();
+    let second_queued = stdout.find("app — sh -c echo child-two >&2").unwrap();
+    assert!(first_queued < second_queued, "{stdout}");
     let stderr = String::from_utf8(version.stderr).unwrap();
     let child_one = stderr.find("child-one\n").unwrap();
     let completed_one = stderr.find("sh -c echo child-one >&2").unwrap();

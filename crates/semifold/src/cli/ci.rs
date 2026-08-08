@@ -6,7 +6,10 @@ use git2::{Cred, IndexAddOption, PushOptions, RemoteCallbacks, Repository};
 use octocrab::{Octocrab, params};
 use rust_i18n::t;
 
-use crate::cli::repository_context;
+use crate::cli::{
+    repository_context,
+    terminal::{StepOutcome, Terminal},
+};
 use semifold_core::ReleaseContext;
 use semifold_engine::{
     ExecutionMode, Project, PublishOptions, ReleaseExecutionOptions, SemifoldService,
@@ -44,6 +47,11 @@ fn force_push_release(repo: &Repository, token: &str, branch: &str) -> anyhow::R
 }
 
 pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
+    terminal.heading(&t!("cli.ci.heading"));
+    if dry_run {
+        terminal.dry_run(&t!("cli.common.dry_run_banner"));
+    }
     let config = &project.config;
     if std::env::var("GITHUB_ACTIONS").is_err() {
         return Err(anyhow::anyhow!(t!("cli.ci.not_ci_environment")));
@@ -69,13 +77,13 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
 
     let is_base_branch = ref_name == config.branches.base;
     if !is_base_branch {
-        log::warn!("{}", t!("cli.ci.not_base_branch"));
+        terminal.summary(StepOutcome::Skipped, &t!("cli.ci.not_base_branch"));
         return Ok(());
     }
 
     let release_plan = SemifoldService::new(SystemDependencies).plan_release(project)?;
     if release_plan.consumed_changesets().is_empty() {
-        log::info!("{}", t!("cli.ci.no_changesets_publish"));
+        terminal.line(t!("cli.ci.no_changesets_publish"));
         let repository = repository_context()
             .ok_or_else(|| anyhow::anyhow!(t!("cli.publish.repo_info_missing")))?;
         let service = SemifoldService::new(SystemDependencies);
@@ -99,6 +107,14 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
                 },
             )
             .await?;
+        terminal.summary(
+            StepOutcome::Success,
+            &if dry_run {
+                t!("cli.ci.dry_run_complete").into_owned()
+            } else {
+                t!("cli.ci.publish_complete").into_owned()
+            },
+        );
         return Ok(());
     }
 
@@ -139,6 +155,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     let pull_request = render_release_pull_request(&pull_request_context);
 
     if dry_run {
+        terminal.summary(StepOutcome::Success, &t!("cli.ci.dry_run_complete"));
         return Ok(());
     }
 
@@ -182,7 +199,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         .take_items();
 
     if existing_prs.is_empty() {
-        log::info!("{}", t!("cli.ci.no_existing_pr"));
+        terminal.line(t!("cli.ci.no_existing_pr"));
         pulls
             .create(
                 &pull_request.title,
@@ -196,7 +213,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         let pr = existing_prs
             .first()
             .ok_or_else(|| anyhow::anyhow!(t!("cli.ci.existing_pr_missing")))?;
-        log::info!("{}", t!("cli.ci.existing_pr_found", number = pr.number));
+        terminal.line(t!("cli.ci.existing_pr_found", number = pr.number));
         pulls
             .update(pr.number)
             .title(&pull_request.title)
@@ -205,5 +222,6 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
             .await?;
     }
 
+    terminal.summary(StepOutcome::Success, &t!("cli.ci.complete"));
     Ok(())
 }

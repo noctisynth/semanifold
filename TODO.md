@@ -421,7 +421,37 @@
 - [x] publish 部分失败时仍能取得完整结构化恢复状态
 - [x] workflow output schema 具有兼容性测试，且敏感字段不会进入输出
 
-## 阶段 8：可扩展 ecosystem 插件
+## 阶段 8：现代化 CLI 终端反馈
+
+### 展示基础层
+
+- [x] 定义 stdout/stderr、TTY/CI、`NO_COLOR`、Unicode 与 dry-run 输出契约
+- [x] 建立 CLI-only `Terminal`、presentation model 与 `ProgressReporter` 边界
+- [x] 使用 `indicatif` 实现动态进度，并为非 TTY 提供稳定 plain 降级
+- [x] 让 logger 与动态进度共享输出协调机制，禁止日志破坏动态区域
+- [x] 移除 debug 中的完整配置、GitHub event 和其他潜在敏感信息
+
+### 核心命令
+
+- [x] `status` 展示计划 fingerprint、bump、原因和明确完成摘要
+- [x] `version` 展示 plan/prepare/validate/apply/post-version/changeset 消费阶段与最终版本表
+- [x] `publish` 展示 preflight、命令、Forge、asset 与 succeeded/skipped/failed/not-started 摘要
+- [x] dry-run 在开头和结尾明确标识未应用的副作用
+- [x] 部分失败展示已完成、失败、未开始事实和可执行恢复建议
+
+### 其余入口与测试
+
+- [x] 统一 config、init、commit 和 CI 的标题、warning 与最终成功反馈
+- [x] 所有新增或修改的用户文案同步 en/zh locale，key 集合保持一致
+- [x] 建立 TTY/非 TTY、成功、skip、dry-run、部分失败、宽字符和敏感信息测试
+
+### 阶段完成条件
+
+- [x] 人类可读业务输出不再直接依赖散落的 `println!` 与 `log::*`
+- [x] 非 TTY/CI 输出稳定且不含光标控制序列，TTY 动态进度不会被日志破坏
+- [x] 每个用户命令成功时有明确摘要，失败时包含阶段和适用的恢复建议
+
+## 阶段 9：可扩展 ecosystem 插件
 
 ### 协议与身份
 

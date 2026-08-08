@@ -8,6 +8,8 @@ use semifold_engine::{
 };
 use semifold_resolver::{config::ChannelBump, resolver::ResolverType};
 
+use crate::cli::terminal::{StepOutcome, Terminal};
+
 #[derive(Parser, Debug)]
 pub(crate) struct Config {
     #[command(subcommand)]
@@ -113,6 +115,11 @@ struct ChannelTarget {
 }
 
 pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
+    terminal.heading(&t!("cli.config.heading"));
+    if dry_run {
+        terminal.dry_run(&t!("cli.common.dry_run_banner"));
+    }
     match &command.command {
         Commands::Sync(options) => sync(options, project, dry_run),
         Commands::Migrate(options) => migrate(options, project, dry_run),
@@ -121,6 +128,7 @@ pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow:
 }
 
 fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
     let service = SemifoldService::new(SystemDependencies);
     let plan = service
         .plan_config_sync(
@@ -132,31 +140,29 @@ fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> 
         )
         .map_err(render_config_sync_error)?;
 
-    report_sync_warnings(&plan.warnings);
+    report_sync_warnings(&plan.warnings, &terminal);
     if !plan.missing.is_empty() {
-        println!(
-            "{}",
-            t!(
-                "cli.config.sync_missing",
-                packages = plan
-                    .missing
-                    .iter()
-                    .map(|package| package.id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        );
+        terminal.warning(&t!(
+            "cli.config.sync_missing",
+            packages = plan
+                .missing
+                .iter()
+                .map(|package| package.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     if options.check {
         if plan.has_drift() {
             anyhow::bail!(t!("cli.config.sync_check_failed"));
         }
-        println!("{}", t!("cli.config.sync_check_passed"));
+        terminal.summary(StepOutcome::Success, &t!("cli.config.sync_check_passed"));
         return Ok(());
     }
     if dry_run {
-        println!("{}", t!("cli.config.sync_dry_run"));
-        println!("{}", serde_json::to_string_pretty(&plan)?);
+        terminal.section(&t!("cli.config.sync_dry_run"));
+        terminal.line(serde_json::to_string_pretty(&plan)?);
+        terminal.summary(StepOutcome::Success, &t!("cli.config.dry_run_complete"));
         return Ok(());
     }
     if !plan.conflicts.is_empty() {
@@ -169,7 +175,7 @@ fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> 
         );
     }
     if !plan.has_drift() {
-        println!("{}", t!("cli.config.sync_not_required"));
+        terminal.summary(StepOutcome::Skipped, &t!("cli.config.sync_not_required"));
         return Ok(());
     }
 
@@ -177,10 +183,13 @@ fn sync(options: &Sync, project: &Project, dry_run: bool) -> anyhow::Result<()> 
         .apply_config_sync(&plan)
         .map_err(|error| anyhow!(t!("cli.config.sync_edit_failed", error = error)))?;
     if !report.changed {
-        println!("{}", t!("cli.config.sync_no_safe_changes"));
+        terminal.summary(StepOutcome::Skipped, &t!("cli.config.sync_no_safe_changes"));
         return Ok(());
     }
-    println!("{}", t!("cli.config.synced", path = report.path));
+    terminal.summary(
+        StepOutcome::Success,
+        &t!("cli.config.synced", path = report.path),
+    );
     Ok(())
 }
 
@@ -203,22 +212,19 @@ fn render_config_sync_error(error: AppError) -> anyhow::Error {
     }
 }
 
-fn report_sync_warnings(warnings: &[ConfigSyncWarning]) {
+fn report_sync_warnings(warnings: &[ConfigSyncWarning], terminal: &Terminal) {
     for warning in warnings {
         match warning {
             ConfigSyncWarning::ChangesetReferencesRenamedPackage {
                 changeset,
                 from,
                 to,
-            } => println!(
-                "{}",
-                t!(
-                    "cli.config.sync_renamed_changeset_warning",
-                    changeset = changeset.as_str(),
-                    from = from.as_str(),
-                    to = to.as_str()
-                )
-            ),
+            } => terminal.warning(&t!(
+                "cli.config.sync_renamed_changeset_warning",
+                changeset = changeset.as_str(),
+                from = from.as_str(),
+                to = to.as_str()
+            )),
         }
     }
 }
@@ -250,6 +256,7 @@ fn update_channel(
     project: &Project,
     dry_run: bool,
 ) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
     let service = SemifoldService::new(SystemDependencies);
     let plan = service
         .plan_channel_update(
@@ -265,57 +272,66 @@ fn update_channel(
             render_config_mutation_error(error, t!("cli.config.command_channel").as_ref())
         })?;
     if plan.packages.is_empty() {
-        println!("{}", t!("cli.config.channels_already_match"));
+        terminal.summary(
+            StepOutcome::Skipped,
+            &t!("cli.config.channels_already_match"),
+        );
         return Ok(());
     }
 
     let requested = channel.unwrap_or("stable");
-    println!(
-        "{}",
-        t!(
-            "cli.config.updating_channel",
-            channel = requested,
-            packages = plan.packages.join(", ")
-        )
-    );
+    terminal.line(t!(
+        "cli.config.updating_channel",
+        channel = requested,
+        packages = plan.packages.join(", ")
+    ));
     if target.check {
         anyhow::bail!(t!("cli.config.channels_mismatch"));
     }
     if dry_run {
+        terminal.summary(StepOutcome::Success, &t!("cli.config.dry_run_complete"));
         return Ok(());
     }
 
     let report = service.apply_config_mutation(&plan)?;
-    println!("{}", t!("cli.config.updated", path = report.path));
+    terminal.summary(
+        StepOutcome::Success,
+        &t!("cli.config.updated", path = report.path),
+    );
     Ok(())
 }
 
 fn migrate(options: &Migrate, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
     let service = SemifoldService::new(SystemDependencies);
     let plan = service.plan_config_migration(project).map_err(|error| {
         render_config_mutation_error(error, t!("cli.config.command_migrate").as_ref())
     })?;
     if plan.packages.is_empty() {
-        println!("{}", t!("cli.config.migration_not_required"));
+        terminal.summary(
+            StepOutcome::Skipped,
+            &t!("cli.config.migration_not_required"),
+        );
         return Ok(());
     }
 
-    println!(
-        "{}",
-        t!(
-            "cli.config.migration_required",
-            packages = plan.packages.join(", ")
-        )
-    );
+    terminal.line(t!(
+        "cli.config.migration_required",
+        packages = plan.packages.join(", ")
+    ));
     if options.check {
         anyhow::bail!(t!("cli.config.migration_required_error"));
     }
     if dry_run {
+        terminal.summary(StepOutcome::Success, &t!("cli.config.dry_run_complete"));
         return Ok(());
     }
 
     let report = service.apply_config_mutation(&plan)?;
-    println!("{}", t!("cli.config.migrated", path = report.path));
+    terminal.summary(
+        StepOutcome::Success,
+        &t!("cli.config.migrated", path = report.path),
+    );
     Ok(())
 }
 

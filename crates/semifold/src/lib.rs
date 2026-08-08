@@ -22,7 +22,10 @@ pub fn run() -> anyhow::Result<()> {
         logger::setup_logger(LevelFilter::Info)?;
     }
 
-    log::debug!("Parsed CLI arguments: {:?}", cli);
+    log::debug!(
+        "Parsed command: {:?}",
+        cli.command.as_ref().map(command_name)
+    );
 
     if let Some(Commands::Mcp(mcp)) = &cli.command {
         utils::run_async(cli::mcp::run_mcp(mcp))?;
@@ -41,7 +44,10 @@ pub fn run() -> anyhow::Result<()> {
     let project = location
         .load()
         .map_err(|error| anyhow::anyhow!(t!("cli.project_load_failed", error = error)))?;
-    log::debug!("Loaded config: {:?}", project.config);
+    log::debug!(
+        "Loaded project with {} configured package(s)",
+        project.config.packages.len()
+    );
 
     match &cli.command {
         Some(Commands::Commit(commit)) => cli::commit::run(commit, &project)?,
@@ -58,4 +64,63 @@ pub fn run() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn command_name(command: &Commands) -> &'static str {
+    match command {
+        Commands::Commit(_) => "commit",
+        Commands::Init(_) => "init",
+        Commands::Config(_) => "config",
+        Commands::Version(_) => "version",
+        Commands::Publish(_) => "publish",
+        Commands::CI(_) => "ci",
+        Commands::Status(_) => "status",
+        Commands::Mcp(_) => "mcp",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeSet, str::FromStr};
+
+    use toml_edit::{DocumentMut, Item, Table};
+
+    fn locale_keys(source: &str) -> BTreeSet<String> {
+        let document = DocumentMut::from_str(source).expect("locale fixture is valid TOML");
+        let mut keys = BTreeSet::new();
+        collect_keys(document.as_table(), "", &mut keys);
+        keys
+    }
+
+    fn collect_keys(table: &Table, prefix: &str, keys: &mut BTreeSet<String>) {
+        for (name, item) in table {
+            let path = if prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{prefix}.{name}")
+            };
+            match item {
+                Item::Table(child) => collect_keys(child, &path, keys),
+                Item::Value(_) | Item::ArrayOfTables(_) | Item::None => {
+                    keys.insert(path);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn english_and_chinese_locales_have_identical_keys() {
+        assert_eq!(
+            locale_keys(include_str!("../locales/en.toml")),
+            locale_keys(include_str!("../locales/zh.toml"))
+        );
+    }
+
+    #[test]
+    fn debug_paths_do_not_dump_configuration_or_github_payloads() {
+        let config_dump = ["Loaded ", "config:"].concat();
+        let event_dump = ["GITHUB_EVENT_PATH", " data:"].concat();
+        assert!(!include_str!("lib.rs").contains(&config_dump));
+        assert!(!include_str!("cli/status.rs").contains(&event_dump));
+    }
 }

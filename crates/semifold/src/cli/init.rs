@@ -8,6 +8,8 @@ use semifold_engine::{
 };
 use semifold_resolver::resolver::ResolverType;
 
+use crate::cli::terminal::{StepOutcome, Terminal};
+
 #[derive(rust_embed::Embed)]
 #[folder = "assets"]
 pub(crate) struct CIAsset;
@@ -27,8 +29,10 @@ pub(crate) struct Init {
 }
 
 pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
+    terminal.heading(&t!("cli.init.heading"));
     if location.existing_config.is_some() && !init.force {
-        log::warn!("{}", t!("cli.init.already_initialized"));
+        terminal.summary(StepOutcome::Skipped, &t!("cli.init.already_initialized"));
         return Ok(());
     }
 
@@ -36,12 +40,12 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
 
     let mut target_dir = std::env::current_dir()?;
     if location.root.as_std_path() != target_dir {
-        log::warn!("{}", t!("cli.init.not_repo_root"));
+        terminal.warning(&t!("cli.init.not_repo_root"));
         if !Confirm::new(&t!("cli.init.continue"))
             .with_default(false)
             .prompt()?
         {
-            log::warn!("{}", t!("cli.init.aborted"));
+            terminal.summary(StepOutcome::Skipped, &t!("cli.init.aborted"));
             return Ok(());
         }
         target_dir = location.root.clone().into_std_path_buf();
@@ -134,7 +138,11 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
             workflows,
         },
     )?;
-    service.apply_init(&plan)?;
+    let report = service.apply_init(&plan)?;
+    terminal.summary(
+        StepOutcome::Success,
+        &t!("cli.init.complete", files = report.files.len()),
+    );
 
     Ok(())
 }

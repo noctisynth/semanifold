@@ -11,6 +11,8 @@ use semifold_engine::{
     SemifoldService, SystemDependencies,
 };
 
+use crate::cli::terminal::{StepOutcome, Terminal};
+
 #[derive(clap::ValueEnum, Clone, Debug)]
 pub(crate) enum Level {
     Patch,
@@ -49,6 +51,8 @@ pub(crate) struct Commit {
 }
 
 pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
+    terminal.heading(&t!("cli.commit.heading"));
     let config = &project.config;
 
     let name = if let Some(name) = &commit.name {
@@ -76,7 +80,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
         let packages =
             MultiSelect::new(&t!("cli.commit.query_packages"), all_packages.clone()).prompt()?;
         if packages.is_empty() {
-            log::warn!("{}", t!("cli.commit.warn_no_packages"));
+            terminal.warning(&t!("cli.commit.warn_no_packages"));
             continue;
         }
         break packages;
@@ -147,7 +151,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
         loop {
             let summary = inquire::prompt_text(&t!("cli.commit.query_summary"))?;
             if summary.is_empty() {
-                log::warn!("{}", t!("cli.commit.empty_summary"));
+                terminal.warning(&t!("cli.commit.empty_summary"));
                 continue;
             }
             break summary;
@@ -171,6 +175,10 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
             }
             error => anyhow::anyhow!(t!("cli.commit.create_failed", error = error)),
         })?;
+    terminal.summary(
+        StepOutcome::Success,
+        &t!("cli.commit.complete", name = name),
+    );
 
     Ok(())
 }

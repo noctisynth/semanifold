@@ -1,5 +1,7 @@
 use colored::{ColoredString, Colorize};
 
+use crate::cli::terminal::ProgressAwareStderr;
+
 fn format_level(level: log::Level) -> ColoredString {
     match level {
         log::Level::Trace => level.as_str().magenta(),
@@ -29,7 +31,7 @@ pub fn setup_logger(level: log::LevelFilter) -> Result<(), fern::InitError> {
             }
         })
         .level(level)
-        .chain(std::io::stdout())
+        .chain(Box::new(ProgressAwareStderr) as Box<dyn std::io::Write + Send>)
         .apply()?;
     Ok(())
 }

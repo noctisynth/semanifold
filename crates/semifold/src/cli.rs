@@ -9,6 +9,7 @@ pub mod init;
 pub mod mcp;
 pub mod publish;
 pub mod status;
+pub(crate) mod terminal;
 pub mod version;
 pub(crate) mod workflow_output;
 

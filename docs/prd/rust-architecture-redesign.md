@@ -722,6 +722,39 @@ GitHub Actions 文件协议。writer 使用进程内逐条唯一且不出现在 
   若此时 output 写入也失败，publish 错误保持主错误，writer 错误作为 CLI warning；
 - version 在形成可用 apply 结果前失败时不伪造成功 output，保留原失败语义。
 
+### 6.8 CLI 终端反馈与渲染边界
+
+CLI 的人类可读输出必须形成统一的 presentation 层，不再由各命令任意混用 `println!`、颜色和
+`log::*`。core 与 engine 继续只返回结构化 plan/report；CLI 将其投影为只读 presentation model，
+再由 `Terminal` 渲染标题、阶段、步骤、表格、成功摘要、警告、失败状态和恢复建议。i18n、颜色、
+Unicode 与动态终端状态只存在于 CLI。
+
+`indicatif` 仅作为 `Terminal` 内部的动态进度适配器：未知长度操作使用 spinner；只有存在可观察的
+逐项执行回调时，已知 package、file edit 或 asset 数量才使用有界进度，不能为瞬时静态渲染伪造
+进度；`MultiProgress` 只在确有多个同时活动的任务时使用。静态表格、
+最终摘要、错误语义、JSON 和 GitHub Actions output 不由 `indicatif` 决定。CLI 通过最小
+`ProgressReporter` 边界表达 begin/succeed/skip/fail；交互终端使用 indicatif 实现，非 TTY、CI、
+重定向及测试使用稳定的 plain/recording 实现。
+
+输出流契约如下：
+
+- 正常结果、静态表格和成功摘要写 stdout；
+- 动态进度、warning、error、debug 和恢复建议写 stderr；
+- 非 TTY 不绘制 spinner、进度条或光标控制序列，改为稳定、逐行的阶段结果；
+- 遵守 `NO_COLOR` 与 `TERM=dumb`；无法可靠显示 Unicode 时使用 ASCII 标记；
+- dry-run 在命令开头显示醒目标识，并在结尾明确哪些操作未应用；
+- 成功命令必须给出最终摘要；部分失败必须同时展示 succeeded、skipped、failed 与 not-started
+  事实，并给出可执行恢复建议；
+- 动态区域存在时，普通消息必须经 `ProgressBar::suspend` 或统一 progress manager 输出，不能破坏
+  光标状态；
+- `--debug` 不得打印完整配置、GitHub event、header、环境变量、token、命令环境或其他敏感值。
+
+首个切片改造 `status`、`version` 与 `publish`：status 展示 changeset/package 数量、fingerprint、
+版本、bump 和原因；version 展示准备、验证、应用、post-version 与 changeset 消费事实；publish
+展示 preflight、命令、Forge、asset 和四态结果。随后统一 config、init、commit 和 CI 的标题与最终
+反馈。展示层必须有 TTY/非 TTY、dry-run、成功、skip、部分失败、宽字符和敏感信息回归测试；测试
+使用内存 writer 或 indicatif `TermLike`，不得依赖人工观察终端。
+
 #### 分层模板变量作用域
 
 模板渲染必须在 `ReleasePlan` 完成和必需事实收集后执行。不同场景使用不同的

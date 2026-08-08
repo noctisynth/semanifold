@@ -1,13 +1,18 @@
-use std::{collections::BTreeMap, env};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    env,
+};
 
 use anyhow::Context as _;
 use clap::Parser;
 use colored::Colorize;
 use octocrab::Octocrab;
 use rust_i18n::t;
-use semifold_core::PlanWarning;
+use semifold_core::{PlanWarning, ReleaseReason};
 use semifold_engine::{Project, SemifoldService, SystemDependencies};
 use serde::{Deserialize, Serialize};
+
+use crate::cli::terminal::{StepOutcome, Terminal};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct RepoOwner {
@@ -48,13 +53,27 @@ pub(crate) struct Status {
 }
 
 pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()> {
+    let terminal = Terminal::detect();
+    terminal.heading(&t!("cli.status.heading"));
     let is_ci = env::var("GITHUB_ACTIONS").is_ok();
     let config = &project.config;
     log::debug!("GitHub CI environment: {}", is_ci);
 
-    let plan = SemifoldService::new(SystemDependencies)
-        .plan_release(project)
-        .map_err(|error| anyhow::anyhow!(t!("cli.status.plan_failed", error = error)))?;
+    let progress = terminal.progress(t!("cli.status.planning").into_owned());
+    let plan = match SemifoldService::new(SystemDependencies).plan_release(project) {
+        Ok(plan) => plan,
+        Err(error) => {
+            progress.finish(
+                StepOutcome::Failed,
+                t!("cli.status.planning_failed").into_owned(),
+            );
+            return Err(anyhow::anyhow!(t!("cli.status.plan_failed", error = error)));
+        }
+    };
+    progress.finish(
+        StepOutcome::Success,
+        t!("cli.status.planned", count = plan.packages().len()).into_owned(),
+    );
     let name_width = plan
         .packages()
         .iter()
@@ -63,13 +82,18 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
         .unwrap_or(0)
         + 1;
 
-    println!(
-        "{}\n",
-        t!(
-            "cli.status.changesets",
-            count = plan.consumed_changesets().len().to_string().bold()
-        )
+    terminal.fact(
+        &t!("cli.status.fact_changesets"),
+        plan.consumed_changesets().len(),
     );
+    terminal.fact(&t!("cli.status.fact_packages"), plan.packages().len());
+    terminal.fact(
+        &t!("cli.status.fact_fingerprint"),
+        semifold_core::ReleaseContext::from_plan(&plan)
+            .plan
+            .fingerprint,
+    );
+    terminal.blank();
 
     let bump_map = plan
         .packages()
@@ -97,24 +121,54 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
         .collect::<Vec<_>>();
 
     if bump_map.is_empty() {
-        println!("{}", t!("cli.status.no_packages"));
+        terminal.summary(StepOutcome::Skipped, &t!("cli.status.no_packages"));
     } else {
-        println!("{}", t!("cli.status.packages"));
-        for (package_name, (_, resolved_version, bumped_version)) in &bump_map {
-            println!(
-                "{:name_width$} {} → {}",
-                package_name.cyan().bold(),
-                resolved_version.to_string().yellow(),
-                bumped_version.to_string().green()
-            );
+        terminal.section(&t!("cli.status.packages"));
+        terminal.line(format!(
+            "  {} {} {} {} {}",
+            Terminal::cell(t!("cli.status.column_package"), name_width),
+            Terminal::cell(t!("cli.status.column_current"), 16),
+            Terminal::cell(t!("cli.status.column_next"), 16),
+            Terminal::cell(t!("cli.status.column_bump"), 8),
+            t!("cli.status.column_reason")
+        ));
+        for package in plan.packages() {
+            let reason = package
+                .reasons
+                .iter()
+                .map(|reason| match reason {
+                    ReleaseReason::Changeset { .. } => t!("cli.status.reason_changeset"),
+                    ReleaseReason::DependencyPropagation { .. } => {
+                        t!("cli.status.reason_dependency")
+                    }
+                    ReleaseReason::SharedVersionPropagation { .. } => {
+                        t!("cli.status.reason_shared_version")
+                    }
+                })
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ");
+            terminal.line(format!(
+                "  {} {} {} {} {}",
+                Terminal::cell(package.id.as_str(), name_width)
+                    .cyan()
+                    .bold(),
+                Terminal::cell(package.current_version.to_string(), 16).yellow(),
+                Terminal::cell(package.next_version.to_string(), 16).green(),
+                Terminal::cell(format!("{:?}", package.bump).to_lowercase(), 8),
+                reason
+            ));
         }
+        terminal.blank();
+        terminal.summary(StepOutcome::Success, &t!("cli.status.complete"));
     }
 
     if !warnings.is_empty() {
-        println!("\n{}", t!("cli.status.pre_release_warning_header").yellow());
+        terminal.warning(&t!("cli.status.pre_release_warning_header"));
     }
     for warning in warnings.iter() {
-        println!("{}", warning.yellow());
+        terminal.warning(warning);
     }
 
     if !is_ci {
@@ -125,7 +179,7 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
     let event_data = std::fs::read_to_string(&path)?;
 
     log::debug!("GITHUB_EVENT_PATH: {}", path);
-    log::debug!("GITHUB_EVENT_PATH data: {}", event_data);
+    log::debug!("Loaded GitHub event payload ({} bytes)", event_data.len());
 
     let event: GitHubEvent = serde_json::from_str(&event_data)?;
 
@@ -203,14 +257,14 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
                 .update_comment(comment.id, comment_body)
                 .await
             {
-                log::warn!("Failed to create comment: {:?}", e);
+                terminal.warning(&t!("cli.status.comment_failed", error = e));
             };
         } else if let Err(e) = octocrab
             .issues(owner, repo_name)
             .create_comment(pr_number, comment_body)
             .await
         {
-            log::warn!("Failed to create comment: {:?}", e);
+            terminal.warning(&t!("cli.status.comment_failed", error = e));
         };
     }
 

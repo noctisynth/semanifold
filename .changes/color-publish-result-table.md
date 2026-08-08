@@ -2,4 +2,5 @@
 semifold: patch:fix
 ---
 
-为发布结果表的包、版本、状态和详情增加语义颜色，同时保持宽字符列对齐与纯文本降级行为。
+Add semantic colors to package, version, status, and detail cells in the publish result table while
+preserving wide-character alignment and plain-text fallback behavior.

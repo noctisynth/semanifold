@@ -660,6 +660,68 @@ changelog 塞回 `ReleaseContext` 或恢复全局万能模板 map。
 运行时路径不默认暴露给模板。只有在出现明确消费者和配置来源后，才能增加
 最小、只读的 `ProjectContext`。
 
+### 6.7 GitHub Actions 工作流输出
+
+`smif version` 与 `smif publish` 在 GitHub Actions 中向后续 step/job 暴露版本化 JSON
+事实。首版不增加 CLI flag：仅当 `GITHUB_ACTIONS` 严格等于 `true` 且 `GITHUB_OUTPUT`
+存在时自动启用；其他环境不创建或写入任何额外文件，也不改变终端输出。两个命令分别写入
+`semifold-version` 与 `semifold-publish` output key。首版 schema version 为整数 `1`；同一
+major schema 内只允许增加可选字段，删除、重命名字段或改变既有枚举含义必须提升
+`schema-version`，并至少保留前一个 schema 一个 Semifold minor 发布周期。
+
+version output 从 `prepare_release` 构造的同一个 `ReleaseContext` 以及由该 context 渲染、校验的
+release branch 派生，不得在 changeset 消费后重新规划：
+
+```rust
+pub struct VersionWorkflowOutput {
+    pub schema_version: u32,
+    pub dry_run: bool,
+    pub plan_fingerprint: String,
+    pub release_branch: String,
+    pub packages: BTreeMap<PackageId, VersionWorkflowPackage>,
+}
+
+pub struct VersionWorkflowPackage {
+    pub current_version: semver::Version,
+    pub next_version: semver::Version,
+}
+```
+
+publish output 从执行所用的 `PublishPlan` 与成功报告或 `PublishExecutionError.report` 派生。package
+按计划顺序输出，并保留 `succeeded`、`skipped`、`failed`、`not-started` 状态；skip reason 与
+failure stage 使用稳定 kebab-case 字符串。恢复所需事实仅包括 package ID、目标版本、状态、
+skip reason 与 failure stage，不输出外部错误文本、命令、参数或环境：
+
+```rust
+pub struct PublishWorkflowOutput {
+    pub schema_version: u32,
+    pub dry_run: bool,
+    pub packages: Vec<PublishWorkflowPackage>,
+}
+
+pub struct PublishWorkflowPackage {
+    pub package: PackageId,
+    pub version: semver::Version,
+    pub status: String,
+    pub skip_reason: Option<String>,
+    pub failure_stage: Option<String>,
+}
+```
+
+engine 提供统一、可序列化的 application workflow output DTO；CLI 最外层的 writer 仅负责
+GitHub Actions 文件协议。writer 使用进程内逐条唯一且不出现在 payload 中的 delimiter 写入
+`name<<delimiter` 多行格式，并以单次 append 保持一条 output 的完整性。DTO 采用字段 allowlist：
+禁止加入 HTTP header、环境变量、token、命令配置、完整配置、绝对路径、commit author email；
+新增字段必须经过序列化快照和敏感字段回归测试。
+
+退出优先级如下：
+
+- dry-run 仍输出完整 DTO，并以 `dry-run = true` 明确其没有应用文件或 Forge 副作用；
+- version 或 publish 成功后 output 写入失败，命令返回非零；
+- publish 部分失败时，先尽力写入携带完整恢复状态的 publish output，再返回原 publish 错误；
+  若此时 output 写入也失败，publish 错误保持主错误，writer 错误作为 CLI warning；
+- version 在形成可用 apply 结果前失败时不伪造成功 output，保留原失败语义。
+
 #### 分层模板变量作用域
 
 模板渲染必须在 `ReleasePlan` 完成和必需事实收集后执行。不同场景使用不同的

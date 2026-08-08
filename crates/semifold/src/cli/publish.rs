@@ -1,10 +1,14 @@
 use clap::Parser;
 use rust_i18n::t;
 use semifold_engine::{
-    ExecutionMode, Project, PublishOptions, PublishReport, SemifoldService, SystemDependencies,
+    AppError, ExecutionMode, Project, PublishOptions, PublishReport, PublishWorkflowOutput,
+    SemifoldService, SystemDependencies, WorkflowExecutionMode,
 };
 
-use crate::cli::repository_context;
+use crate::cli::{
+    repository_context,
+    workflow_output::{GithubOutputWriter, PUBLISH_OUTPUT_KEY},
+};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Publish {
@@ -30,7 +34,7 @@ pub(crate) async fn publish(
         return Err(anyhow::anyhow!(t!("cli.publish.repo_info_missing")));
     }
     let service = SemifoldService::new(SystemDependencies);
-    let plan = service
+    let mut plan = service
         .plan_publish(
             project,
             &PublishOptions {
@@ -41,16 +45,45 @@ pub(crate) async fn publish(
         .await
         .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
     log::debug!("Packages to publish: {:?}", plan.packages);
-    let report = service
-        .publish(
-            plan,
-            if dry_run {
-                ExecutionMode::DryRun
-            } else {
-                ExecutionMode::Apply
-            },
-        )
-        .await?;
+    let mode = if dry_run {
+        ExecutionMode::DryRun
+    } else {
+        ExecutionMode::Apply
+    };
+    let workflow_mode = if dry_run {
+        WorkflowExecutionMode::DryRun
+    } else {
+        WorkflowExecutionMode::Apply
+    };
+    let result = service.publish(&mut plan, mode).await;
+    let writer = GithubOutputWriter::from_environment();
+
+    let report = match result {
+        Ok(report) => {
+            let output = PublishWorkflowOutput::from_plan_and_report(&plan, &report, workflow_mode);
+            writer.write(PUBLISH_OUTPUT_KEY, &output).map_err(|error| {
+                anyhow::anyhow!(t!("cli.publish.workflow_output_failed", error = error))
+            })?;
+            report
+        }
+        Err(error @ AppError::PublishExecution(_)) => {
+            if let AppError::PublishExecution(execution) = &error {
+                let output = PublishWorkflowOutput::from_plan_and_report(
+                    &plan,
+                    &execution.report,
+                    workflow_mode,
+                );
+                if let Err(output_error) = writer.write(PUBLISH_OUTPUT_KEY, &output) {
+                    log::warn!(
+                        "{}",
+                        t!("cli.publish.workflow_output_warning", error = output_error)
+                    );
+                }
+            }
+            return Err(error.into());
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     Ok(report)
 }

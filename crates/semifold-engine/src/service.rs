@@ -311,7 +311,7 @@ impl SemifoldService<SystemDependencies> {
 
     pub async fn publish(
         &self,
-        mut plan: PublishPlan,
+        plan: &mut PublishPlan,
         mode: ExecutionMode,
     ) -> Result<PublishReport, AppError> {
         let forge_client = if plan.packages.iter().any(|package| package.forge.is_some()) {
@@ -337,7 +337,7 @@ impl SemifoldService<SystemDependencies> {
             root: project_root.as_std_path(),
         });
         execute_publish_plan(
-            &mut plan,
+            plan,
             &self.deps,
             &SystemPreCheckRunner::default(),
             forge,

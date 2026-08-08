@@ -79,7 +79,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         let repository = repository_context()
             .ok_or_else(|| anyhow::anyhow!(t!("cli.publish.repo_info_missing")))?;
         let service = SemifoldService::new(SystemDependencies);
-        let publish_plan = service
+        let mut publish_plan = service
             .plan_publish(
                 project,
                 &PublishOptions {
@@ -91,7 +91,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
             .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
         service
             .publish(
-                publish_plan,
+                &mut publish_plan,
                 if dry_run {
                     ExecutionMode::DryRun
                 } else {

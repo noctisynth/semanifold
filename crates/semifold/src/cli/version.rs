@@ -4,10 +4,14 @@ use rust_i18n::t;
 use semifold_core::ChangesetId;
 use semifold_engine::{
     AppError, ApplyReport, ExecutionMode, Project, ReleaseApplyError, ReleaseApplyPlan,
-    ReleaseExecutionOptions, SemifoldService, SystemDependencies,
+    ReleaseExecutionOptions, SemifoldService, SystemDependencies, VersionWorkflowOutput,
+    WorkflowExecutionMode,
 };
 
-use crate::cli::repository_context;
+use crate::cli::{
+    repository_context,
+    workflow_output::{GithubOutputWriter, VERSION_OUTPUT_KEY},
+};
 
 #[derive(Parser, Debug)]
 pub(crate) struct Version {
@@ -33,7 +37,16 @@ pub(crate) async fn prepare_and_apply_release(
         .await
         .map_err(|error| anyhow::anyhow!(t!("cli.version.prepare_failed", error = error)))?;
     render_release_plan_activity(&plan, dry_run);
-    service
+    let output = VersionWorkflowOutput::from_release(
+        &plan.release_context,
+        plan.release_branch.clone(),
+        if dry_run {
+            WorkflowExecutionMode::DryRun
+        } else {
+            WorkflowExecutionMode::Apply
+        },
+    );
+    let report = service
         .apply_release(
             plan,
             if dry_run {
@@ -42,7 +55,13 @@ pub(crate) async fn prepare_and_apply_release(
                 ExecutionMode::Apply
             },
         )
-        .map_err(render_apply_error)
+        .map_err(render_apply_error)?;
+    GithubOutputWriter::from_environment()
+        .write(VERSION_OUTPUT_KEY, &output)
+        .map_err(|error| {
+            anyhow::anyhow!(t!("cli.version.workflow_output_failed", error = error))
+        })?;
+    Ok(report)
 }
 
 fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool) {

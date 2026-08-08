@@ -399,27 +399,27 @@
 
 ### 输出契约
 
-- [ ] 确定 `version` / `publish` 的 GitHub Actions output key、启用方式和 schema 兼容周期
-- [ ] 定义带 `schema-version` 的 version workflow DTO，覆盖 plan fingerprint、release branch 和
+- [x] 确定 `version` / `publish` 的 GitHub Actions output key、启用方式和 schema 兼容周期
+- [x] 定义带 `schema-version` 的 version workflow DTO，覆盖 plan fingerprint、release branch 和
   实际发布 package 的稳定版本事实
-- [ ] 定义带 `schema-version` 的 publish workflow DTO，覆盖 package 发布状态和部分失败恢复事实
-- [ ] 确定 dry-run、publish 失败及 output 写入失败的优先级和退出语义
-- [ ] 建立敏感字段 allowlist，禁止输出 header、环境变量、token、命令配置和 author email
+- [x] 定义带 `schema-version` 的 publish workflow DTO，覆盖 package 发布状态和部分失败恢复事实
+- [x] 确定 dry-run、publish 失败及 output 写入失败的优先级和退出语义
+- [x] 建立敏感字段 allowlist，禁止输出 header、环境变量、token、命令配置和 author email
 
 ### 应用与 GitHub Actions 边界
 
-- [ ] 从 version 使用的同一个 `ReleaseContext` 派生 workflow output，不在 changeset 消费后重新推断
-- [ ] 从 `PublishPlan` 与 `PublishReport` 派生 publish workflow output，并保留 succeeded、skipped、
+- [x] 从 version 使用的同一个 `ReleaseContext` 派生 workflow output，不在 changeset 消费后重新推断
+- [x] 从 `PublishPlan` 与 `PublishReport` 派生 publish workflow output，并保留 succeeded、skipped、
   failed 和 not-started 状态
-- [ ] 抽取 workflow output writer port，在 CLI 最外层实现 GitHub Actions 安全多行输出格式
-- [ ] 非 GitHub Actions 环境不写额外文件，也不改变现有终端输出
-- [ ] 让 `smif version` 与 `smif publish` 通过同一个 application output 契约提供后续 step/job 数据
+- [x] 抽取 workflow output writer port，在 CLI 最外层实现 GitHub Actions 安全多行输出格式
+- [x] 非 GitHub Actions 环境不写额外文件，也不改变现有终端输出
+- [x] 让 `smif version` 与 `smif publish` 通过同一个 application output 契约提供后续 step/job 数据
 
 ### 阶段完成条件
 
-- [ ] 后续 GitHub Actions job 无需重新读取 changeset，即可取得 version 阶段的确定性发布事实
-- [ ] publish 部分失败时仍能取得完整结构化恢复状态
-- [ ] workflow output schema 具有兼容性测试，且敏感字段不会进入输出
+- [x] 后续 GitHub Actions job 无需重新读取 changeset，即可取得 version 阶段的确定性发布事实
+- [x] publish 部分失败时仍能取得完整结构化恢复状态
+- [x] workflow output schema 具有兼容性测试，且敏感字段不会进入输出
 
 ## 阶段 8：可扩展 ecosystem 插件
 
@@ -467,7 +467,7 @@
 - [x] 现有 CLI 主要用法保持稳定；所有 TOML 配置字段使用 kebab-case，snake_case 不兼容
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
-- [ ] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
+- [x] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
 - [ ] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning
 
 ## 实施前需要确认的决策

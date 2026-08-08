@@ -10,6 +10,7 @@ pub mod mcp;
 pub mod publish;
 pub mod status;
 pub mod version;
+pub(crate) mod workflow_output;
 
 pub(crate) fn repository_context() -> Option<RepositoryContext> {
     let repository = std::env::var("GITHUB_REPOSITORY").ok()?;

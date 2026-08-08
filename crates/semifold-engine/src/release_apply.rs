@@ -24,6 +24,7 @@ use crate::{
     project::Project,
     publish_plan::{CommandPhase, CommandSpec, StdioPolicy},
     publisher::{CommandError, CommandRunner},
+    release::render_release_branch,
     workspace::{WorkspaceLoadError, load_workspace_graph},
 };
 
@@ -48,6 +49,8 @@ pub struct PostVersionCommand {
 #[derive(Debug)]
 pub struct ReleaseApplyPlan {
     pub release: ReleasePlan,
+    pub release_context: ReleaseContext,
+    pub release_branch: String,
     pub project_root: Utf8PathBuf,
     pub config_path: Utf8PathBuf,
     pub changelogs: BTreeMap<PackageId, String>,
@@ -104,7 +107,12 @@ pub async fn prepare_release(
             source,
         })?;
     let workspace = load_workspace_graph(project.root.as_std_path(), &project.config)?;
-    let release_context = ReleaseContext::from_plan(&release);
+    let mut release_context = ReleaseContext::from_plan(&release);
+    if let Some(repository) = options.repository.clone() {
+        release_context = release_context.with_repository(repository);
+    }
+    let release_branch = render_release_branch(&project.config.branches.release, &release_context)
+        .map_err(ReleasePrepareError::ReleaseBranch)?;
     let changelog_renderer = release
         .order()
         .first()
@@ -203,6 +211,8 @@ pub async fn prepare_release(
 
     Ok(ReleaseApplyPlan {
         release,
+        release_context,
+        release_branch,
         project_root: project.root.clone(),
         config_path: project.config_path.clone(),
         changelogs,
@@ -461,6 +471,8 @@ pub enum ReleasePrepareError {
     WorkspacePackageMissing { package: PackageId },
     #[error(transparent)]
     ReleaseContext(#[from] ReleasePackageContextError),
+    #[error("failed to render release branch")]
+    ReleaseBranch(#[source] crate::release::ReleaseBranchRenderError),
     #[error("failed to generate changelog")]
     Changelog(#[from] GenerateChangelogError),
     #[error("changelog renderer is unavailable for planned package {package}")]

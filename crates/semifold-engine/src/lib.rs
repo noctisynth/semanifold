@@ -14,6 +14,7 @@ pub mod publisher;
 pub mod release;
 pub mod release_apply;
 pub mod service;
+pub mod workflow_output;
 pub mod workspace;
 
 pub use changeset_service::{ChangesetCreateError, ChangesetDraft, ChangesetPackageInput};
@@ -21,7 +22,7 @@ pub use config_management::{ChannelUpdate, ConfigMutationError, ConfigMutationPl
 pub use init::{InitFile, InitOptions, InitPlan, InitReport, InitWorkflowTemplates};
 pub use project::{Project, ProjectLoadError, ProjectLocation};
 pub use publish_plan::{PublishOptions, PublishPlan};
-pub use publisher::{PublishReport, PublishStatus};
+pub use publisher::{PublishExecutionError, PublishReport, PublishStatus};
 pub use release_apply::{
     ApplyReport, ExecutionMode, PostVersionCommand, PostVersionFailure, ReleaseApplyError,
     ReleaseApplyPlan, ReleaseExecutionOptions,
@@ -30,3 +31,4 @@ pub use service::{
     AppError, ConfigMutationReport, ConfigSyncOptions, ConfigSyncReport, SemifoldService,
     SystemDependencies,
 };
+pub use workflow_output::{PublishWorkflowOutput, VersionWorkflowOutput, WorkflowExecutionMode};

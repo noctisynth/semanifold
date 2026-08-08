@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0-rc.2
+
+### Bug Fixes
+
+- [`9e042d4`](https://github.com/noctisynth/semifold/commit/9e042d469769d6f0a74537a359c417028ded2330): Normalize source-wrapped lines within each changeset paragraph to spaces in the default changelog template while preserving explicit blank-line paragraph boundaries and custom template access to the original summary structure.
+
 ## v0.3.0-rc.1
 
 ### New Features

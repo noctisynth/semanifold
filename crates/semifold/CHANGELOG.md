@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.3.0-rc.3
+
+### Bug Fixes
+
+- [`ee07213`](https://github.com/noctisynth/semifold/commit/ee07213d03b5d9ce10c0e4927f721367657779a9): 为发布结果表的包、版本、状态和详情增加语义颜色，同时保持宽字符列对齐与纯文本降级行为。
+- [`b34131e`](https://github.com/noctisynth/semifold/commit/b34131e08c6e6db0d3562d6d554847587c90953e): Replace the verbose numbered post-version command queue with a compact, ordered, deduplicated list
+    of affected packages while retaining per-command execution feedback.
+- [`23ac210`](https://github.com/noctisynth/semifold/commit/23ac210a0f0e2511d2cef079cbc2678f2ff80cac): Detect changesets introduced or changed by the current pull request through the paginated GitHub
+    files API, list them in status comments, and base the explanatory empty state on that branch scope.
+- [`1467a2b`](https://github.com/noctisynth/semifold/commit/1467a2b34f50add6c62f2133c8b4f4af8e243df9): Align CLI fact columns by Unicode display width and suspend dynamic progress while post-version
+    commands inherit the terminal, preventing spinner redraws from overwriting child-process output.
+- [`d37a03e`](https://github.com/noctisynth/semifold/commit/d37a03e97f10ddbc5989670250b54473449c9f21): Improve GitHub pull request release-plan comments with an always-visible version table, reasons,
+    safe comment ownership markers, and an explanatory empty state for post-merge publishing.
+- [`b31f342`](https://github.com/noctisynth/semifold/commit/b31f342ef8421d6a312b83099b20d31710ae10ca): Report post-version commands in their actual sequential execution order. Commands with captured
+    output show per-command progress, while commands inheriting the terminal only print a result after
+    their child process exits.
+- [`ca614dd`](https://github.com/noctisynth/semifold/commit/ca614dd6c061a8a0554c035ad73037557c0a8f0c): List the complete ordered package and command queue before executing post-version hooks, while
+    retaining per-command progress and completion feedback during execution.
+
+### New Features
+
+- [`b52d510`](https://github.com/noctisynth/semifold/commit/b52d510607c00954cb647f7d3e8b70ee7095f1f5): Expose versioned, allowlisted GitHub Actions outputs from `smif version` and `smif publish`.
+    Version outputs preserve the release plan fingerprint, branch, and package versions, while publish
+    outputs retain complete package recovery states after partial failures without leaking command or
+    environment configuration.
+- [`7cc9b8b`](https://github.com/noctisynth/semifold/commit/7cc9b8b05f8ab9b331f61f45c5a15776f3b162db): Introduce a unified terminal presentation layer with indicatif-powered TTY progress, stable CI and
+    redirected output, Unicode-aware tables, explicit dry-run banners, command summaries, and
+    actionable partial-publish recovery feedback. Debug output no longer dumps complete configuration
+    or GitHub event payloads.
+
 ## v0.3.0-rc.2
 
 ### New Features

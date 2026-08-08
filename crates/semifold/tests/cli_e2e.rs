@@ -209,6 +209,30 @@ fn dry_run_version_runs_explicitly_allowed_post_version_commands() {
 }
 
 #[test]
+fn inherited_post_version_output_precedes_each_completed_step() {
+    let root = temporary_project(
+        "sequential-post-version-output",
+        &format!(
+            "{}\n[[resolver.rust.post-version]]\ncommand = \"sh\"\nargs = [\"-c\", \"echo child-one >&2\"]\ndry-run = true\n\n[[resolver.rust.post-version]]\ncommand = \"sh\"\nargs = [\"-c\", \"echo child-two >&2\"]\ndry-run = true\n",
+            config("channel = \"stable\"")
+        ),
+    );
+
+    let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    let stderr = String::from_utf8(version.stderr).unwrap();
+    let child_one = stderr.find("child-one\n").unwrap();
+    let completed_one = stderr.find("sh -c echo child-one >&2").unwrap();
+    let child_two = stderr.find("child-two\n").unwrap();
+    let completed_two = stderr.find("sh -c echo child-two >&2").unwrap();
+    assert!(child_one < completed_one, "{stderr}");
+    assert!(completed_one < child_two, "{stderr}");
+    assert!(child_two < completed_two, "{stderr}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn post_version_failure_keeps_applied_files_and_changesets_for_recovery() {
     let root = temporary_project(
         "post-version-failure",

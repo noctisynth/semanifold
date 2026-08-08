@@ -46,6 +46,17 @@ pub struct PostVersionCommand {
     pub command: CommandSpec,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PostVersionCommandOutcome {
+    Success,
+    Failed,
+}
+
+pub enum PostVersionCommandEvent {
+    Started,
+    Finished(PostVersionCommandOutcome),
+}
+
 #[derive(Debug)]
 pub struct ReleaseApplyPlan {
     pub release: ReleasePlan,
@@ -231,12 +242,32 @@ pub fn apply_release<D>(
 where
     D: crate::service::EngineDependencies + CommandRunner,
 {
+    apply_release_with_callback(deps, plan, mode, &mut ignore_post_version_event)
+}
+
+pub fn apply_release_with_callback<D, F>(
+    deps: &D,
+    plan: ReleaseApplyPlan,
+    mode: ExecutionMode,
+    callback: &mut F,
+) -> Result<ApplyReport, ReleaseApplyError>
+where
+    D: crate::service::EngineDependencies + CommandRunner,
+    F: FnMut(&PostVersionCommand, PostVersionCommandEvent),
+{
     validate_file_edits(&plan.project_root, plan.release.file_edits())
         .map_err(ReleaseApplyError::FileValidation)?;
     let changeset_ids = plan.release.consumed_changesets().to_vec();
 
     if mode == ExecutionMode::DryRun {
-        run_post_version_commands(deps, &plan.post_version_commands, mode, None, &plan)?;
+        run_post_version_commands(
+            deps,
+            &plan.post_version_commands,
+            mode,
+            None,
+            &plan,
+            callback,
+        )?;
         return Ok(ApplyReport {
             changelogs: plan.changelogs,
             file_edits: None,
@@ -253,6 +284,7 @@ where
         mode,
         Some(file_edits.clone()),
         &plan,
+        callback,
     )?;
     consume_channel_bumps(deps, &plan.config_path, &plan.channel_bumps_to_consume)
         .map_err(ReleaseApplyError::ChannelBump)?;
@@ -271,21 +303,28 @@ where
     })
 }
 
-fn run_post_version_commands<D>(
+fn run_post_version_commands<D, F>(
     deps: &D,
     commands: &[PostVersionCommand],
     mode: ExecutionMode,
     file_edits: Option<FileEditApplyReport>,
     plan: &ReleaseApplyPlan,
+    callback: &mut F,
 ) -> Result<(), ReleaseApplyError>
 where
     D: CommandRunner,
+    F: FnMut(&PostVersionCommand, PostVersionCommandEvent),
 {
     for planned in commands {
         if mode == ExecutionMode::DryRun && !planned.command.run_in_dry_run {
             continue;
         }
+        callback(planned, PostVersionCommandEvent::Started);
         if let Err(source) = deps.run(&planned.command) {
+            callback(
+                planned,
+                PostVersionCommandEvent::Finished(PostVersionCommandOutcome::Failed),
+            );
             return Err(ReleaseApplyError::PostVersion {
                 report: Box::new(ApplyReport {
                     changelogs: plan.changelogs.clone(),
@@ -299,9 +338,15 @@ where
                 }),
             });
         }
+        callback(
+            planned,
+            PostVersionCommandEvent::Finished(PostVersionCommandOutcome::Success),
+        );
     }
     Ok(())
 }
+
+fn ignore_post_version_event(_command: &PostVersionCommand, _event: PostVersionCommandEvent) {}
 
 fn consumed_changeset_paths(
     changesets: &[Changeset],

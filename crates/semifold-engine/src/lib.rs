@@ -24,8 +24,9 @@ pub use project::{Project, ProjectLoadError, ProjectLocation};
 pub use publish_plan::{PublishOptions, PublishPlan};
 pub use publisher::{PublishExecutionError, PublishReport, PublishStatus};
 pub use release_apply::{
-    ApplyReport, ExecutionMode, PostVersionCommand, PostVersionFailure, ReleaseApplyError,
-    ReleaseApplyPlan, ReleaseExecutionOptions,
+    ApplyReport, ExecutionMode, PostVersionCommand, PostVersionCommandEvent,
+    PostVersionCommandOutcome, PostVersionFailure, ReleaseApplyError, ReleaseApplyPlan,
+    ReleaseExecutionOptions,
 };
 pub use service::{
     AppError, ConfigMutationReport, ConfigSyncOptions, ConfigSyncReport, SemifoldService,

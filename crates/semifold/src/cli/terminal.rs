@@ -137,6 +137,16 @@ impl Terminal {
         }
     }
 
+    pub(crate) fn step(&self, outcome: StepOutcome, message: &str) {
+        let symbol = self.symbol(outcome);
+        let rendered = match outcome {
+            StepOutcome::Success => format!("  {symbol} {message}").green(),
+            StepOutcome::Skipped => format!("  {symbol} {message}").yellow(),
+            StepOutcome::Failed => format!("  {symbol} {message}").red(),
+        };
+        let _ = writeln!(std::io::stderr(), "{rendered}");
+    }
+
     pub(crate) fn progress(&self, message: impl Into<String>) -> ProgressTask {
         match &self.progress {
             ProgressBackend::Indicatif(reporter) => reporter.begin(message.into()),

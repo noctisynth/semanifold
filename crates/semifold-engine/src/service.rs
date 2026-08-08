@@ -296,6 +296,22 @@ where
         crate::release_apply::apply_release(&self.deps, plan, mode)
             .map_err(|error| AppError::ReleaseApply(Box::new(error)))
     }
+
+    pub fn apply_release_with_callback<F>(
+        &self,
+        plan: ReleaseApplyPlan,
+        mode: ExecutionMode,
+        callback: &mut F,
+    ) -> Result<ApplyReport, AppError>
+    where
+        F: FnMut(
+            &crate::release_apply::PostVersionCommand,
+            crate::release_apply::PostVersionCommandEvent,
+        ),
+    {
+        crate::release_apply::apply_release_with_callback(&self.deps, plan, mode, callback)
+            .map_err(|error| AppError::ReleaseApply(Box::new(error)))
+    }
 }
 
 impl SemifoldService<SystemDependencies> {

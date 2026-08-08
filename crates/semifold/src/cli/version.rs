@@ -3,9 +3,10 @@ use colored::Colorize;
 use rust_i18n::t;
 use semifold_core::ChangesetId;
 use semifold_engine::{
-    AppError, ApplyReport, ExecutionMode, Project, ReleaseApplyError, ReleaseApplyPlan,
+    AppError, ApplyReport, ExecutionMode, PostVersionCommand, PostVersionCommandEvent,
+    PostVersionCommandOutcome, Project, ReleaseApplyError, ReleaseApplyPlan,
     ReleaseExecutionOptions, SemifoldService, SystemDependencies, VersionWorkflowOutput,
-    WorkflowExecutionMode,
+    WorkflowExecutionMode, publish_plan::StdioPolicy,
 };
 
 use crate::cli::{
@@ -80,13 +81,18 @@ pub(crate) async fn prepare_and_apply_release(
         t!("cli.version.applying").into_owned()
     });
     let apply_result = apply_progress.suspend(|| {
-        service.apply_release(
+        let mut command_progress = None;
+        let mut callback = |command: &PostVersionCommand, event| {
+            render_post_version_event(terminal, &mut command_progress, command, event);
+        };
+        service.apply_release_with_callback(
             plan,
             if dry_run {
                 ExecutionMode::DryRun
             } else {
                 ExecutionMode::Apply
             },
+            &mut callback,
         )
     });
     let report = match apply_result {
@@ -156,6 +162,7 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
             package = package.as_str()
         ));
     }
+    let mut runnable = 0;
     for planned in &plan.post_version_commands {
         let command = format!(
             "{} {}",
@@ -169,13 +176,79 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
                 package = planned.package.as_str().cyan()
             ));
         } else {
-            terminal.line(t!(
-                "cli.version.run_post_version",
-                command = command.magenta(),
-                package = planned.package.as_str().cyan()
-            ));
+            runnable += 1;
         }
     }
+    if runnable > 0 {
+        terminal.line(t!("cli.version.post_version_batch", count = runnable));
+    }
+}
+
+fn render_post_version_event(
+    terminal: &Terminal,
+    progress: &mut Option<crate::cli::terminal::ProgressTask>,
+    command: &PostVersionCommand,
+    event: PostVersionCommandEvent,
+) {
+    match event {
+        PostVersionCommandEvent::Started => {
+            let rendered_command = format_command(command);
+            if !inherits_terminal(command) {
+                *progress = Some(
+                    terminal.progress(
+                        t!(
+                            "cli.version.run_post_version",
+                            command = rendered_command.magenta(),
+                            package = command.package.as_str().cyan()
+                        )
+                        .into_owned(),
+                    ),
+                );
+            }
+        }
+        PostVersionCommandEvent::Finished(outcome) => {
+            let rendered_command = format_command(command);
+            let (step_outcome, message) = match outcome {
+                PostVersionCommandOutcome::Success => (
+                    StepOutcome::Success,
+                    t!(
+                        "cli.version.post_version_complete",
+                        command = rendered_command.magenta(),
+                        package = command.package.as_str().cyan()
+                    )
+                    .into_owned(),
+                ),
+                PostVersionCommandOutcome::Failed => (
+                    StepOutcome::Failed,
+                    t!(
+                        "cli.version.post_version_failed",
+                        command = rendered_command.magenta(),
+                        package = command.package.as_str().cyan()
+                    )
+                    .into_owned(),
+                ),
+            };
+            if let Some(progress) = progress.take() {
+                progress.finish(step_outcome, message);
+            } else {
+                terminal.step(step_outcome, &message);
+            }
+        }
+    }
+}
+
+fn format_command(planned: &PostVersionCommand) -> String {
+    format!(
+        "{} {}",
+        planned.command.executable,
+        planned.command.args.join(" ")
+    )
+    .trim_end()
+    .to_string()
+}
+
+fn inherits_terminal(planned: &PostVersionCommand) -> bool {
+    planned.command.stdout == StdioPolicy::Inherit || planned.command.stderr == StdioPolicy::Inherit
 }
 
 fn render_apply_error(error: AppError) -> anyhow::Error {

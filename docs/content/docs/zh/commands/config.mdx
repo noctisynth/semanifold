@@ -1,5 +1,5 @@
 ---
-title: smif config
+title: 配置文件
 description: 同步发现的软件包、迁移旧字段，并在不重写无关策略的情况下维护命名发布通道。
 ---
 
@@ -23,14 +23,14 @@ smif config sync --check
 
 使用 `--resolver rust --resolver nodejs` 可以限制扫描的软件生态。`--prune` 会删除完整、成功扫描中不存在的已配置软件包；部分扫描或冲突无法证明删除安全时，Semifold 会拒绝清理。
 
-## 迁移旧配置
+## 从 v0.2.x 迁移
 
 ```bash
 smif config migrate --check
 smif config migrate
 ```
 
-迁移发生在严格加载项目之前。它可以替换旧 `version-mode`、规范已知的 snake_case 字段，并为旧的版本存在性检查补充必需的 `type`，同时保留无关 TOML 和注释。需要迁移时，`--check` 返回非零状态且不写文件。
+Semifold 会在严格加载项目之前读取并迁移 v0.2.x 配置。它可以替换旧 `version-mode`、规范已知的 snake_case 字段，并为旧的版本存在性检查补充必需的 `type`，同时保留无关 TOML 和注释。需要迁移时，`--check` 返回非零状态且不写文件。
 
 ## 设置或清除发布通道
 

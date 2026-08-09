@@ -1,5 +1,5 @@
 ---
-title: smif config
+title: Configuration
 description: Synchronize discovered packages, migrate legacy fields, and manage named release channels without rewriting unrelated policy.
 ---
 
@@ -23,14 +23,14 @@ smif config sync --check
 
 Use `--resolver rust --resolver nodejs` to limit discovery. `--prune` removes configured packages missing from a complete successful scan; it is intentionally unavailable when a partial scan or conflict makes deletion unsafe.
 
-## Migrate an older configuration
+## Migrate from v0.2.x
 
 ```bash
 smif config migrate --check
 smif config migrate
 ```
 
-Migration runs before strict project loading. It can replace legacy `version-mode`, normalize known snake_case keys, and add the required typed `pre-check` discriminator while preserving unrelated TOML and comments. `--check` returns a non-zero status when a migration is needed and never writes the file.
+Semifold reads and migrates v0.2.x configuration before strict project loading. It can replace legacy `version-mode`, normalize known snake_case keys, and add the required typed `pre-check` discriminator while preserving unrelated TOML and comments. `--check` returns a non-zero status when a migration is needed and never writes the file.
 
 ## Set or clear a release channel
 

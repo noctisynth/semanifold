@@ -266,6 +266,10 @@ code change
 getting started、workflow、workspace 和 automation。原 `/docs/reference/cli` 保留静态迁移入口，规范位置改为
 `/docs/commands/reference`。
 
+命令行模块的侧栏和页面标题使用本地化的任务名称，例如“初始化”“配置文件”“持续集成”和“MCP 工具”；
+`init`、`config`、`ci` 等稳定 slug 与正文中的 `smif ...` 命令保留原文。导航负责帮助用户按意图选择页面，
+命令拼写和完整参数由页面正文与参数参考承载。
+
 ## 8. 页面与写作规范
 
 ### 8.1 页面类型
@@ -300,6 +304,7 @@ getting started、workflow、workspace 和 automation。原 `/docs/reference/cli
   “发布计划（release plan）”、“软件生态（ecosystem）”、“清单文件（manifest）”和“软件包仓库（registry）”；
 - `PackageId`、配置字段和协议 operation 等精确标识保留原文，但必须立即解释它在用户任务中的含义；
 - 不允许连续堆叠未解释的英文领域词，也不允许把英文原词当作中文解释的 fallback；
+- 页面标题、描述和导语直接说明内容，不用“用中文解释”“中文文档会”等自我指涉来强调当前页面语言；
 - 不使用“zero pain”“stable”等无法验证的绝对营销表述；
 - 每项 ecosystem 能力分别说明 discovery、version edit、dependency propagation 与 publish，而不是一个总状态。
 - 英文首页避免把 `polyglot` 当作无需解释的主标题词；优先使用 “multiple languages and package ecosystems”，

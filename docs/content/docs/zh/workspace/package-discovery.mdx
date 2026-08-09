@@ -43,6 +43,8 @@ resolver = "rust"
 
 一份配置中的 `PackageId` 必须全局唯一。同一生态内的清单名称也必须唯一，否则 Semifold 无法判断清单依赖指向哪个软件包。不同生态可以使用相同清单名称，但应选择不同 ID，例如 `rust-shared` 和 `node-shared`。
 
+已有配置会按“软件生态 + 路径”保留这类自定义 ID，`config sync` 不会把它们改回同名清单的默认建议。不过，首次 `smif init` 目前还不能为跨生态同名软件包自动选择不同 ID：两个软件包都建议为清单名称时会报告 `DuplicatePackageId`。当前需要先为它们手工建立不同的 `[packages.<PackageId>]`，或者在初始化前消除清单名称冲突。
+
 Semifold 不会因为两个生态的软件包同名就推断依赖。跨生态关系必须使用 [`depends-on`](/zh/docs/workspace/dependencies/) 显式引用稳定 ID。
 
 ## 插件定义的软件生态

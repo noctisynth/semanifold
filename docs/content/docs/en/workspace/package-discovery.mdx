@@ -43,6 +43,8 @@ The manifest name is the native Cargo, npm, PyPI, or CMake name. Discovery propo
 
 Every `PackageId` in one configuration must be globally unique. Manifest names must also be unique within an ecosystem so manifest dependencies have one unambiguous target. Different ecosystems may use the same manifest name, but should receive different IDs such as `rust-shared` and `node-shared`.
 
+Existing configuration preserves these custom IDs by ecosystem and path, and `config sync` does not rename them back to the manifest-name suggestion. Initial `smif init` cannot yet choose distinct IDs for a cross-ecosystem name collision: when both packages propose the manifest name, it reports `DuplicatePackageId`. For now, create distinct `[packages.<PackageId>]` entries manually or remove the manifest-name collision before initialization.
+
 Matching names in two ecosystems never imply a dependency. A cross-ecosystem edge must use [`depends-on`](/docs/workspace/dependencies/) to reference a stable ID.
 
 ## Plugin-defined ecosystems

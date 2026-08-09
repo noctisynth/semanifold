@@ -296,6 +296,56 @@ mod tests {
     }
 
     #[test]
+    fn plans_distinct_ids_for_matching_names_across_ecosystems() {
+        let root = temporary_root();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"shared\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("package.json"),
+            r#"{"name":"shared","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        let location = ProjectLocation {
+            root: root.clone(),
+            existing_config: None,
+        };
+        let target = root.join(".changes");
+
+        let plan = plan_init(
+            &location,
+            InitOptions {
+                target: target.clone(),
+                resolvers: vec![ResolverType::Rust, ResolverType::Nodejs],
+                tags: BTreeMap::new(),
+                base_branch: "main".to_string(),
+                release_branch: "release".to_string(),
+                workflows: None,
+            },
+        )
+        .unwrap();
+
+        let config = plan
+            .files
+            .iter()
+            .find(|file| file.path == target.join("config.toml"))
+            .unwrap();
+        let parsed: config::Config = toml_edit::de::from_str(&config.content).unwrap();
+        assert_eq!(
+            parsed
+                .packages
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["nodejs-shared", "rust-shared"]
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn invalid_workflow_template_returns_an_error() {
         let error = render_workflow("{{ missing }}", "main", &[]).unwrap_err();
         assert_eq!(error.kind(), minijinja::ErrorKind::UndefinedError);

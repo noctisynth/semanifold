@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fmt,
     path::{Path, PathBuf},
@@ -31,25 +31,81 @@ impl PackageDiscovery {
     pub fn default_package_configs(
         &self,
     ) -> Result<BTreeMap<String, PackageConfig>, PackageDiscoveryError> {
+        let mut packages = self.packages.iter().collect::<Vec<_>>();
+        packages.sort();
+
+        let mut packages_by_id = BTreeMap::<PackageId, Vec<&DiscoveredPackage>>::new();
+        for package in packages {
+            packages_by_id
+                .entry(package.id.clone())
+                .or_default()
+                .push(package);
+        }
+
+        for (package_id, packages) in &packages_by_id {
+            let mut ecosystems = BTreeSet::new();
+            for package in packages {
+                if !ecosystems.insert(package.ecosystem.clone()) {
+                    return Err(PackageDiscoveryError::DuplicatePackageId {
+                        package: package_id.clone(),
+                    });
+                }
+            }
+        }
+
+        let mut occupied_ids = packages_by_id
+            .iter()
+            .filter(|(_, packages)| packages.len() == 1)
+            .map(|(package_id, _)| package_id.to_string())
+            .collect::<BTreeSet<_>>();
         let mut configs = BTreeMap::new();
-        for package in &self.packages {
-            let config = PackageConfig {
-                path: PathBuf::from(package.path.as_str()),
-                resolver: package.ecosystem.clone(),
-                publish: None,
-                channel: ReleaseChannel::Stable,
-                channel_bump: None,
-                assets: vec![],
-                github_release: None,
-                depends_on: vec![],
-            };
-            if configs.insert(package.id.to_string(), config).is_some() {
-                return Err(PackageDiscoveryError::DuplicatePackageId {
-                    package: package.id.clone(),
-                });
+        for (package_id, packages) in packages_by_id {
+            let has_cross_ecosystem_duplicate = packages.len() > 1;
+            for package in packages {
+                let config_id = if has_cross_ecosystem_duplicate {
+                    let base = format!("{}-{package_id}", package.ecosystem.as_str());
+                    allocate_config_id(&base, &occupied_ids, self.packages.len()).ok_or_else(
+                        || PackageDiscoveryError::PackageIdAllocationExhausted {
+                            package: package_id.clone(),
+                            ecosystem: package.ecosystem.clone(),
+                        },
+                    )?
+                } else {
+                    package_id.to_string()
+                };
+                occupied_ids.insert(config_id.clone());
+                configs.insert(config_id, default_package_config(package));
             }
         }
         Ok(configs)
+    }
+}
+
+fn allocate_config_id(
+    base: &str,
+    occupied_ids: &BTreeSet<String>,
+    package_count: usize,
+) -> Option<String> {
+    if !occupied_ids.contains(base) {
+        return Some(base.to_owned());
+    }
+
+    let max_suffix = package_count.checked_add(1)?;
+    (2..=max_suffix)
+        .map(|suffix| format!("{base}-{suffix}"))
+        .find(|candidate| !occupied_ids.contains(candidate))
+}
+
+fn default_package_config(package: &DiscoveredPackage) -> PackageConfig {
+    PackageConfig {
+        path: PathBuf::from(package.path.as_str()),
+        resolver: package.ecosystem.clone(),
+        publish: None,
+        channel: ReleaseChannel::Stable,
+        channel_bump: None,
+        assets: vec![],
+        github_release: None,
+        depends_on: vec![],
     }
 }
 
@@ -214,6 +270,10 @@ pub enum PackageDiscoveryError {
     DuplicatePackageId {
         package: PackageId,
     },
+    PackageIdAllocationExhausted {
+        package: PackageId,
+        ecosystem: EcosystemId,
+    },
     Registry(ResolverRegistryError),
 }
 
@@ -244,6 +304,10 @@ impl fmt::Display for PackageDiscoveryError {
                     "package discovery returned duplicate package id: {package}"
                 )
             }
+            Self::PackageIdAllocationExhausted { package, ecosystem } => write!(
+                formatter,
+                "package discovery could not allocate a unique id for {ecosystem} package: {package}"
+            ),
             Self::Registry(source) => source.fmt(formatter),
         }
     }
@@ -255,7 +319,9 @@ impl Error for PackageDiscoveryError {
             Self::Adapter { source, .. } => Some(source),
             Self::PackagePath { source, .. } => Some(source),
             Self::Registry(source) => Some(source),
-            Self::InvalidProjectRoot { .. } | Self::DuplicatePackageId { .. } => None,
+            Self::InvalidProjectRoot { .. }
+            | Self::DuplicatePackageId { .. }
+            | Self::PackageIdAllocationExhausted { .. } => None,
         }
     }
 }
@@ -353,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_ids_when_building_config_tables() {
+    fn qualifies_cross_ecosystem_duplicate_ids_when_building_config_tables() {
         let discovery = PackageDiscovery {
             resolvers: vec![EcosystemId::RUST, EcosystemId::NODE],
             packages: vec![
@@ -370,11 +436,82 @@ mod tests {
             ],
         };
 
+        let configs = discovery.default_package_configs().unwrap();
+        assert_eq!(
+            configs.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["nodejs-shared", "rust-shared"]
+        );
+        assert_eq!(configs["nodejs-shared"].path, PathBuf::from("node"));
+        assert_eq!(configs["rust-shared"].path, PathBuf::from("rust"));
+    }
+
+    #[test]
+    fn rejects_duplicate_ids_within_one_ecosystem() {
+        let discovery = PackageDiscovery {
+            resolvers: vec![EcosystemId::RUST],
+            packages: vec![
+                DiscoveredPackage {
+                    id: PackageId::new("shared"),
+                    ecosystem: EcosystemId::RUST,
+                    path: Utf8PathBuf::from("crates/first"),
+                },
+                DiscoveredPackage {
+                    id: PackageId::new("shared"),
+                    ecosystem: EcosystemId::RUST,
+                    path: Utf8PathBuf::from("crates/second"),
+                },
+            ],
+        };
+
         assert!(matches!(
             discovery.default_package_configs(),
             Err(PackageDiscoveryError::DuplicatePackageId { package })
                 if package == PackageId::new("shared")
         ));
+    }
+
+    #[test]
+    fn appends_a_deterministic_suffix_when_qualified_ids_already_exist() {
+        let discovery = PackageDiscovery {
+            resolvers: vec![EcosystemId::NODE, EcosystemId::RUST],
+            packages: vec![
+                DiscoveredPackage {
+                    id: PackageId::new("rust-shared-2"),
+                    ecosystem: EcosystemId::RUST,
+                    path: Utf8PathBuf::from("crates/existing-two"),
+                },
+                DiscoveredPackage {
+                    id: PackageId::new("shared"),
+                    ecosystem: EcosystemId::NODE,
+                    path: Utf8PathBuf::from("packages/shared"),
+                },
+                DiscoveredPackage {
+                    id: PackageId::new("rust-shared"),
+                    ecosystem: EcosystemId::RUST,
+                    path: Utf8PathBuf::from("crates/existing"),
+                },
+                DiscoveredPackage {
+                    id: PackageId::new("shared"),
+                    ecosystem: EcosystemId::RUST,
+                    path: Utf8PathBuf::from("crates/shared"),
+                },
+            ],
+        };
+
+        let configs = discovery.default_package_configs().unwrap();
+        assert_eq!(
+            configs.keys().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "nodejs-shared",
+                "rust-shared",
+                "rust-shared-2",
+                "rust-shared-3"
+            ]
+        );
+        assert_eq!(
+            configs["rust-shared-3"].path,
+            PathBuf::from("crates/shared")
+        );
     }
 
     #[test]

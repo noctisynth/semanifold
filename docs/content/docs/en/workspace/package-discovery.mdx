@@ -41,9 +41,21 @@ resolver = "rust"
 
 The manifest name is the native Cargo, npm, PyPI, or CMake name. Discovery proposes it as an initial ID, but configured identity is stable. After configuration exists, Semifold uses `rust-core` for this package even if its directory or manifest name later changes.
 
-Every `PackageId` in one configuration must be globally unique. Manifest names must also be unique within an ecosystem so manifest dependencies have one unambiguous target. Different ecosystems may use the same manifest name, but should receive different IDs such as `rust-shared` and `node-shared`.
+Every `PackageId` in one configuration must be globally unique. Manifest names must also be unique within an ecosystem so manifest dependencies have one unambiguous target. Different ecosystems may use the same manifest name. On the first `smif init`, Semifold automatically adds the ecosystem prefix to those packages. For example, Rust and Node.js packages both named `shared` become `rust-shared` and `nodejs-shared`:
 
-Existing configuration preserves these custom IDs by ecosystem and path, and `config sync` does not rename them back to the manifest-name suggestion. Initial `smif init` cannot yet choose distinct IDs for a cross-ecosystem name collision: when both packages propose the manifest name, it reports `DuplicatePackageId`. For now, create distinct `[packages.<PackageId>]` entries manually or remove the manifest-name collision before initialization.
+```toml
+[packages.rust-shared]
+path = "crates/shared"
+resolver = "rust"
+
+[packages.nodejs-shared]
+path = "packages/shared"
+resolver = "nodejs"
+```
+
+Packages without a name collision still use the manifest name directly. If another package already occupies a prefixed ID, initialization appends a numeric suffix in stable discovery order, such as `rust-shared-2` or `rust-shared-3`. Duplicate manifest names within one ecosystem still report `DuplicatePackageId`, because renaming the configured IDs cannot resolve ambiguous manifest dependencies.
+
+Automatic prefixing only applies when creating the initial configuration. Existing configuration preserves stable IDs by ecosystem and path, and `config sync` does not rename configured packages. If a later discovery finds multiple unconfigured packages with the same name across ecosystems, `config sync` still reports a conflict so a maintainer can choose their IDs explicitly.
 
 Matching names in two ecosystems never imply a dependency. A cross-ecosystem edge must use [`depends-on`](/docs/workspace/dependencies/) to reference a stable ID.
 

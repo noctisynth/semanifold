@@ -216,6 +216,12 @@ pub enum DependencySource {
 manifest 依赖，工作区加载必须失败。manifest 依赖始终按 `(Ecosystem, manifest_name)` 解析，绝不因
 跨生态名称相同而推断跨生态边；跨生态关系只能通过 `depends-on` 引用稳定 `PackageId`。
 
+首次 `init` 从 manifest name 生成初始配置时，只对跨生态重复建议自动加 ecosystem 前缀，例如
+`shared` 分配为 `rust-shared` 与 `nodejs-shared`；未冲突的建议保持原样。若限定后的 ID 已被其他建议
+占用，按完整 discovery 稳定顺序追加 `-2`、`-3`，直到得到全局唯一 ID。同一生态内的重复 manifest
+name 仍然失败，不能用自动后缀掩盖依赖匹配歧义。该规则只负责生成首次配置，不改变已有稳定 ID，也
+不让运行时从 ID 反向推导 ecosystem。
+
 `DependencySource` 区分生态 manifest 推导的依赖与 `depends-on` 配置补充的依赖。两者都参与同一个
 `WorkspaceGraph`；同一 package 同时通过两种来源指向同一目标时，图边去重，但配置来源的发布传播语义仍必须保留。
 
@@ -2097,7 +2103,7 @@ impl PackageDiscoveryService {
 }
 ```
 
-resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId` 建议，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复建议保留在发现快照中。`ConfigSyncPlanner` 可用相同 ecosystem 与 path 将跨生态同名结果绑定到已有稳定 ID；首次 `init` 或未配置的多个新增 package 仍竞争同一建议时产生多义冲突并停止，不猜测 namespace。
+resolver 选择先按类型稳定排序并去重。服务通过 registry 创建现有 resolver，调用发现接口，将 manifest name 作为默认 `PackageId` 建议，并使用共享 `PackagePathNormalizer` 生成规范化路径。`PackageDiscovery.packages` 按 `PackageId`、ecosystem 和 path 稳定排序；重复建议保留在发现快照中。`ConfigSyncPlanner` 可用相同 ecosystem 与 path 将跨生态同名结果绑定到已有稳定 ID。首次 `init` 生成默认配置时，对跨生态重复建议使用 6.1 节定义的 ecosystem 前缀和确定性数字后缀；`config sync` 中尚未配置的多个新增 package 继续分类为多义冲突，不擅自改变增量配置中的稳定 ID。
 
 一次 discovery 只有“完整成功”或“失败”两种结果：任一所选 resolver 的 glob 遍历、manifest 读取、package 解析或路径规范化失败时，整个调用返回结构化错误，不得返回看似完整的部分快照。未选择的 resolver 不属于扫描范围；应用层据此禁止在部分 resolver 模式下 prune 其他生态的配置。现有 `resolve_all` 中记录 warning 后跳过损坏 package 的路径必须改为传播错误，避免把扫描失败误判为 package 已删除。
 
@@ -2584,7 +2590,9 @@ adapter 暴露旧 `ResolvedPackage`。
 3. [已决定] 所有内部依赖类别参与拓扑排序；首版 manifest 自动传播仅支持 Rust runtime，
    development、build、peer、optional 及其他生态 manifest 依赖不自动传播，需要时使用
    `depends-on`。
-4. [已决定] `PackageId` 全局唯一但不自动添加 namespace；跨生态同名 manifest 由已有配置的稳定 ID 区分，首次发现无法唯一落盘时报告冲突。
+4. [已决定] `PackageId` 全局唯一且运行时不隐式添加 namespace；首次 `init` 对跨生态同名 manifest
+   使用 `<ecosystem>-<manifest-name>` 生成稳定 ID，必要时追加确定性数字后缀。已有配置继续使用稳定
+   ID，`config sync` 不自动重命名尚未配置的跨生态冲突。
 5. [已决定] post-version 命令失败时保留已写入文件和 changeset，不自动回滚；输出包含已完成文件、失败命令和未消费 changeset 的结构化恢复指引。
 6. [已决定] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`，并保留可诊断的收集错误。
 7. [已决定] Semifold 运行时和配置编辑只支持 TOML；JSON 配置不再维护，发现时返回明确错误。

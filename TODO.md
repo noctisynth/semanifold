@@ -148,6 +148,7 @@
 - [x] 抽取 package path 规范化
 - [x] 抽取默认 `PackageConfig` 生成
 - [x] 让 `init` 和 `config sync` 使用相同发现逻辑
+- [x] `init` 为跨生态重复的默认 `PackageId` 建议添加 ecosystem 前缀，并以确定性数字后缀处理二次冲突
 - [x] 将 `init --force` 从日常工作区同步路径中移除（仅保留为显式重新初始化）
 
 ### 测试
@@ -548,7 +549,7 @@
 - [x] 运行时内部依赖仅在计划新版本不满足依赖方 manifest 约束时触发 patch bump；显式 changeset 的更高 bump 优先，约束仍满足时不自动发布依赖方
 - [x] 首版 Rust 仅 `[dependencies]` 参与自动版本传播；`dev-dependencies` 与 `build-dependencies` 不自动传播
 - [x] 所有内部依赖类别参与排序；dev、build、peer、optional 不自动传播，需要时使用 `depends-on`
-- [x] `PackageId` 不自动添加 namespace；跨生态同名由稳定配置 ID 区分，首次发现歧义时报告冲突
+- [x] `PackageId` 运行时不隐式添加 namespace；首次 `init` 对跨生态同名使用 ecosystem 前缀和确定性后缀，已有配置继续使用稳定 ID
 - [x] Post-version 命令失败时保留已写入文件和 changeset，不自动回滚，并返回结构化恢复指引
 - [x] GitHub PR 元数据查询失败时降级为无 PR 信息的 changelog，不中断 `version`
 - [x] 移除 Semifold JSON 配置加载与保存；发现 `config.json` 时返回明确的不支持错误

@@ -18,8 +18,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Check plugin SDK protocol bindings
-        run: cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs -- --check
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node.js
@@ -29,6 +27,8 @@ jobs:
           cache: pnpm
       - name: Install SDK dependencies
         run: pnpm install --frozen-lockfile --filter @semifold/plugin-sdk
+      - name: Check plugin SDK
+        run: pnpm --filter @semifold/plugin-sdk check
       - name: Test plugin SDK
         run: pnpm --filter @semifold/plugin-sdk test
       - name: Build

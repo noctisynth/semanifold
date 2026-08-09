@@ -500,6 +500,7 @@
   - [x] 使用 `ts-rs` 投影 serde 字段、tag、optional 规则以及 schema/operation 字面量
   - [x] 从生成 union 派生现有 operation-specific 类型，并在公共出口递归施加只读约束
   - [x] 提供确定性生成与 CI drift 检查，同时保留跨语言 JSON fixture
+  - [x] 生成与 drift 检查统一经过固定版本 Biome，并将 SDK 的 Biome format/lint 接入只读检查与 CI
 - [ ] 实现配套 Vite 插件的单文件 ESM bundle 与不支持能力检查
 
 ### 阶段完成条件

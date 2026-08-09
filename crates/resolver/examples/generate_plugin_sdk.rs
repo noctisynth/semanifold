@@ -2,7 +2,14 @@ use std::process::ExitCode;
 
 #[cfg(feature = "ts-rs")]
 mod generator {
-    use std::{env, error::Error, fs, io, path::PathBuf};
+    use std::{
+        env,
+        error::Error,
+        fs,
+        io::{self, Write},
+        path::{Path, PathBuf},
+        process::{Command, Stdio},
+    };
 
     use semifold_resolver::plugin::protocol::{
         PLUGIN_OPERATIONS, PLUGIN_PROTOCOL_SCHEMA_VERSION, PluginCallV1, PluginDependencyKindV1,
@@ -20,7 +27,7 @@ mod generator {
     pub fn run() -> Result<(), Box<dyn Error>> {
         let check = parse_mode()?;
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(GENERATED_PATH);
-        let generated = generate()?;
+        let generated = format_generated(&generate()?, &path)?;
 
         if check {
             let current = fs::read_to_string(&path).map_err(|error| {
@@ -34,7 +41,7 @@ mod generator {
             })?;
             if current != generated {
                 return Err(io::Error::other(format!(
-                    "generated plugin SDK types are stale; run `cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs` to update {}",
+                    "generated plugin SDK types are stale; run `pnpm --filter @semifold/plugin-sdk generate:protocol` to update {}",
                     path.display()
                 ))
                 .into());
@@ -98,6 +105,55 @@ mod generator {
         append::<PluginResponseV1>(&config, &mut output);
 
         Ok(output)
+    }
+
+    fn format_generated(generated: &str, path: &Path) -> Result<String, Box<dyn Error>> {
+        let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .ok_or_else(|| {
+                io::Error::other("resolver manifest path has no repository root parent")
+            })?;
+        let mut child = Command::new("biome")
+            .arg("format")
+            .arg("--config-path")
+            .arg(repository_root.join("biome.json"))
+            .arg("--stdin-file-path")
+            .arg(path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| {
+                io::Error::new(
+                    error.kind(),
+                    format!(
+                        "failed to start Biome for plugin SDK generation; run `pnpm install` first: {error}"
+                    ),
+                )
+            })?;
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            io::Error::other("failed to open Biome stdin for plugin SDK generation")
+        })?;
+        stdin.write_all(generated.as_bytes())?;
+        drop(stdin);
+
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(io::Error::other(format!(
+                "Biome failed to format generated plugin SDK types: {}",
+                stderr.trim()
+            ))
+            .into());
+        }
+        String::from_utf8(output.stdout).map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Biome returned non-UTF-8 plugin SDK types: {error}"),
+            )
+            .into()
+        })
     }
 
     fn append<T: TS>(config: &Config, output: &mut String) {

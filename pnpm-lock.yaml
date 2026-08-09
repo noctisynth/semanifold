@@ -35,6 +35,9 @@ importers:
 
   packages/plugin-sdk:
     devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.3.4
+        version: 2.3.4
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

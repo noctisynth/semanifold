@@ -18,7 +18,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "check": "pnpm run check:protocol && pnpm run check:biome",
+    "check:biome": "biome check src test package.json tsconfig.json",
     "check:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs -- --check",
+    "format": "biome format --write src test package.json tsconfig.json",
     "generate:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs",
     "prepack": "tsc -p tsconfig.json",
     "test": "pnpm run build && pnpm run test:types && pnpm run test:runtime",
@@ -43,6 +46,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.3.4",
     "typescript": "^7.0.2"
   }
 }

@@ -40,19 +40,28 @@ export type SemVerV1 = string;
 
 export type PluginOperationV1 = GeneratedPluginOperationV1;
 export type PluginMetadataV1 = DeepReadonly<GeneratedPluginMetadataV1>;
-export type PluginDiscoverInputV1 = DeepReadonly<GeneratedPluginDiscoverInputV1>;
+export type PluginDiscoverInputV1 =
+  DeepReadonly<GeneratedPluginDiscoverInputV1>;
 export type PluginInspectInputV1 = DeepReadonly<GeneratedPluginInspectInputV1>;
-export type PluginPlanEditsInputV1 = DeepReadonly<GeneratedPluginPlanEditsInputV1>;
-export type PluginPackageLocationV1 = DeepReadonly<GeneratedPluginPackageLocationV1>;
-export type PluginVersionSourceV1 = DeepReadonly<GeneratedPluginVersionSourceV1>;
+export type PluginPlanEditsInputV1 =
+  DeepReadonly<GeneratedPluginPlanEditsInputV1>;
+export type PluginPackageLocationV1 =
+  DeepReadonly<GeneratedPluginPackageLocationV1>;
+export type PluginVersionSourceV1 =
+  DeepReadonly<GeneratedPluginVersionSourceV1>;
 export type PluginDependencyKindV1 = GeneratedPluginDependencyKindV1;
 export type PluginDependencySourceV1 = GeneratedPluginDependencySourceV1;
-export type PluginManifestDependencyV1 = DeepReadonly<GeneratedPluginManifestDependencyV1>;
+export type PluginManifestDependencyV1 =
+  DeepReadonly<GeneratedPluginManifestDependencyV1>;
 export type PluginDependencyV1 = DeepReadonly<GeneratedPluginDependencyV1>;
-export type PluginPackageInspectionV1 = DeepReadonly<GeneratedPluginPackageInspectionV1>;
-export type PluginPackageSnapshotV1 = DeepReadonly<GeneratedPluginPackageSnapshotV1>;
-export type PluginFileEditExpectationV1 = DeepReadonly<GeneratedPluginFileEditExpectationV1>;
-export type PluginSharedVersionEditV1 = DeepReadonly<GeneratedPluginSharedVersionEditV1>;
+export type PluginPackageInspectionV1 =
+  DeepReadonly<GeneratedPluginPackageInspectionV1>;
+export type PluginPackageSnapshotV1 =
+  DeepReadonly<GeneratedPluginPackageSnapshotV1>;
+export type PluginFileEditExpectationV1 =
+  DeepReadonly<GeneratedPluginFileEditExpectationV1>;
+export type PluginSharedVersionEditV1 =
+  DeepReadonly<GeneratedPluginSharedVersionEditV1>;
 export type PluginEditSourceV1 = DeepReadonly<GeneratedPluginEditSourceV1>;
 export type PluginFileEditV1 = DeepReadonly<GeneratedPluginFileEditV1>;
 export type PluginDiagnosticSeverityV1 = GeneratedPluginDiagnosticSeverityV1;
@@ -81,8 +90,7 @@ export type PluginRequestV1 = DeepReadonly<GeneratedPluginRequestV1>;
 export type PluginRequestForOperationV1<Operation extends PluginOperationV1> =
   Extract<PluginRequestV1, { readonly operation: Operation }>;
 
-export type PluginDiscoverRequestV1 =
-  PluginRequestForOperationV1<'discover'>;
+export type PluginDiscoverRequestV1 = PluginRequestForOperationV1<'discover'>;
 export type PluginInspectRequestV1 = PluginRequestForOperationV1<'inspect'>;
 export type PluginPlanEditsRequestV1 =
   PluginRequestForOperationV1<'plan-edits'>;
@@ -109,8 +117,7 @@ export interface PluginOutputEnvelopeV1<
 
 export type PluginDiscoverOutputV1 = PluginOutputByOperationV1['discover'];
 export type PluginInspectOutputV1 = PluginOutputByOperationV1['inspect'];
-export type PluginPlanEditsOutputV1 =
-  PluginOutputByOperationV1['plan-edits'];
+export type PluginPlanEditsOutputV1 = PluginOutputByOperationV1['plan-edits'];
 
 export type PluginResponseV1 = DeepReadonly<GeneratedPluginResponseV1>;
 

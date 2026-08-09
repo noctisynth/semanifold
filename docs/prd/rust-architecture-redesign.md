@@ -1228,6 +1228,12 @@ schema v1 的 JSON wire types 必须从 `semifold-resolver` 中使用 serde 的�
 独立的 `--check` 模式和 CI drift 检查必须在 Rust 协议变化而生成产物未同步时失败。跨语言 JSON fixture 继续
 保留，用于验证 serde 运行时形状，而不是由静态类型生成替代。
 
+ts-rs 的声明文本不是提交格式。生成器必须把原始声明通过 SDK 固定版本的 Biome 与仓库根配置规范化后，
+再写入 `src/generated/protocol.ts`；`--check` 必须对同样规范化后的候选内容与已提交文件做字节比较，避免
+格式化本身被误报为协议漂移。Biome 不可用、格式化进程失败或未返回有效 UTF-8 时，生成与检查都必须失败，
+不得退回未格式化输出。SDK 的只读检查脚本和 CI 必须同时覆盖协议 drift、Biome format/lint 与现有类型、
+运行时测试；写入式生成命令应一次产生可直接提交且再次检查幂等的文件。
+
 自动生成只覆盖 wire schema，不覆盖 SDK 的运行时 helper、Boa capability ambient 声明或面向插件作者的
 请求/输出关联类型。生成模型作为内部 raw wire layer；SDK 公共类型从该层派生，并递归施加只读属性，使嵌套
 对象、数组和 map 保持现有不可变输入契约。`schema-version` 在 `V1` 类型中必须保持字面量 `1`，不能退化为

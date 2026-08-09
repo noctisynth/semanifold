@@ -2573,11 +2573,11 @@ adapter 暴露旧 `ResolvedPackage`。
     `VersionSourceId` 表示；组内取最高 bump，要求 channel 与 `channel-bump` 一致，全部成员进入
     版本闭包，private 成员参与计算但跳过 publish，并只编辑一次
     `[workspace.package].version`。该关系不从 `ReleaseContext` 推导。
-11. 旧 HTTP pre-check 缺少 `type` 但包含 `url` 时，运行时 loader 是否应默认按 HTTP 解析。若保持
-    当前严格判别字段规则，则 `config migrate` 必须在严格 `Project` 加载前读取并迁移原始 TOML；
-    若允许默认 HTTP，则只对旧 `url` 结构兼容，command pre-check 仍必须显式声明 `type`。
-12. GitHub Actions workflow output 的 key、版本化 JSON schema、启用方式、dry-run/失败路径语义
-    和写入失败优先级。
+11. [已决定] 运行时 loader 保持严格判别，不默认兼容缺少 `type` 的旧 HTTP pre-check；
+    `config migrate` 在严格 `Project` 加载前读取原始 TOML，为仅含 `url` 的旧结构补充
+    `type = "http"`，command pre-check 仍必须显式声明 `type`。
+12. [已决定] GitHub Actions workflow output 使用 6.7 节定义的 key、schema v1、环境自动启用条件、
+    dry-run/失败路径语义与写入失败优先级；兼容周期和敏感字段 allowlist 同样以该节为准。
 13. [已决定] ecosystem 插件首版只支持纯 Rust Boa 执行的单文件 JavaScript ESM；使用无 ambient
     文件/进程 I/O 的最小运行时、显式只读文件与受控 `fetch` capability 和固定资源限制。插件只从
     仓库内路径加载并以 SHA-256 锁定，协议使用独立 schema version，首版 package version model

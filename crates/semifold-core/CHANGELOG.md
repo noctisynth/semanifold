@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.0-rc.2
+
+### Bug Fixes
+
+- [`9b3eb89`](https://github.com/noctisynth/semifold/commit/9b3eb89ebd4460c2bcfed5fd73daafe3ff27b069): Use `nodejs` as the canonical built-in ecosystem identity so domain serialization, existing package configuration, adapter lookup, and future plugin registration share one stable value without aliases.
+
+### New Features
+
+- [`5496c96`](https://github.com/noctisynth/semifold/commit/5496c96f4a5b26626ac7267b64b81c96fafc0b6b): Adapt authenticated JavaScript plugins directly to the existing ecosystem boundary, with deterministic snapshot conversion and host-side validation of project roots, package identities, paths, edit sources, duplicate targets, and streamed file hashes.
+- [`dd10f1a`](https://github.com/noctisynth/semifold/commit/dd10f1a00b2a99219861083ba3fc10d07322fe72): Introduce validated, stable ecosystem identities and a schema-versioned plugin protocol for metadata, discovery, inspection, edit planning, and structured diagnostics.
+- [`8caff0a`](https://github.com/noctisynth/semifold/commit/8caff0ad5ace8ca72600ed1acabd08a6a1ec2b13): Migrate domain packages, plans, contexts, and adapters to open ecosystem identities while preserving built-in serialization and ordering compatibility ahead of dynamic plugin registration.
+
 ## v0.1.0-rc.1
 
 ### New Features

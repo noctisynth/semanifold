@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.3.0-rc.6
+
+### Bug Fixes
+
+- [`b17acdb`](https://github.com/noctisynth/semifold/commit/b17acdb420cd9d02e6f85716219f6eba3dba899a): Run config migrate against raw TOML before strict project loading, and warn when channel updates target Node.js packages whose npm publish command lacks an explicit dist-tag.
+- [`92cf6d7`](https://github.com/noctisynth/semifold/commit/92cf6d70e7f516965461cbd5801b5b1640d27f80): Continue a planned GitHub Release after registry preflight finds an existing package version, while keeping registry commands skipped, reporting both outcomes, and leaving existing Release assets untouched.
+
+### New Features
+
+- [`ca56371`](https://github.com/noctisynth/semifold/commit/ca56371c162e7845e8f8652d9e2b488021a85de8): Configure repository-local dynamic ecosystem plugins by stable ID with optional SHA-256 pins and exact HTTPS origins, and route discovery, workspace loading, config sync, and version edit planning through their authenticated adapters.
+- [`90f27bb`](https://github.com/noctisynth/semifold/commit/90f27bb8bd85a7d0a1dbb6830cfec2ed46ec1152): Replace the MCP changeset surface with lazily loaded, structured get/create/update/delete tools, optimistic SHA-256 revisions, dry-run planning, localized errors, and panic isolation that keeps the stdio server available after failed calls.
+
 ## v0.3.0-rc.5
 
 ### Bug Fixes

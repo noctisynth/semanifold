@@ -1,6 +1,6 @@
 [package]
 name = "semifold"
-version = "0.3.0-rc.3"
+version = "0.3.0-rc.4"
 authors.workspace = true
 edition.workspace = true
 description.workspace = true

@@ -1,0 +1,96 @@
+---
+title: 术语表
+description: 用中文解释 Semifold 文档中与仓库、软件包、版本和发布有关的核心术语。
+---
+
+遇到陌生术语，或者需要区分两个相近概念时，可以回到本页。中文文档会优先使用中文解释，并在第一次出现时保留英文原词以便检索。
+
+## 仓库与软件包
+
+### 单仓库（monorepo）
+
+一座 Git 仓库中包含多个可以独立确定版本的软件包或项目。**跨语言单仓库（polyglot monorepo）**还会同时包含来自多种编程语言和软件生态的软件包。
+
+### 工作区（workspace）
+
+Semifold 作为一张依赖关系图统一管理的软件包集合。这张图来自软件包清单、内置生态适配器、仓库内插件，以及配置中的显式 `depends-on` 关系。
+
+### 软件包（package）
+
+工作区中一个可以确定版本的单元。每个软件包都有稳定的软件包 ID、清单名称、版本、路径、所属软件生态，以及是否需要发布等信息。
+
+### 软件包 ID（PackageId）
+
+`.changes/config.toml` 的 `[packages]` 和变更集使用的稳定标识。它不必等于发布到软件包仓库时使用的名称。
+
+```toml
+[packages.web-bindings]
+path = "packages/web"
+resolver = "nodejs"
+```
+
+这里的 `web-bindings` 是 `PackageId`；`package.json` 中的 `name` 可以不同。
+
+### 清单文件（manifest）
+
+某种软件生态用来描述软件包的文件，例如 `Cargo.toml`、`package.json`、`pyproject.toml`、`CMakeLists.txt` 或 `vcpkg.json`。
+
+## 软件生态与扩展
+
+### 软件生态（ecosystem）
+
+一种软件包格式及其版本、依赖和发布约定，例如 Cargo/crates.io 或 npm。Semifold 使用 `rust`、`nodejs`、`com.example.game` 这样的稳定 ID 区分软件生态。
+
+### 生态适配器（adapter）与解析器（resolver）
+
+**生态适配器**负责发现软件包、读取版本与依赖，并规划清单文件修改。配置文件沿用 `resolver` 这个历史字段名，用它选择软件生态，并配置发布命令和发布前检查。
+
+### 生态插件（plugin）
+
+保存在仓库中的单文件 JavaScript 生态适配器。插件可以发现和读取软件包，并规划版本修改；它不能直接写文件、运行命令、读取宿主凭据、发布软件包或创建代码托管平台 Release。
+
+## 版本管理
+
+### 变更集（changeset）
+
+`.changes/` 下的一份小型 Markdown 文件。它记录哪些 `PackageId` 发生了变化、期望怎样提升版本、变更日志如何分类，以及给使用者阅读的变更摘要。
+
+### 版本提升级别（bump level）
+
+期望的版本增量：`patch`、`minor` 或 `major`。Semifold 读取直接变更集后，还可能根据依赖传播和发布通道规则提高级别，或加入其他受影响的软件包。
+
+### 变更日志标签（changelog tag）
+
+`feat`、`fix` 等用于选择变更日志分组的标签。标签只负责给变更分类，不负责选择发布通道。
+
+### 发布通道（release channel）
+
+软件包当前的发布状态，例如 `stable`、`rc` 或 `beta`。命名通道会影响版本编码；Node.js 软件包还应该在 npm 发布命令中使用对应的 dist-tag。
+
+### 发布计划（release plan）
+
+`smif status` 展示的不可变结果：目标版本、提升原因、依赖传播、待修改文件和计划指纹。只要仓库输入没有变化，`smif version` 会计算并应用同一项发布决定。
+
+## 发布执行
+
+### 发布执行计划（publish plan）
+
+版本和变更日志写入后，Semifold 为实际发布组织的有序工作。它包括软件包仓库检查、发布前命令、发布命令、软件包顺序和可选的代码托管平台操作。
+
+### 软件包仓库（registry）
+
+保存已发布版本的服务，例如 crates.io、npm 或 PyPI。Semifold 可以在运行发布命令前执行 HTTP 或命令形式的存在性检查。
+
+### 代码托管平台（Forge）
+
+托管源代码和 Release 的服务。Semifold 当前可以独立于软件包仓库发布来创建 GitHub Release 并上传附件。
+
+### 预演（dry run）
+
+通过 `--dry-run` 选择的预览执行。文件、软件包仓库和代码托管平台修改会被跳过；只读的版本存在性检查仍会运行，配置命令只有明确设置 `dry-run = true` 时才会在预演中执行。
+
+## 接下来阅读
+
+- [理解 Semifold](/zh/docs/introduction/)：建立完整的产品心智模型。
+- [配置概览](/zh/docs/configuration/overview/)：查看这些概念怎样出现在 `.changes/config.toml` 中。
+- [插件系统](/zh/docs/plugins/overview/)：了解如何接入自定义软件生态。

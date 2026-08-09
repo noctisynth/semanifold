@@ -1,0 +1,106 @@
+---
+title: 配置概览
+description: 理解 .changes/config.toml 各部分的职责，以及日常维护配置的正确流程。
+---
+
+Semifold 把整座仓库的版本与发布规则保存在 `.changes/config.toml`。`smif init` 会创建这个文件；之后，人工维护有意制定的策略，再使用 `smif config sync` 对齐自动发现的软件包。
+
+## 从一份小配置开始
+
+```toml title=".changes/config.toml"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+feat = "新增功能"
+fix = "问题修复"
+
+[packages.core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.web]
+path = "packages/web"
+resolver = "nodejs"
+
+[resolver.rust.pre-check]
+type = "http"
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+
+[[resolver.rust.publish]]
+command = "cargo"
+args = ["publish"]
+
+[resolver.nodejs.pre-check]
+type = "http"
+url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public"]
+```
+
+这份配置表达了四件事：
+
+1. 发布以 `main` 为基础，并在 `release` 分支准备版本变更；
+2. `core` 和 `web` 是变更集使用的稳定软件包 ID（`PackageId`）；
+3. 每个软件包选择能够理解自己清单文件的生态适配器；
+4. 每种软件生态分别定义怎样检查已有版本、怎样执行发布。
+
+## 配置分区
+
+| 分区 | 负责什么 |
+| --- | --- |
+| `[branches]` | 发布工作流使用的基础分支与发布分支名称。 |
+| `[tags]` | 变更集允许使用的分类，以及对应的变更日志标题。 |
+| `[changelog]` | 可选的 MiniJinja 发布块和变更条目模板。 |
+| `[packages]` | 稳定软件包 ID、路径、软件生态、发布通道、显式关系和 Release 附件。 |
+| `[plugins]` | 仓库内 JavaScript 生态插件及其得到授权的能力。 |
+| `[resolver]` | 各软件生态的版本存在性检查、发布钩子和版本修改后命令。 |
+
+## 自动发现与发布策略由不同部分负责
+
+生态适配器或插件可以发现软件包路径、清单名称、版本和清单中的依赖关系。它不能替你决定发布分支、变更日志分类、命名发布通道、显式 `depends-on` 关系或 GitHub Release 策略。
+
+因此，同步配置时应先检查差异：
+
+```bash
+smif config sync --check
+```
+
+这条命令只报告配置漂移，不写文件。确认结果后去掉 `--check`，即可加入或更新发现的软件包。只有在审查过待删除软件包后，才应加入 `--prune`。
+
+如需只同步部分软件生态，可以重复传入 `--resolver`：
+
+```bash
+smif config sync --resolver rust --resolver nodejs
+```
+
+## 检查旧配置
+
+升级 Semifold 后，先检查配置是否需要迁移：
+
+```bash
+smif config migrate --check
+```
+
+如果存在迁移，审查后执行：
+
+```bash
+smif config migrate
+```
+
+例如，旧的 `version-mode` 软件包字段只为迁移兼容而保留；新配置应使用 `channel`，进入命名通道时还可以使用一次性的 `channel-bump`。
+
+## 逐步加入策略
+
+第一次发布之前不需要配完所有功能。更容易理解的顺序是：
+
+1. 确认自动发现的软件包 ID 与路径；
+2. 检查清单依赖，只为清单无法表达的真实关系添加 `depends-on`；
+3. 先完成一次稳定通道发布；
+4. 按需加入命名通道、自定义变更日志模板、软件包仓库检查、附件和持续集成策略；
+5. 只有内置适配器无法理解某种软件生态时，才注册生态插件。
+
+接下来可以查看包含全部字段的[配置参考](/zh/docs/configuration/reference/)，或者阅读[插件系统概览](/zh/docs/plugins/overview/)来接入自定义软件生态。

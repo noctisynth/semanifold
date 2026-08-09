@@ -6,7 +6,7 @@ description: The public Semifold 0.3.0-rc.5 command surface and global execution
 The installed binary is named `smif`; `semifold` is an equivalent long name. Run `smif <command> --help` for the complete options accepted by one command.
 
 <Availability status="released">
-  This reference sample is checked against the public command surface of **Semifold 0.3.0-rc.5**.
+  This reference sample is checked against the public command surface of <strong>Semifold 0.3.0-rc.5</strong>.
 </Availability>
 
 ## Syntax
@@ -37,9 +37,17 @@ smif [OPTIONS] [COMMAND]
 | `-h`, `--help` | Print help for the selected command level. |
 | `-V`, `--version` | Print the Semifold binary version. |
 
-## Common non-interactive invocations
+## Common commands
 
 ### Initialize one ecosystem
+
+For local use, start with the interactive command:
+
+```bash
+smif init
+```
+
+CI and environments without interactive input can provide the same answers explicitly:
 
 ```bash
 smif init --resolvers rust \
@@ -52,6 +60,14 @@ smif init --resolvers rust \
 Use `--no-resolvers`, `--no-default-tags`, or `--no-github-actions` when explicitly choosing the corresponding empty behavior. Use `config sync` when an initialized workspace gains or loses packages.
 
 ### Create a changeset
+
+For local use, let the prompts collect the package, bump, tag, and summary:
+
+```bash
+smif commit
+```
+
+Automation can provide those values as flags:
 
 ```bash
 smif commit \

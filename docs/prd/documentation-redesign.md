@@ -22,9 +22,11 @@
 ### 2.1 发布状态
 
 - 最新 Semifold tag 为 `semifold-v0.3.0-rc.5`。
-- 当前开发状态复核到 commit `4e2a40e`，`main` 比该 tag 超前 22 个提交；最新提交只调整本仓库 npm 发布命令的 `rc` dist-tag，不改变 Semifold 的公开命令面。
-- 开始文档重构前，release plan 包含 15 个待消费 changeset，计划提升 5 个 package。
-- `@semifold/plugin-sdk` 当前 manifest 为 `0.1.0-alpha.0`，其首个 changeset 计划进入 `0.1.0-rc.0`。
+- 当前领域实现复核到远端基线 commit `50af846`；其后的本地提交只处理文档设计，不改变 Semifold 的公开命令面。
+- `21e08e6` 已消费此前的功能 changeset。当前 manifest 中 `semifold` 为 `0.3.0-rc.6`，
+  `semifold-resolver` 为 `0.4.0-rc.3`，`@semifold/plugin-sdk` 为 `0.1.0-rc.0`；这些版本尚无对应 Git tag，
+  因而仍属于下一次发布内容。
+- 本轮体验复核前只剩文档迁移 changeset；`smif status` 验证该 changeset 只提升 `@semifold/docs`。
 
 文档重构期间，安装与默认工作流必须描述最新已发布版本。面向下一 RC 的页面允许提前编写，但必须满足
 下列条件之一：
@@ -105,7 +107,7 @@ plugin author 的任务。
 
 ### 4.1 主要目标
 
-1. 让首次用户先理解 Semifold 的 release workflow，再接触配置细节。
+1. 让首次用户先理解 Semifold 如何统一跨语言单仓库的版本与发布，再接触配置细节。
 2. 为 workspace owner、contributor、release engineer 和 plugin author 提供独立成功路径。
 3. 以真实 CLI、配置类型、fixture 和 release plan 约束文档事实。
 4. 保留英文无前缀与中文 `/zh` 的公共 URL 语义。
@@ -152,18 +154,23 @@ plugin author 的任务。
 
 ## 6. 核心心智模型
 
-所有 onboarding 和 workflow 内容围绕同一条路径：
+Semifold 的产品心智模型是“一座仓库、一张软件包关系图、一套版本与发布流程”。内置生态适配器与插件先把
+不同清单格式归一为同一张工作区图；变更集、版本联动、变更日志和发布再围绕这张图工作。
+
+所有入门和工作流内容围绕下列用户路径：
 
 ```text
 code change
   -> changeset
-  -> immutable release plan (`smif status`)
+  -> repository-wide version decision (`smif status`)
   -> version edits and release pull request
   -> dependency-ordered publish plan
   -> registry / Forge report
 ```
 
-必须在进入完整配置 reference 前解释：
+`release plan` 是实现可审查性的公开结果，不是 Semifold 的产品定位，也不能在首页替代跨生态版本管理本身。
+
+必须在进入完整配置参考前解释：
 
 - PackageId 与 manifest name 的区别；
 - ecosystem adapter/plugin 负责 discovery、inspection 与 edit planning；
@@ -181,6 +188,8 @@ code change
 /
 /docs/
   introduction
+  concepts/
+    glossary
   getting-started/
     installation
     first-release
@@ -233,11 +242,13 @@ code change
 
 首页不进入 docs sidebar。它只负责：
 
-- 用一句具体价值表达说明 Semifold；
-- 展示 release workflow；
+- 用一句具体价值表达说明 Semifold 是跨语言单仓库的版本与发布工具；
+- 用仓库中的多种清单文件展示统一的版本、依赖与发布生命周期；
 - 给出“第一次发布”和“理解工作流”两个主要入口；
-- 展示按 discovery/version/dependency/publish 拆分的 ecosystem capability；
+- 紧凑展示内置生态，并把插件扩展作为与内置能力同级的产品能力；
 - 链接当前版本、GitHub 与双语入口。
+
+首页不得把某一次架构重构（例如不可变计划）或受限环境兼容能力（例如完整参数化的非交互调用）写成产品主卖点。
 
 ## 8. 页面与写作规范
 
@@ -269,8 +280,10 @@ code change
 
 - 面向用户统一使用 `smif`；第一次出现时说明 `semifold` 是等价长名称；
 - command、flag、配置 key、package ID 与路径保留原文；
-- 中文不翻译 changeset、release plan、PackageId、ecosystem、resolver、adapter、plugin 等会影响检索的术语，
-  首次出现时补充中文解释；
+- 中文正文优先使用清楚的中文概念，并在首次出现时用括号保留英文检索词，例如“变更集（changeset）”、
+  “发布计划（release plan）”、“软件生态（ecosystem）”、“清单文件（manifest）”和“软件包仓库（registry）”；
+- `PackageId`、配置字段和协议 operation 等精确标识保留原文，但必须立即解释它在用户任务中的含义；
+- 不允许连续堆叠未解释的英文领域词，也不允许把英文原词当作中文解释的 fallback；
 - 不使用“zero pain”“stable”等无法验证的绝对营销表述；
 - 每项 ecosystem 能力分别说明 discovery、version edit、dependency propagation 与 publish，而不是一个总状态。
 
@@ -300,6 +313,9 @@ CLI reference 必须由 `clap` command surface 生成或由快照检查约束。
 - Tailwind CSS 4；
 - pnpm workspace；
 - TypeScript strict mode。
+
+首页、页脚和简单布局优先使用 Tailwind utilities。全局 CSS 只保留主题 token、Fumadocs/MDX 需要的跨组件规则、
+无法由局部 utility 清楚表达的主题切换，以及确有复用价值的领域组件样式；不得为单个首页复制一套独立 CSS 设计系统。
 
 不采用 Fumapress/Waku；当前需求需要对路由、静态导出、双语和首页进行明确控制。也不采用 Astro + React
 islands，避免再引入一层 UI runtime 边界。
@@ -354,10 +370,13 @@ Fumadocs MDX 开启 processed Markdown 输出，并静态生成：
 - 使用 Fumadocs DocsLayout、DocsPage、search dialog 和默认可访问性行为；
 - 只通过 design tokens、全局样式、首页与少量领域组件定制；
 - 不复制或 fork Fumadocs sidebar、search、mobile nav 的内部实现；
-- 保留现有 Semifold logo，但不使用 emoji 作为主要 feature icon；
+- 保留现有 Semifold logo；内置生态展示使用可识别、带无障碍名称的官方品牌图形，不使用字母切片或 emoji 充当 logo；
+- 首页功能区在常见桌面首屏内保持紧凑，内容量少时不得用固定最小高度制造大块空白；
 - 正文目标宽度约 720–800px，reference table 可在容器内滚动；
 - 提供浅色/深色主题，并尊重系统偏好；
 - 交互目标、焦点可见性和颜色对比满足 WCAG 2.2 AA。
+
+首页与所有文档页底部都必须显示版权与 AGPL-3.0-only 许可声明，并提供仓库和许可链接。
 
 领域组件限制为具有明确复用价值的内容，例如 ReleaseFlow、EcosystemMatrix、ExpectedOutput 与
 Availability。纯装饰效果不新增自定义 runtime 组件。
@@ -472,7 +491,19 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 - `docs:check` 已覆盖源码生成、TypeScript、locale 文件 parity、静态构建、必需输出、静态内部链接与 locale search 配置；
 - 本地静态服务器的根路由、三层深路由、中英文路由、search/LLM 输出与 404 smoke test 通过；
 - 1440px 首页与 390px 深层教程完成真实 Chromium 截图检查。
-- 本任务新增独立 `@semifold/docs` changeset 后，当前 release plan 为 16 个 changeset、6 个 package，文档 package 计划从 `1.1.0-beta.0` 提升到 `1.1.0-rc.0`。
+- `21e08e6` 消费功能 changeset 后，本地两项独立文档任务各自保留 changeset；当前发布计划为 2 个 changeset、
+  1 个 package，`@semifold/docs` 计划从 `1.1.0-beta.0` 提升到 `1.1.0-rc.0`。
 - 旧 Rspress URL 已建立 inventory，并生成 canonical、可见链接和 HTML refresh 完整的静态 redirect page；Pages workflow 已切换为先运行 `docs:check`，再上传 `docs/out`。
 
-阶段 2 至阶段 4 与阶段 5 的内容清理仍在进行。旧 Rspress 内容和配置暂时保留为事实核对与迁移线索；生产构建已经切换到 Fumadocs，但当前导航仍只包含纵向切片，不能被解释为完整内容重写已经结束。
+首次用户体验复核后，阶段 2 至阶段 4 已完成一组纠偏切片：
+
+- 首页产品定位改为跨语言单仓库的版本、依赖、变更日志与发布管理，不再以 release plan 或非交互调用作为主叙事；
+- 首页使用 Tailwind utilities 和 Rust、Node.js、Python、C++ 官方品牌图形，生态区域改为紧凑列表，并把插件提升为同级入口；
+- 首页与文档页恢复版权、AGPL-3.0-only、仓库和许可链接完整的全站页脚；
+- First Release 恢复交互式默认路径，自动化参数降为后置补充，并修复 MDX 容器中 Markdown 强调符号的字面量渲染；
+- 新增 installation、configuration overview/reference、plugin overview/quick-start/capabilities 与 glossary，
+  当前英中各 17 个内容/meta 文件，静态构建生成 69 个页面；
+- 中文写作改为中文解释优先、英文检索词首次出现时括注，术语表覆盖仓库、软件包、生态、版本与发布概念；
+- 首页定制 CSS 已迁移到组件内 Tailwind utilities，全局样式从 558 行收敛为 37 行，只保留框架导入、基础规则和跨组件行为。
+
+阶段 2、阶段 3 的其余工作流、workspace、自动化内容与阶段 5 的内容清理仍在进行。旧 Rspress 内容和配置暂时保留为事实核对与迁移线索；生产构建已经切换到 Fumadocs，但当前导航仍未覆盖完整产品内容，不能被解释为全部重写已经结束。

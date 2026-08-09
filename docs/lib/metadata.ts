@@ -5,8 +5,8 @@ import { source } from '@/lib/source';
 export const siteUrl = new URL('https://semifold.noctisynth.org');
 
 const descriptions: Record<Locale, string> = {
-  en: 'Plan, version, and publish releases across Rust, Node.js, Python, and C++ workspaces.',
-  zh: '统一规划、版本化并发布 Rust、Node.js、Python 与 C++ workspace。',
+  en: 'Version and publish packages across every ecosystem in a polyglot monorepo.',
+  zh: '统一管理跨语言单仓库中各类软件包的版本、依赖、变更日志与发布。',
 };
 
 export function siteMetadata(locale: Locale): Metadata {

@@ -1,0 +1,75 @@
+---
+title: Plugin system
+description: Extend Semifold to package formats beyond the four built-in ecosystems.
+---
+
+Semifold's plugin system lets a repository teach Semifold how to discover, inspect, and version packages from another ecosystem. The result participates in the same workspace dependency graph, changesets, version propagation, configuration synchronization, and release workflow as a built-in package.
+
+<Availability status="next">
+  The plugin runtime is complete on `main` and is planned for the next Semifold release after `0.3.0-rc.5`. The current manifests are `semifold 0.3.0-rc.6` and `@semifold/plugin-sdk 0.1.0-rc.0`, but no matching release tag exists yet.
+</Availability>
+
+## When to write a plugin
+
+Use a plugin when the repository contains a real package format that Rust, Node.js, Python, or C++ adapters do not understand. A plugin is appropriate when Semifold needs to:
+
+- find package manifests and stable package IDs;
+- read current versions and package-to-package dependencies;
+- distinguish package-local and shared version sources;
+- update versions and internal requirements without losing manifest structure.
+
+Do not write a plugin merely to customize `cargo publish`, `npm publish`, or another release command. Publish commands, registry checks, GitHub Releases, and assets remain normal `[resolver.<id>]` and package configuration.
+
+## One adapter contract
+
+A plugin exports schema-v1 metadata and one default async entrypoint. Semifold calls three operations:
+
+| Operation | Input | Required output |
+| --- | --- | --- |
+| `discover` | Project root | Complete package inspections for every package found by the plugin. |
+| `inspect` | One configured package location | The current package inspection. |
+| `plan-edits` | Workspace snapshots, released package IDs, and target versions | Candidate file edits with expected file state and an edit source. |
+
+Each package inspection includes its `PackageId`, manifest name, semantic version, version source, ecosystem ID, path, publishability, and manifest dependencies. The host resolves manifest names to stable package IDs and builds the cross-ecosystem graph.
+
+## Repository-local and authenticated
+
+Plugins are registered by stable ecosystem ID:
+
+```toml title=".changes/config.toml"
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "64-lowercase-hex-characters"
+
+[packages.engine]
+path = "engine"
+resolver = "com.example.game"
+
+[resolver."com.example.game"]
+```
+
+The path must stay inside the repository. An optional SHA-256 pin authenticates the exact plugin file before it is loaded. Registry entries are sorted by ecosystem ID, so behavior does not depend on discovery order.
+
+## Capability-scoped runtime
+
+The embedded Boa runtime starts with no project-file or network access. Metadata explicitly lists readable glob patterns, and configuration explicitly lists exact HTTPS origins. The runtime exposes only the supported `host.listFiles`, `host.readText`, `fetch`, and `URL` subsets.
+
+A plugin cannot:
+
+- write files directly;
+- start child processes or publish commands;
+- read registry or Forge credentials from the host;
+- create GitHub Releases or upload assets;
+- use Node.js built-ins, a DOM, or runtime module loading.
+
+Semifold validates plugin metadata, responses, diagnostics, paths, dependencies, expected hashes, edit conflicts, and resource budgets before applying any candidate edit.
+
+## SDK and bundling status
+
+`@semifold/plugin-sdk` provides TypeScript wire types and response builders generated from the Rust schema. Its runtime declarations describe the actual Boa `fetch`, `URL`, and file-host surface instead of pretending browser or Node.js APIs exist.
+
+<Availability status="planned">
+  A companion Vite plugin for producing one ESM file and rejecting unsupported imports or globals is not implemented. For the first release, use your existing bundler and verify that the configured output is one ESM file with no runtime imports.
+</Availability>
+
+Continue with [write a plugin](/docs/plugins/quick-start/) or read the [capability and security model](/docs/plugins/capabilities/).

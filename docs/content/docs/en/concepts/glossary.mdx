@@ -1,0 +1,96 @@
+---
+title: Glossary
+description: The repository, package, versioning, and publishing terms used throughout Semifold.
+---
+
+Use this page when a Semifold term is unfamiliar or when two similar concepts need to be distinguished.
+
+## Repository and packages
+
+### Monorepo
+
+A Git repository that contains more than one independently versioned package or project. A **polyglot monorepo** contains packages from multiple language ecosystems.
+
+### Workspace
+
+The set of packages Semifold manages as one dependency graph. Semifold builds this graph from package manifests, built-in ecosystem adapters, repository-local plugins, and explicit `depends-on` relationships.
+
+### Package
+
+One versioned unit in the workspace. A package has a stable `PackageId`, a manifest name, a version, a path, an ecosystem, and a publishability state.
+
+### PackageId
+
+The stable identifier used as a key under `[packages]` in `.changes/config.toml` and in changesets. It does not have to equal the name published to a registry.
+
+```toml
+[packages.web-bindings]
+path = "packages/web"
+resolver = "nodejs"
+```
+
+Here, `web-bindings` is the `PackageId`; the `name` in `package.json` may be different.
+
+### Manifest
+
+The ecosystem-specific file that describes a package. Examples include `Cargo.toml`, `package.json`, `pyproject.toml`, `CMakeLists.txt`, and `vcpkg.json`.
+
+## Ecosystems and extension
+
+### Ecosystem
+
+A package format and its surrounding version and publishing conventions, such as Cargo/crates.io or npm. Semifold identifies each ecosystem with a stable ID such as `rust`, `nodejs`, or `com.example.game`.
+
+### Adapter and resolver
+
+An **adapter** is the implementation boundary that discovers packages, reads their versions and dependencies, and plans manifest edits. The configuration uses the historical name `resolver` to select an ecosystem and to define its publish commands and registry pre-check.
+
+### Plugin
+
+A repository-local, single-file JavaScript implementation of an ecosystem adapter. A plugin can discover and inspect packages and plan version edits. It cannot write files, run commands, access host credentials, publish packages, or create Forge releases.
+
+## Versioning
+
+### Changeset
+
+A small Markdown file under `.changes/` that records which `PackageId` values changed, their requested version bump, their changelog category, and a human-readable summary.
+
+### Bump level
+
+The requested version increase: `patch`, `minor`, or `major`. Dependency propagation and release-channel rules may increase or add package bumps after the direct changesets are read.
+
+### Changelog tag
+
+A label such as `feat` or `fix` that chooses a changelog section. A tag categorizes a change; it does not select a release channel.
+
+### Release channel
+
+The publishing state of a package, such as `stable`, `rc`, or `beta`. Named channels affect version encoding and, for Node.js, should be paired with the corresponding npm dist-tag.
+
+### Release plan
+
+The immutable result displayed by `smif status`: target versions, reasons, dependency propagation, planned file edits, and a fingerprint. `smif version` computes and applies the same release decision from the same repository state.
+
+## Publishing
+
+### Publish plan
+
+The ordered work Semifold derives after versions and changelogs have been written. It contains registry checks, prepublish and publish commands, package ordering, and optional Forge work.
+
+### Registry
+
+The package service that stores published versions, such as crates.io, npm, or PyPI. Semifold can run an HTTP or command pre-check before executing a package's publish command.
+
+### Forge
+
+A source-hosting and release service. Semifold currently integrates with GitHub Releases and release assets independently from registry publishing.
+
+### Dry run
+
+A preview execution selected with `--dry-run`. File, registry, and Forge mutations are skipped. Read-only registry pre-checks still run, and a configured command runs only when it explicitly has `dry-run = true`.
+
+## Where to continue
+
+- [Understand Semifold](/docs/introduction/) for the complete product model.
+- [Configuration overview](/docs/configuration/overview/) for how these concepts appear in `.changes/config.toml`.
+- [Plugin system](/docs/plugins/overview/) for custom ecosystem support.

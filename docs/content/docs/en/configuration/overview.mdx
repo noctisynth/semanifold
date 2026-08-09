@@ -1,0 +1,106 @@
+---
+title: Configuration overview
+description: Understand the responsibilities and normal maintenance workflow of .changes/config.toml.
+---
+
+Semifold stores repository-wide release rules in `.changes/config.toml`. `smif init` creates the file; after that, edit intentional policy by hand and use `smif config sync` to reconcile package discovery.
+
+## Start with a small configuration
+
+```toml title=".changes/config.toml"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+feat = "New Features"
+fix = "Bug Fixes"
+
+[packages.core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.web]
+path = "packages/web"
+resolver = "nodejs"
+
+[resolver.rust.pre-check]
+type = "http"
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+
+[[resolver.rust.publish]]
+command = "cargo"
+args = ["publish"]
+
+[resolver.nodejs.pre-check]
+type = "http"
+url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public"]
+```
+
+This file says:
+
+1. releases start from `main` and are prepared on `release`;
+2. `core` and `web` are the stable `PackageId` values used by changesets;
+3. each package chooses the adapter that understands its manifest;
+4. each ecosystem defines how to check for an existing version and how to publish.
+
+## Configuration sections
+
+| Section | Responsibility |
+| --- | --- |
+| `[branches]` | Base and release branch names used by the release workflow. |
+| `[tags]` | Allowed changeset categories and their changelog headings. |
+| `[changelog]` | Optional MiniJinja templates for release blocks and changeset entries. |
+| `[packages]` | Stable package IDs, paths, ecosystems, channels, explicit relationships, and release assets. |
+| `[plugins]` | Repository-local JavaScript ecosystem plugins and their allowed capabilities. |
+| `[resolver]` | Per-ecosystem registry pre-check, publish hooks, and post-version commands. |
+
+## Discovery and policy have different owners
+
+An adapter or plugin can discover package paths, manifest names, versions, and manifest dependencies. It cannot decide your release branch, changelog categories, named channels, explicit `depends-on` edges, or GitHub Release policy.
+
+This division matters during synchronization:
+
+```bash
+smif config sync --check
+```
+
+The command reports drift without writing. Remove `--check` to add or update discovered packages. Add `--prune` only after reviewing packages that would be removed.
+
+To synchronize only selected ecosystems, repeat `--resolver`:
+
+```bash
+smif config sync --resolver rust --resolver nodejs
+```
+
+## Validate older configuration
+
+When upgrading Semifold, check whether the file needs a schema migration:
+
+```bash
+smif config migrate --check
+```
+
+If a migration is available, review and apply it with:
+
+```bash
+smif config migrate
+```
+
+For example, the legacy `version-mode` package field is accepted for migration but current configuration should use `channel` and, when entering a named channel, `channel-bump`.
+
+## Add policy gradually
+
+You do not need to configure every feature before the first release. A practical order is:
+
+1. verify discovered package IDs and paths;
+2. confirm manifest dependencies and add only genuinely supplemental `depends-on` edges;
+3. run one stable release;
+4. add named channels, custom changelog templates, registry checks, assets, and CI policy as needed;
+5. register a plugin only for an ecosystem that the built-in adapters do not understand.
+
+Continue to the [configuration reference](/docs/configuration/reference/) for every field, or open the [plugin system overview](/docs/plugins/overview/) for custom ecosystems.

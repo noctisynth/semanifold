@@ -1,49 +1,51 @@
 ---
 title: Documentation
-description: Start with Semifold's release model, then complete your first deterministic release plan.
+description: Learn how Semifold versions and publishes packages across every ecosystem in one repository.
 ---
 
+Semifold is a versioning and release tool for polyglot monorepos. It connects packages that use different manifests and registries, then manages their changesets, related version updates, changelogs, and dependency-ordered publishing as one repository-wide workflow.
+
 <Availability status="released">
-  <strong>Released baseline: Semifold 0.3.0-rc.5.</strong> The default paths in this documentation describe capabilities available in that release. Features present only on `main` are labelled separately.
+  <strong>Published baseline: Semifold 0.3.0-rc.5.</strong> Features already implemented on `main`, including ecosystem plugins, are documented with an explicit “Next release” label.
 </Availability>
 
-Semifold is a release manager for repositories that contain Rust, Node.js, Python, C++, or a mixture of those ecosystems. It discovers packages, evaluates changesets, and gives every command a deterministic view of the work to be released.
-
-## The release model
-
-```text
-code change
-  -> changeset
-  -> immutable release plan (`smif status`)
-  -> version edits and release pull request
-  -> dependency-ordered publish plan
-  -> registry / Forge report
-```
-
-A changeset records **release intent**: which PackageIds changed, how their versions should move, and what belongs in the changelog. `smif status` turns all pending intent and dependency rules into a release plan you can inspect before any version file is modified.
-
-`smif version` applies that same release plan. `smif publish` then reads the versions and changelogs already written to the workspace and builds a separate, dependency-ordered publish plan.
-
-## Choose a path
+## Choose what you need
 
 <Cards>
+  <Card title="Install Semifold" href="/docs/getting-started/installation/">
+    Install the published CLI with the script, Cargo, npm, or PyPI.
+  </Card>
   <Card title="Make your first release" href="/docs/getting-started/first-release/">
-    Initialize a Rust repository, create a changeset, inspect the plan, and run version and publish safely.
+    Initialize a repository, create a changeset, review affected packages, and run version and publish.
   </Card>
   <Card title="Understand Semifold" href="/docs/introduction/">
-    Learn the boundaries between PackageId, ecosystem discovery, changesets, release plans, and publish plans.
+    See how package manifests, stable package IDs, dependencies, changesets, and release commands fit together.
   </Card>
-  <Card title="Look up a command" href="/docs/reference/cli/">
-    Scan the current public CLI surface and the options shared by every command.
+  <Card title="Configure a repository" href="/docs/configuration/overview/">
+    Learn the structure and maintenance workflow of `.changes/config.toml`.
+  </Card>
+  <Card title="Extend an ecosystem" href="/docs/plugins/overview/">
+    Use the next-release JavaScript plugin runtime and TypeScript SDK for custom package formats.
+  </Card>
+  <Card title="Look up a term" href="/docs/concepts/glossary/">
+    Distinguish packages, PackageId values, ecosystems, changesets, channels, registries, and plans.
   </Card>
 </Cards>
 
-## What to learn first
+## The repository-wide lifecycle
 
-1. A **PackageId** is Semifold's stable configuration identity. It can differ from the name published to a registry.
-2. A changeset tag groups changelog entries; it does not select a release channel.
-3. `status` previews the exact plan that `version` applies, provided the inputs have not changed.
-4. Internal manifest dependencies and explicit `depends-on` relationships have different propagation rules.
-5. Publishing is ordered by dependencies and reports succeeded, skipped, failed, and not-started packages separately.
+```text
+packages in different ecosystems
+  -> one dependency-aware workspace
+  -> changesets describing user-visible changes
+  -> related version and changelog updates
+  -> publish each package with its ecosystem's rules
+```
 
-You do not need to configure every resolver, template, pre-check, or release channel before the first useful run. Begin with one ecosystem and one changeset, then expand the workspace deliberately.
+The ecosystem adapter for each package understands its manifest. Semifold owns the relationships across adapters: stable package identity, cross-ecosystem dependency propagation, changeset intent, release channels, changelogs, publish ordering, and recovery reporting.
+
+## A useful reading order
+
+If Semifold is new to you, read [the introduction](/docs/introduction/) before the configuration reference. Then complete [the first-release tutorial](/docs/getting-started/first-release/) with a small repository. Use the [glossary](/docs/concepts/glossary/) whenever an unfamiliar domain term appears.
+
+The [CLI reference](/docs/reference/cli/) is a lookup page. It is not intended to be the primary way to learn the workflow.

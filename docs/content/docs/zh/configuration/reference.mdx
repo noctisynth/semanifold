@@ -1,0 +1,152 @@
+---
+title: 配置参考
+description: 逐项说明当前 .changes/config.toml 配置结构中的字段、默认值和职责。
+---
+
+Semifold 读取 `.changes/config.toml` 中的 TOML 配置。字段名使用 kebab-case。JSON 配置和未知字段不属于受支持的配置契约。
+
+## `[branches]`
+
+| 字段 | 类型 | 必需 | 含义 |
+| --- | --- | --- | --- |
+| `base` | 字符串 | 是 | 日常开发与发布准备开始的基础分支。 |
+| `release` | 字符串 | 是 | 用来维护版本修改和发布拉取请求的分支。 |
+
+## `[tags]`
+
+变更集标签到变更日志标题的映射：
+
+```toml
+[tags]
+feat = "新增功能"
+fix = "问题修复"
+```
+
+变更集使用的每个标签都必须在这里存在。标签不会选择发布通道。
+
+## `[changelog]`
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `template` | 字符串 | 内置模板 | 渲染完整版本发布块的 MiniJinja 模板。 |
+| `changeset-template` | 字符串 | 内置模板 | 渲染一条变更集内容的 MiniJinja 模板。 |
+
+`smif init` 会写入内置模板，方便直接发现和修改。替换完整发布模板时，必须保留 Semifold 识别版本所需的稳定标记。
+
+## `[packages.<PackageId>]`
+
+```toml
+[packages.web]
+path = "packages/web"
+resolver = "nodejs"
+channel = "rc"
+channel-bump = "minor"
+depends-on = ["native-core"]
+github-release = true
+assets = [
+  "dist/*.wasm",
+  { path = "dist/cli", name = "semifold-linux-x64" },
+]
+```
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `path` | 路径 | 必需 | 相对于仓库根目录的软件包路径。 |
+| `resolver` | 软件生态 ID | 必需 | 该软件包使用的内置适配器或已注册插件。 |
+| `channel` | 字符串 | `stable` | 稳定通道，或 `rc`、`beta` 等命名发布通道。 |
+| `channel-bump` | `preserve`、`patch`、`minor` 或 `major` | 无 | 下一次进入命名通道时使用的一次性稳定基线提升方式。 |
+| `depends-on` | `PackageId` 数组 | `[]` | 清单文件无法表达的补充内部依赖关系。 |
+| `github-release` | 布尔值 | 公开软件包为 `true`；私有软件包为 `false` | 覆盖 GitHub Release 创建策略。 |
+| `assets` | 字符串或 `{ path, name }` 数组 | `[]` | 上传到该软件包 GitHub Release 的文件或 glob。 |
+
+旧的 `version-mode` 字段仍可读取，以便完成配置迁移。新配置应使用 `channel`。
+
+## `[plugins.<ecosystem-id>]`
+
+<Availability status="next">
+  仓库内生态插件将在 `0.3.0-rc.5` 之后的下一版 Semifold 中发布。
+</Availability>
+
+```toml
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "64-lowercase-hex-characters"
+allowed-origins = ["https://api.example.com"]
+```
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `path` | 路径 | 必需 | 相对于仓库根目录的一份已打包 ESM 文件。 |
+| `sha256` | 字符串 | 无 | 可选的小写 SHA-256 内容锁。 |
+| `allowed-origins` | HTTPS 来源数组 | `[]` | 插件可以通过 `fetch` 访问的精确来源。路径、通配符、凭据和非 HTTPS 来源都会被拒绝。 |
+
+插件导出的元数据还会单独声明 `read-patterns`。只有元数据声明和宿主校验同时允许时，文件读取才会成功。
+
+## `[resolver.<ecosystem-id>]`
+
+即使软件包发现和版本修改来自插件，解析器配置仍然负责实际发布行为。
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `pre-check` | HTTP 或命令对象 | 无 | 检查目标软件包版本是否已经存在。 |
+| `prepublish` | 命令数组 | `[]` | 在该软件生态的发布命令之前执行。 |
+| `publish` | 命令数组 | `[]` | 把软件包发布到软件包仓库。 |
+| `post-version` | 命令数组 | `[]` | 软件包与变更日志修改写入后执行。 |
+
+### HTTP 版本检查
+
+```toml
+[resolver.rust.pre-check]
+type = "http"
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+extra-headers = { User-Agent = "Example release automation" }
+retry = [2, 5, 15]
+```
+
+HTTP 状态 `200` 表示版本存在，`404` 表示不存在，其他状态都会让检查失败。`retry` 是可重试失败的等待秒数，也可以与有上限的 `Retry-After` 响应配合。
+
+### 命令形式的版本检查
+
+```toml
+[resolver.internal.pre-check]
+type = "command"
+command = "./scripts/version-exists"
+args = ["--json-lines"]
+extra-env = { REGISTRY = "internal" }
+```
+
+命令检查通过带版本的 JSON Lines 请求与响应契约交换信息。非零退出状态、格式错误或软件包身份不一致都会安全地让检查失败。
+
+### 命令条目
+
+```toml
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public", "--tag", "rc"]
+extra-env = { NPM_CONFIG_PROVENANCE = "true" }
+stdout = "inherit"
+stderr = "inherit"
+dry-run = false
+```
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `command` | 字符串 | 必需 | 不经过 shell 展开的可执行文件。 |
+| `args` | 字符串数组 | `[]` | 直接传给可执行文件的参数。 |
+| `extra-env` | 字符串映射 | `{}` | 额外环境变量。不要把凭据写进提交到仓库的配置。 |
+| `stdout` / `stderr` | `inherit`、`pipe` 或 `null` | `inherit` | 子进程输出策略。 |
+| `dry-run` | 布尔值 | `false` | 是否明确允许该命令在 `--dry-run` 预演中运行。 |
+
+Semifold 不会解释 `args` 中的 shell 操作符；需要管道或复合 shell 行为时，请把逻辑放进单独的脚本。
+
+## 模板变量
+
+软件包仓库 URL 和配置命令可以使用软件包作用域的模板上下文。常见值包括：
+
+| 变量 | 含义 |
+| --- | --- |
+| `{{ package.name }}` | 清单名称或软件包仓库名称。 |
+| `{{ package.version }}` | 正在检查或发布的版本。 |
+| `{{ package.path }}` | 相对于仓库根目录的软件包路径。 |
+
+变更日志模板会收到更丰富的结构化上下文。请把变更日志定制与软件包仓库命令配置分开，并使用 `smif status` 和 `smif version --dry-run` 验证修改。

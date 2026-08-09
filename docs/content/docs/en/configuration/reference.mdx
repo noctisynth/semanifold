@@ -1,0 +1,152 @@
+---
+title: Configuration reference
+description: Field-by-field reference for the current .changes/config.toml schema.
+---
+
+Semifold accepts TOML configuration at `.changes/config.toml`. Field names use kebab-case. JSON configuration and unknown fields are not part of the supported configuration contract.
+
+## `[branches]`
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `base` | string | yes | Branch that normal development and release preparation start from. |
+| `release` | string | yes | Branch maintained for prepared version changes and the release pull request. |
+
+## `[tags]`
+
+A map from changeset tag to changelog heading:
+
+```toml
+[tags]
+feat = "New Features"
+fix = "Bug Fixes"
+```
+
+Every tag used in a changeset must exist here. A tag does not choose a release channel.
+
+## `[changelog]`
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `template` | string | built-in template | MiniJinja template for a complete release block. |
+| `changeset-template` | string | built-in template | MiniJinja template for one changeset entry. |
+
+`smif init` writes the built-in templates so they can be discovered and customized. Keep the stable release marker required by Semifold when replacing a complete release template.
+
+## `[packages.<PackageId>]`
+
+```toml
+[packages.web]
+path = "packages/web"
+resolver = "nodejs"
+channel = "rc"
+channel-bump = "minor"
+depends-on = ["native-core"]
+github-release = true
+assets = [
+  "dist/*.wasm",
+  { path = "dist/cli", name = "semifold-linux-x64" },
+]
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `path` | path | required | Package root relative to the repository. |
+| `resolver` | ecosystem ID | required | Built-in adapter or registered plugin used for this package. |
+| `channel` | string | `stable` | Stable or named release channel such as `rc` or `beta`. |
+| `channel-bump` | `preserve`, `patch`, `minor`, or `major` | none | One-shot stable-base bump for the next transition into the named channel. |
+| `depends-on` | PackageId array | `[]` | Supplemental internal dependency edges that are not represented by manifests. |
+| `github-release` | boolean | public package: `true`; private package: `false` | Overrides GitHub Release creation policy. |
+| `assets` | string or `{ path, name }` array | `[]` | Files or globs uploaded to the package's GitHub Release. |
+
+The legacy `version-mode` field remains readable for migration. New configuration should use `channel`.
+
+## `[plugins.<ecosystem-id>]`
+
+<Availability status="next">
+  Repository-local ecosystem plugins are in the next Semifold release after `0.3.0-rc.5`.
+</Availability>
+
+```toml
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "64-lowercase-hex-characters"
+allowed-origins = ["https://api.example.com"]
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `path` | path | required | Repository-relative path to one bundled ESM file. |
+| `sha256` | string | none | Optional lowercase SHA-256 content pin. |
+| `allowed-origins` | HTTPS origin array | `[]` | Exact origins the plugin may access through `fetch`. Paths, wildcards, credentials, and non-HTTPS origins are rejected. |
+
+The plugin's exported metadata separately declares `read-patterns`. Both the metadata declaration and host validation must allow a file read.
+
+## `[resolver.<ecosystem-id>]`
+
+Resolver configuration owns publishing behavior even when package discovery and version edits come from a plugin.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `pre-check` | HTTP or command object | none | Checks whether the target package version already exists. |
+| `prepublish` | command array | `[]` | Commands executed before this ecosystem's publish command. |
+| `publish` | command array | `[]` | Commands that publish the package to its registry. |
+| `post-version` | command array | `[]` | Commands executed after package and changelog file edits are applied. |
+
+### HTTP pre-check
+
+```toml
+[resolver.rust.pre-check]
+type = "http"
+url = "https://crates.io/api/v1/crates/{{ package.name }}/{{ package.version }}"
+extra-headers = { User-Agent = "Example release automation" }
+retry = [2, 5, 15]
+```
+
+HTTP status `200` means the version exists and `404` means it does not. Other statuses fail the pre-check. `retry` contains delays in seconds for retryable failures and may be combined with a bounded `Retry-After` response.
+
+### Command pre-check
+
+```toml
+[resolver.internal.pre-check]
+type = "command"
+command = "./scripts/version-exists"
+args = ["--json-lines"]
+extra-env = { REGISTRY = "internal" }
+```
+
+Command pre-checks use Semifold's versioned JSON Lines request/response contract. A non-zero exit, malformed response, or mismatched package identity fails safely.
+
+### Command entries
+
+```toml
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public", "--tag", "rc"]
+extra-env = { NPM_CONFIG_PROVENANCE = "true" }
+stdout = "inherit"
+stderr = "inherit"
+dry-run = false
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `command` | string | required | Executable without shell expansion. |
+| `args` | string array | `[]` | Arguments passed directly to the executable. |
+| `extra-env` | string map | `{}` | Additional environment variables. Avoid putting credentials in committed configuration. |
+| `stdout` / `stderr` | `inherit`, `pipe`, or `null` | `inherit` | Child-process output policy. |
+| `dry-run` | boolean | `false` | Whether this command is explicitly safe to run during `--dry-run`. |
+
+Semifold does not interpret shell operators inside `args`; use a script when a workflow requires pipes or compound shell behavior.
+
+## Template variables
+
+Registry URLs and configured commands use package-scoped template context. Common values include:
+
+| Variable | Meaning |
+| --- | --- |
+| `{{ package.name }}` | Manifest or registry name. |
+| `{{ package.version }}` | Version being checked or published. |
+| `{{ package.path }}` | Package path relative to the repository. |
+
+The changelog templates receive a richer structured context. Keep template customization separate from registry command configuration and validate changes with `smif status` and `smif version --dry-run`.

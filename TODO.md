@@ -579,13 +579,22 @@
 - [x] 完成首页、Introduction、First Release 与 CLI reference 样例
 - [x] 验证 GitHub Pages deep link、404、移动端与双语搜索
 
+### 体验纠偏
+
+- [x] 将首页定位改为“跨语言单仓库的版本与发布”，不再以 release plan 或非交互调用作为产品主叙事
+- [x] 使用 Tailwind utilities 重构首页，并以官方品牌图形紧凑展示内置 ecosystem
+- [x] 在首页和文档页恢复版权、许可、仓库链接完整的全站页脚
+- [x] 修复 MDX 容器中的强调标记渲染，并让首发教程默认展示交互式使用路径
+- [x] 补齐 plugin、configuration 与中文术语表的首批双语页面
+- [x] 建立中文术语规则：中文解释优先，首次出现时保留英文检索词，不使用英文 fallback 代替解释
+
 ### 内容重写
 
 - [ ] 重写 getting started 与完整 release workflow
 - [ ] 补齐 workspace、四个内置 ecosystem 与跨生态依赖
 - [ ] 补齐 configuration、release channel、changelog template 与 publish pre-check
 - [ ] 重写 GitHub Actions、workflow outputs 与当前 MCP changeset CRUD
-- [ ] 为已实现 plugin runtime/SDK 编写下一版本文档，并明确 Vite plugin 尚未完成
+- [x] 为已实现 plugin runtime/SDK 编写下一版本文档，并明确 Vite plugin 尚未完成
 - [ ] 同步完成英文与中文内容，不依赖 fallback
 
 ### 质量与迁移
@@ -594,5 +603,5 @@
 - [x] 建立旧 URL inventory 与静态 redirect pages
 - [x] 将部署产物切换为 `docs/out`，部署前运行当前 docs checks
 - [ ] 删除 Rspress 专用依赖、配置、组件与旧内容
-- [ ] 创建并验证 `@semifold/docs` changeset
+- [x] 创建并验证 `@semifold/docs` changeset
 - [ ] 运行 production build、静态 direct-route smoke test 与 `smif status`

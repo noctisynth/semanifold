@@ -1,0 +1,91 @@
+---
+title: Capabilities and security
+description: Understand the plugin runtime's default-deny file, network, execution, and edit boundaries.
+---
+
+Semifold treats ecosystem plugins as repository code that parses untrusted project data. The runtime therefore uses explicit, operation-scoped capabilities instead of ambient machine access.
+
+<Availability status="next">
+  This page documents plugin protocol schema v1 on `main`, planned for the next release after `0.3.0-rc.5`.
+</Availability>
+
+## Boundary at a glance
+
+| Capability | Default | How it is granted | Important limit |
+| --- | --- | --- | --- |
+| List files | denied | `metadata.readPatterns` | Requested and returned paths must match an authorized repository-relative glob. |
+| Read text | denied | Same declared pattern | Reads remain inside the project root and are subject to file and operation budgets. |
+| HTTPS fetch | denied | `allowed-origins` in `.changes/config.toml` | Exact HTTPS origins only; no wildcard, credential, or path-based grants. |
+| `URL` | available subset | built into the Boa host | Only the SDK-declared surface is supported. |
+| Write files | unavailable | cannot be granted | Plugins return candidate edits; the host validates and applies them. |
+| Start commands | unavailable | cannot be granted | Publish and hook commands stay in resolver configuration. |
+| Host credentials | unavailable | cannot be granted | Registry and Forge credentials never enter plugin input. |
+
+## File access
+
+The plugin declares the smallest useful glob set in metadata:
+
+```ts
+export const metadata = definePluginMetadata({
+  ecosystem: 'com.example.game',
+  pluginVersion: '1.0.0',
+  readPatterns: [
+    'packages/*/manifest.json',
+    'workspace.lock',
+  ],
+});
+```
+
+`host.listFiles(pattern)` does not expand authority. Its requested pattern must stay within a declared pattern, and every returned path is checked again. `host.readText(path)` applies the same project-root, glob, path-encoding, file-size, and cumulative-operation checks.
+
+Use forward-slash, repository-relative paths in protocol data. Do not depend on the caller's current working directory.
+
+## Network access
+
+Grant exact origins in configuration:
+
+```toml
+[plugins."com.example.game"]
+path = "plugins/game.js"
+allowed-origins = [
+  "https://api.example.com",
+  "https://metadata.example.net:8443",
+]
+```
+
+The runtime rejects non-HTTPS URLs, embedded credentials, unapproved ports, and origins that only look similar. Request and response bodies, request counts, redirects, concurrency, and elapsed requests are bounded. The transport does not inherit a system proxy.
+
+`fetch` and `URL` are deliberately smaller than browser APIs. Use `@semifold/plugin-sdk` types as the supported contract; the presence of a familiar Web API name does not imply a DOM, cookies, browser cache, or Node.js behavior.
+
+## Candidate edits, not direct writes
+
+`plan-edits` returns declarative file edits. For an existing file, an edit includes the SHA-256 of the bytes the plugin inspected. The host then verifies:
+
+- target paths are valid and remain inside the repository;
+- the package and dependency named by the edit exist;
+- the edit source is consistent with the release plan;
+- current file content still matches the expected hash;
+- duplicate targets and cross-adapter conflicts do not exist;
+- the proposed edit is accepted by the normal file-edit executor.
+
+The plugin never receives a writable file handle.
+
+## Runtime and protocol failures
+
+A plugin should return structured diagnostics for expected domain failures. Semifold also turns runtime exceptions, invalid schema versions, missing operations, mismatched output operations, malformed paths, resource exhaustion, and invalid edits into plugin-scoped errors.
+
+One plugin failure stops the operation that needed it; it does not grant fallback access or silently accept a partial workspace.
+
+## What remains outside plugins
+
+The host continues to own:
+
+- changeset parsing and bump merging;
+- cross-ecosystem dependency graph validation;
+- release-channel version calculation;
+- changelog rendering;
+- registry pre-check and command execution;
+- GitHub Release and asset upload;
+- final file application and recovery reporting.
+
+This boundary keeps a custom package format extensible without turning a plugin into an unrestricted release script.

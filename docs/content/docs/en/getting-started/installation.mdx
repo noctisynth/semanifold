@@ -1,0 +1,100 @@
+---
+title: Install Semifold
+description: Install the latest published Semifold CLI and verify that the smif command is available.
+---
+
+The published command is available as both `smif` and `semifold`. This documentation uses the shorter `smif` form.
+
+<Availability status="released">
+  The latest published Semifold release is <strong>0.3.0-rc.5</strong>. Features marked “Next release” elsewhere in the documentation are present on `main` but not in this tag.
+</Availability>
+
+## Recommended: installation script
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+
+The script installs to `$HOME/.local/bin` by default. If that directory is not already on `PATH`, add it in your shell configuration.
+
+  </Tab>
+  <Tab>
+
+```powershell
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+The script installs to `%USERPROFILE%\.local\bin` by default. Add that directory to `PATH` if necessary.
+
+  </Tab>
+</Tabs>
+
+To select a version or installation directory, pass arguments to the downloaded script:
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | \
+  sh -s -- 0.3.0-rc.5 --install-dir "$HOME/bin"
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
+  0.3.0-rc.5 -InstallDir "$HOME\bin"
+```
+
+  </Tab>
+</Tabs>
+
+## Package-manager alternatives
+
+Choose the registry already trusted in your environment:
+
+<Tabs items={['Cargo', 'npm', 'PyPI']}>
+  <Tab>
+
+```bash
+cargo install semifold --version 0.3.0-rc.5
+```
+
+  </Tab>
+  <Tab>
+
+```bash
+npm install --global semifold@0.3.0-rc.5
+```
+
+  </Tab>
+  <Tab>
+
+```bash
+pipx install semifold==0.3.0rc5
+```
+
+  </Tab>
+</Tabs>
+
+## Verify the command
+
+Open a new shell after changing `PATH`, then run:
+
+```bash
+smif --version
+```
+
+<ExpectedOutput title="Expected output">
+
+```text
+semifold 0.3.0-rc.5
+```
+
+</ExpectedOutput>
+
+You can now continue to [your first release](/docs/getting-started/first-release/) or read [what Semifold manages](/docs/introduction/) first.

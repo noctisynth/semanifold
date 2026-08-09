@@ -1,0 +1,167 @@
+---
+title: 编写生态插件
+description: 定义版本为 1 的 JavaScript 生态适配器，完成打包、权限注册，并验证软件包发现与版本规划。
+---
+
+本指南展示一条完整的接入路径。示例软件包格式在每个软件包目录中保存 `manifest.json`，其中包含 `name`、`version` 和 `dependencies` 字段。
+
+<Availability status="next">
+  请在包含 `semifold 0.3.0-rc.6` 和 `@semifold/plugin-sdk 0.1.0-rc.0` 的版本发布后运行本指南。API 已经在 `main` 实现；`0.3.0-rc.5` 还不能加载这些插件。
+</Availability>
+
+## 1. 选择稳定的软件生态 ID
+
+使用自己控制的反向域名 ID，例如 `com.example.game`。`rust`、`nodejs` 等内置 ID 已被保留。
+
+创建源码目录，并安装带类型的 SDK：
+
+```bash
+pnpm add --save-dev @semifold/plugin-sdk@0.1.0-rc.0
+```
+
+## 2. 导出元数据与入口函数
+
+```ts title="plugins/game.ts"
+import {
+  createPluginFailure,
+  createPluginSuccess,
+  definePlugin,
+  definePluginMetadata,
+  type PluginHostV1,
+  type PluginPackageInspectionV1,
+} from '@semifold/plugin-sdk';
+
+const ecosystem = 'com.example.game';
+
+export const metadata = definePluginMetadata({
+  ecosystem,
+  pluginVersion: '1.0.0',
+  readPatterns: ['packages/*/manifest.json'],
+});
+
+async function inspectPackage(
+  id: string,
+  path: string,
+  host: PluginHostV1,
+): Promise<PluginPackageInspectionV1> {
+  const manifest = JSON.parse(
+    await host.readText(`${path}/manifest.json`),
+  ) as {
+    name: string;
+    version: string;
+    dependencies?: Record<string, string>;
+  };
+
+  return {
+    id,
+    'manifest-name': manifest.name,
+    version: manifest.version,
+    'version-source': { kind: 'package-manifest' },
+    ecosystem,
+    path,
+    publishable: true,
+    dependencies: Object.entries(manifest.dependencies ?? {}).map(
+      ([name, requirement]) => ({
+        'manifest-name': name,
+        kind: 'runtime',
+        requirement,
+      }),
+    ),
+  };
+}
+
+export default definePlugin(async (request, host) => {
+  switch (request.operation) {
+    case 'discover': {
+      const manifests = await host.listFiles('packages/*/manifest.json');
+      const packages = await Promise.all(
+        manifests.map((manifest) => {
+          const path = manifest.slice(0, -'/manifest.json'.length);
+          return inspectPackage(path, path, host);
+        }),
+      );
+      return createPluginSuccess(request, { packages });
+    }
+    case 'inspect': {
+      const { id, path } = request.input.package;
+      return createPluginSuccess(request, {
+        package: await inspectPackage(id, path, host),
+      });
+    }
+    case 'plan-edits':
+      return createPluginFailure(request, ecosystem, {
+        code: 'plan-edits-not-implemented',
+        message: '启用发布前，请先实现确定性的清单文件修改。',
+      });
+  }
+});
+```
+
+这个初始版本可以安全测试发现和读取，但会拒绝写入版本。尚未准备好修改时返回失败，比成功返回不完整修改更安全。
+
+## 3. 实现版本修改
+
+遍历 `request.input['released-packages']` 中待发布的软件包，从 `request.input['workspace-packages']` 找到快照，再从 `request.input.versions` 取得目标版本。为每个目标返回一项或多项修改：
+
+```ts
+{
+  path: 'packages/engine/manifest.json',
+  expected: {
+    kind: 'existing',
+    sha256: '<插件读取到的原始字节所对应的 sha256>',
+  },
+  'new-content': '{\n  "name": "engine",\n  "version": "1.1.0"\n}\n',
+  source: {
+    kind: 'package-version',
+    package: 'packages/engine',
+  },
+}
+```
+
+修改内部依赖要求时，来源使用 `dependency-version`，并同时写出所属软件包与被依赖软件包。修改共享工作区清单时，使用 `workspace-manifest`，列出共享版本修改和依赖。
+
+协议要求每个已有目标都携带 SHA-256。请把确定性的 SHA-256 实现一起打包进插件；Boa 宿主不会暴露 Node.js `crypto`。Semifold 会在应用修改前再次计算文件哈希，拒绝已经变化的内容，并继续执行路径与冲突检查。
+
+## 4. 生成一份 ESM 文件
+
+把 SDK 工具和其他源码全部打包进一份 ESM 文件，例如 `plugins/game.js`。配置中的最终文件必须满足：
+
+- 导出名为 `metadata` 的元数据；
+- 默认导出异步插件入口；
+- 不含运行时 `import`；
+- 不使用 Node.js 内置模块、动态模块加载、DOM 或不受支持的 Web API。
+
+<Availability status="planned">
+  Semifold 尚未提供计划中的 Vite 集成来自动完成打包检查。请让仓库现有的打包器内联依赖，并在注册前检查最终文件。
+</Availability>
+
+## 5. 注册插件
+
+```toml title=".changes/config.toml"
+[plugins."com.example.game"]
+path = "plugins/game.js"
+
+[resolver."com.example.game"]
+pre-check = { type = "command", command = "./scripts/game-version-exists" }
+publish = [{ command = "./scripts/publish-game-package" }]
+```
+
+配置表中的软件生态 ID 必须与 `metadata.ecosystem` 完全一致。打包结果稳定后，可以加入 `sha256`。只有插件确实需要访问某个 HTTPS 服务时，才加入对应的 `allowed-origins`。
+
+## 6. 发现并验证软件包
+
+```bash
+smif config sync --resolver com.example.game --check
+```
+
+审查建议的软件包 ID 和路径。去掉 `--check` 应用同步，然后在创建变更集之前实现并测试 `plan-edits`：
+
+```bash
+smif config sync --resolver com.example.game
+smif status
+smif version --dry-run
+```
+
+插件只负责提出候选修改。Semifold 仍然会验证完整的跨生态依赖图，并通过宿主控制的同一套文件执行器应用所有已接受的修改。
+
+授予文件或网络权限前，请阅读[能力与安全边界](/zh/docs/plugins/capabilities/)。

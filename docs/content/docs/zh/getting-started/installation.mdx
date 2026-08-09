@@ -1,0 +1,100 @@
+---
+title: 安装 Semifold
+description: 安装最新发布的 Semifold 命令行工具，并确认 smif 命令可以使用。
+---
+
+安装后可以使用 `smif` 和 `semifold` 两个等价的命令名称。本文档统一使用较短的 `smif`。
+
+<Availability status="released">
+  Semifold 最新发布版本是 <strong>0.3.0-rc.5</strong>。文档中标记为“下一版本”的功能已经合入 `main`，但不包含在这个标签中。
+</Availability>
+
+## 推荐方式：安装脚本
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+
+脚本默认安装到 `$HOME/.local/bin`。如果这个目录尚未加入 `PATH`，请在 shell 配置中添加它。
+
+  </Tab>
+  <Tab>
+
+```powershell
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+脚本默认安装到 `%USERPROFILE%\.local\bin`。如有需要，请把该目录加入 `PATH`。
+
+  </Tab>
+</Tabs>
+
+如需选择版本或安装目录，可以向下载后的脚本传入参数：
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | \
+  sh -s -- 0.3.0-rc.5 --install-dir "$HOME/bin"
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
+  0.3.0-rc.5 -InstallDir "$HOME\bin"
+```
+
+  </Tab>
+</Tabs>
+
+## 通过软件包管理器安装
+
+也可以选择当前环境已经信任的软件包仓库：
+
+<Tabs items={['Cargo', 'npm', 'PyPI']}>
+  <Tab>
+
+```bash
+cargo install semifold --version 0.3.0-rc.5
+```
+
+  </Tab>
+  <Tab>
+
+```bash
+npm install --global semifold@0.3.0-rc.5
+```
+
+  </Tab>
+  <Tab>
+
+```bash
+pipx install semifold==0.3.0rc5
+```
+
+  </Tab>
+</Tabs>
+
+## 验证命令
+
+修改 `PATH` 后请打开一个新 shell，再运行：
+
+```bash
+smif --version
+```
+
+<ExpectedOutput title="预期输出">
+
+```text
+semifold 0.3.0-rc.5
+```
+
+</ExpectedOutput>
+
+现在可以继续[完成第一次发布](/zh/docs/getting-started/first-release/)，也可以先阅读[Semifold 管理什么](/zh/docs/introduction/)。

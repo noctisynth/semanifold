@@ -10,17 +10,17 @@ export function baseOptions(
   return {
     nav: {
       title: (
-        <span className="site-wordmark">
-          <span className="site-logo" aria-hidden>
+        <span className="inline-flex items-center gap-2.5 font-semibold tracking-tight">
+          <span className="relative size-7 shrink-0" aria-hidden>
             <Image
-              className="site-logo-light"
+              className="absolute inset-0 size-full dark:hidden"
               alt=""
               width={29}
               height={29}
               src="/logo-light.svg"
             />
             <Image
-              className="site-logo-dark"
+              className="absolute inset-0 hidden size-full dark:block"
               alt=""
               width={29}
               height={29}

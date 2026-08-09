@@ -1,0 +1,75 @@
+---
+title: 插件系统
+description: 通过受限权限的仓库内插件，让 Semifold 支持四种内置生态之外的软件包格式。
+---
+
+Semifold 的插件系统允许一座仓库补充自己的生态适配器：插件告诉 Semifold 怎样发现软件包、读取软件包信息和修改版本。插件软件包会像内置软件包一样进入工作区依赖图、变更集、版本传播、配置同步和发布流程。
+
+<Availability status="next">
+  插件运行时已经在 `main` 完整实现，计划随 `0.3.0-rc.5` 之后的下一版 Semifold 发布。当前清单版本是 `semifold 0.3.0-rc.6` 和 `@semifold/plugin-sdk 0.1.0-rc.0`，但还没有对应的发布标签。
+</Availability>
+
+## 什么时候应该编写插件
+
+当仓库中存在 Rust、Node.js、Python、C++ 内置适配器无法理解的真实软件包格式时，才需要插件。典型任务包括：
+
+- 找到软件包清单与稳定的软件包 ID；
+- 读取当前版本和软件包之间的依赖；
+- 区分各软件包独立版本与共享版本来源；
+- 在保留清单结构的前提下更新版本和内部依赖要求。
+
+如果只是想定制 `cargo publish`、`npm publish` 或其他发布命令，不需要编写插件。发布命令、软件包仓库检查、GitHub Release 和附件仍由普通的 `[resolver.<id>]` 与软件包配置负责。
+
+## 一套生态适配契约
+
+插件导出版本为 1 的协议元数据，以及一个默认异步入口。Semifold 会调用三种操作：
+
+| 操作 | 输入 | 必须返回什么 |
+| --- | --- | --- |
+| `discover` | 项目根目录 | 插件发现的所有软件包及其完整信息。 |
+| `inspect` | 一个已配置的软件包位置 | 该软件包当前的完整信息。 |
+| `plan-edits` | 工作区快照、待发布软件包 ID 与目标版本 | 带预期文件状态和修改来源的候选文件修改。 |
+
+每份软件包信息包含 `PackageId`、清单名称、语义化版本、版本来源、软件生态 ID、路径、是否发布，以及清单依赖。宿主会把清单名称解析成稳定的软件包 ID，并建立跨生态依赖图。
+
+## 保存在仓库中，并校验身份
+
+插件通过稳定的软件生态 ID 注册：
+
+```toml title=".changes/config.toml"
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "64-lowercase-hex-characters"
+
+[packages.engine]
+path = "engine"
+resolver = "com.example.game"
+
+[resolver."com.example.game"]
+```
+
+插件路径必须留在仓库内部。可选的 SHA-256 内容锁会在加载前验证插件文件。注册表按照软件生态 ID 排序，因此行为不会依赖发现顺序。
+
+## 权限受限的运行时
+
+内嵌的 Boa 运行时默认不能读取项目文件，也不能访问网络。插件元数据显式声明允许读取的 glob；配置则显式声明允许访问的精确 HTTPS 来源。运行时只提供受支持的 `host.listFiles`、`host.readText`、`fetch` 和 `URL` 子集。
+
+插件不能：
+
+- 直接写文件；
+- 启动子进程或运行发布命令；
+- 从宿主读取软件包仓库或代码托管平台凭据；
+- 创建 GitHub Release 或上传附件；
+- 使用 Node.js 内置模块、DOM 或运行时模块加载。
+
+Semifold 会先验证插件元数据、响应、诊断、路径、依赖、预期哈希、修改冲突和资源预算，再应用任何候选修改。
+
+## SDK 与打包状态
+
+`@semifold/plugin-sdk` 提供从 Rust 协议生成的 TypeScript 传输类型与响应构造工具。它的运行时声明只描述 Boa 真正支持的 `fetch`、`URL` 和文件宿主接口，不会假装完整浏览器或 Node.js API 存在。
+
+<Availability status="planned">
+  用来生成单文件 ESM 并拒绝不支持 import 或全局 API 的配套 Vite 插件尚未实现。首个版本需要使用仓库已有的打包器，并确认输出是一份没有运行时 import 的 ESM 文件。
+</Availability>
+
+接下来可以[编写一个插件](/zh/docs/plugins/quick-start/)，或者先了解[能力与安全边界](/zh/docs/plugins/capabilities/)。

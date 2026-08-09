@@ -1,0 +1,167 @@
+---
+title: Write an ecosystem plugin
+description: Define a schema-v1 JavaScript adapter, bundle it, register its capabilities, and verify discovery and version planning.
+---
+
+This guide shows the complete integration path. The example package format stores one `manifest.json` per package with `name`, `version`, and `dependencies` fields.
+
+<Availability status="next">
+  Run this guide after a Semifold release containing `semifold 0.3.0-rc.6` and `@semifold/plugin-sdk 0.1.0-rc.0` is published. The APIs are implemented on `main`; `0.3.0-rc.5` cannot load these plugins.
+</Availability>
+
+## 1. Choose a stable ecosystem ID
+
+Use a reverse-domain ID that you control, for example `com.example.game`. Built-in IDs such as `rust` and `nodejs` are reserved.
+
+Create a source directory and install the typed SDK:
+
+```bash
+pnpm add --save-dev @semifold/plugin-sdk@0.1.0-rc.0
+```
+
+## 2. Export metadata and an entrypoint
+
+```ts title="plugins/game.ts"
+import {
+  createPluginFailure,
+  createPluginSuccess,
+  definePlugin,
+  definePluginMetadata,
+  type PluginHostV1,
+  type PluginPackageInspectionV1,
+} from '@semifold/plugin-sdk';
+
+const ecosystem = 'com.example.game';
+
+export const metadata = definePluginMetadata({
+  ecosystem,
+  pluginVersion: '1.0.0',
+  readPatterns: ['packages/*/manifest.json'],
+});
+
+async function inspectPackage(
+  id: string,
+  path: string,
+  host: PluginHostV1,
+): Promise<PluginPackageInspectionV1> {
+  const manifest = JSON.parse(
+    await host.readText(`${path}/manifest.json`),
+  ) as {
+    name: string;
+    version: string;
+    dependencies?: Record<string, string>;
+  };
+
+  return {
+    id,
+    'manifest-name': manifest.name,
+    version: manifest.version,
+    'version-source': { kind: 'package-manifest' },
+    ecosystem,
+    path,
+    publishable: true,
+    dependencies: Object.entries(manifest.dependencies ?? {}).map(
+      ([name, requirement]) => ({
+        'manifest-name': name,
+        kind: 'runtime',
+        requirement,
+      }),
+    ),
+  };
+}
+
+export default definePlugin(async (request, host) => {
+  switch (request.operation) {
+    case 'discover': {
+      const manifests = await host.listFiles('packages/*/manifest.json');
+      const packages = await Promise.all(
+        manifests.map((manifest) => {
+          const path = manifest.slice(0, -'/manifest.json'.length);
+          return inspectPackage(path, path, host);
+        }),
+      );
+      return createPluginSuccess(request, { packages });
+    }
+    case 'inspect': {
+      const { id, path } = request.input.package;
+      return createPluginSuccess(request, {
+        package: await inspectPackage(id, path, host),
+      });
+    }
+    case 'plan-edits':
+      return createPluginFailure(request, ecosystem, {
+        code: 'plan-edits-not-implemented',
+        message: 'Add deterministic manifest edits before enabling releases.',
+      });
+  }
+});
+```
+
+This first version intentionally makes discovery and inspection testable while refusing version writes. A failure response is safer than returning success with incomplete edits.
+
+## 3. Implement version edits
+
+For every package in `request.input['released-packages']`, find its snapshot in `request.input['workspace-packages']` and target version in `request.input.versions`. Return one or more edits:
+
+```ts
+{
+  path: 'packages/engine/manifest.json',
+  expected: {
+    kind: 'existing',
+    sha256: '<sha256 of the exact bytes inspected by the plugin>',
+  },
+  'new-content': '{\n  "name": "engine",\n  "version": "1.1.0"\n}\n',
+  source: {
+    kind: 'package-version',
+    package: 'packages/engine',
+  },
+}
+```
+
+When an internal dependency requirement changes, use `dependency-version` as the source and name both the owner package and dependency. For a shared workspace manifest, use `workspace-manifest` and list its shared version edits and dependencies.
+
+The protocol requires the SHA-256 of every existing target. Bundle a deterministic SHA-256 implementation with the plugin; the Boa host does not expose Node.js `crypto`. Semifold re-hashes the file before applying the edit, rejects stale content, and performs its normal path and conflict checks.
+
+## 4. Produce one ESM file
+
+Bundle the SDK helpers and all other source into one ESM file, for example `plugins/game.js`. The configured file must have:
+
+- named `metadata` export;
+- default async plugin entrypoint;
+- no runtime `import` statements;
+- no Node.js built-ins, dynamic module loading, DOM assumptions, or unsupported Web APIs.
+
+<Availability status="planned">
+  Semifold does not yet ship the planned Vite integration that automates this check. Configure your existing bundler to inline dependencies and inspect the final file before registration.
+</Availability>
+
+## 5. Register the plugin
+
+```toml title=".changes/config.toml"
+[plugins."com.example.game"]
+path = "plugins/game.js"
+
+[resolver."com.example.game"]
+pre-check = { type = "command", command = "./scripts/game-version-exists" }
+publish = [{ command = "./scripts/publish-game-package" }]
+```
+
+The ecosystem ID in the table must exactly match `metadata.ecosystem`. Add an optional `sha256` after the bundle stabilizes. Add `allowed-origins` only when the plugin genuinely needs a specific HTTPS service.
+
+## 6. Discover and verify
+
+```bash
+smif config sync --resolver com.example.game --check
+```
+
+Review the proposed package IDs and paths. Apply synchronization without `--check`, then implement and test `plan-edits` before creating a changeset:
+
+```bash
+smif config sync --resolver com.example.game
+smif status
+smif version --dry-run
+```
+
+The plugin only proposes edits. Semifold still validates the complete cross-ecosystem dependency graph and applies all accepted edits through the same host-controlled file executor.
+
+Read [capabilities and security](/docs/plugins/capabilities/) before granting file or network access.

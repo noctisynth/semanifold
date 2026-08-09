@@ -1,68 +1,36 @@
 ---
 title: 完成第一次发布
-description: 初始化 Rust 仓库、记录一次变更、检查 release plan，并在明确的安全检查下运行 version 与 publish。
+description: 初始化一座小仓库、记录变更、检查受影响的软件包、修改版本并执行发布。
 ---
 
-完成本教程后，你会得到 Semifold 配置、一份 changeset、经过检查的 release plan、已经完成版本修改的 package 文件，以及一条可以在凭据就绪后执行的 publish 命令。
+本教程使用正常的交互式命令行。你会创建 Semifold 配置、记录一份变更集、检查受影响的软件包、修改文件，并准备一次软件包仓库发布。
 
 <Availability status="released">
-  本教程面向 **Semifold 0.3.0-rc.5**，使用该版本完整的非交互 CLI 路径。
+  本教程使用 <strong>Semifold 0.3.0-rc.5</strong>，只包含这个已发布版本真正提供的功能。
 </Availability>
 
 ## 开始之前
 
-准备一个默认分支为 `main` 的 Git 仓库，其中至少包含一个具有有效 `Cargo.toml` 的 Rust package。请从干净的 worktree 开始，便于审查 version diff。
+准备一座默认分支为 `main`、工作区没有未提交修改的 Git 仓库。示例假设仓库中至少有一个包含有效 `Cargo.toml` 的 Rust 软件包；其他内置软件生态使用相同的生命周期。
 
-你还需要新增 `.changes/` 与 GitHub workflow 文件的权限。只有最后的 publish 步骤需要 registry 凭据。
+如果 `smif --version` 还不能运行，请先按照[安装指南](/zh/docs/getting-started/installation/)安装 Semifold。
 
-## 1. 安装并验证 Semifold
+## 1. 初始化仓库
 
-<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
-  <Tab>
-
-```bash
-curl -L https://semifold.noctisynth.org/install/install.sh | sh
-```
-
-  </Tab>
-  <Tab>
-
-```powershell
-irm https://semifold.noctisynth.org/install/install.ps1 | iex
-```
-
-  </Tab>
-</Tabs>
-
-如果 installer 修改了 `PATH`，请打开一个新 shell，然后确认已发布 binary：
+在仓库根目录运行：
 
 ```bash
-smif --version
+smif init
 ```
 
-<ExpectedOutput title="预期输出">
+交互提示会依次询问：
 
-```text
-semifold 0.3.0-rc.5
-```
+1. 要发现哪些软件包生态；
+2. 基础分支和发布分支名称；
+3. 是否使用默认的变更日志分类；
+4. 是否生成 GitHub Actions 工作流。
 
-</ExpectedOutput>
-
-`semifold` 是等价的完整 executable name。本文档统一使用 `smif`。
-
-## 2. 初始化仓库
-
-在 repository root 运行：
-
-```bash
-smif init --resolvers rust \
-  --base-branch main \
-  --release-branch release \
-  --default-tags \
-  --github-actions
-```
-
-所有决策都通过参数明确给出，因此命令不需要交互终端。
+本教程选择 Rust，分支保留 `main` 和 `release`，接受默认分类，并生成工作流。
 
 <ExpectedOutput title="创建的文件">
 
@@ -80,99 +48,117 @@ smif init --resolvers rust \
 
 </ExpectedOutput>
 
-打开 `.changes/config.toml`，确认发现的每个 package 都具有预期的 PackageId 与 path。PackageId 是 `[packages]` 下的 key；下一条命令需要使用这个 key。
+打开 `.changes/config.toml`。在 `[packages]` 下确认每个软件包的路径和解析器符合预期。配置表的 key 是稳定的软件包 ID（`PackageId`），它可能不同于清单文件中用于发布的名称。
 
-如果仓库已经存在 Semifold 配置，而 package 发生了变化，请使用 `smif config sync`，不要重复执行 `init --force`。
+如果仓库已经初始化，只是后来增加或删除了软件包，请使用 `smif config sync`，不要再次运行 `init --force`。
 
-## 3. 记录一项发布意图
+## 2. 完成一项用户可见的改动
 
-完成一个小型、面向用户的代码变更，然后创建 changeset。把 `my-package` 替换为配置中的 PackageId：
+修改一个公开 API，或者完成其他使用者能感知的行为变化。第一次练习尽量保持改动小而明确，便于判断版本影响。
+
+现在记录发布意图：
 
 ```bash
-smif commit \
-  --name add-api \
-  --package my-package=minor \
-  --tag feat \
-  --summary "Add the public API."
+smif commit
 ```
 
-命令不会发起交互，而是直接创建 `.changes/add-api.md`：
+按照提示选择发生变化的软件包，选择 `patch`、`minor` 或 `major`，选择变更日志分类，输入 `add-api` 这样的简短变更集名称，再写一段给使用者阅读的摘要。
 
-```md
+Semifold 会创建类似下面的文件：
+
+```md title=".changes/add-api.md"
 ---
 my-package: "minor:feat"
 ---
 
-Add the public API.
+开放新的公共 API。
 ```
 
-`minor` 请求版本提升；`feat` 选择 changelog section，并不选择 release channel。
+`minor` 表示期望的版本提升；`feat` 选择变更日志分组，不会选择发布通道。
 
-## 4. 检查不可变 release plan
+把变更集与代码改动放在同一个提交或拉取请求中，让审查者一起判断实现和版本影响。
+
+## 3. 检查受影响的软件包
 
 ```bash
 smif status
 ```
 
-<ExpectedOutput title="需要在 status 报告中确认的内容">
+<ExpectedOutput title="需要确认的内容">
 
-- 报告包含 plan fingerprint；
-- `my-package` 的当前版本与下一版本符合预期；
-- 原因指向 `add-api` changeset；
-- 额外出现的 package 都有可以解释的依赖传播原因；
-- 最终摘要表示 plan 生成成功，而不是已经应用发布。
+- 发生变化的软件包具有正确的当前版本和目标版本；
+- 直接原因指向 `add-api` 变更集；
+- 额外出现的软件包都有可以理解的依赖传播原因；
+- 最后的提示表示发布计划已经就绪，而不是文件已经被修改。
 
 </ExpectedOutput>
 
-如果 package 集合、bump level 或原因不正确，请在这里停止。修改 changeset 或配置后重新运行 `smif status`。不要通过手工修改 package version 来补偿错误的 plan。
+如果软件包或版本不正确，请在这里停止。修改变更集、软件包 ID 或依赖配置，然后重新运行 `smif status`。
 
-## 5. 预览并应用版本修改
+## 4. 预览并应用版本修改
 
-先让 Semifold 准备同一个 release，但不写入正常的 version 副作用：
+先预览待修改文件和待运行命令：
 
 ```bash
 smif version --dry-run
 ```
 
-检查列出的文件修改与 post-version 命令。全局 dry-run 仍可能执行配置中显式标记 `dry-run = true` 的命令；这类命令本身必须适合安全预览。
+预演不会应用正常的版本副作用。配置命令只有明确设置 `dry-run = true` 时才会在预演中运行，因此这类命令必须能够安全重复执行。
 
-确认预览正确后，应用计划：
+确认预览符合预期后，应用修改：
 
 ```bash
 smif version
 ```
 
-<ExpectedOutput title="Version 结果">
+Semifold 会修改软件包版本和符合条件的内部依赖要求，写入变更日志，运行配置的版本修改后工作，并消费已经应用的变更集。
 
-Semifold 修改 package version 与符合条件的内部依赖约束，写入 changelog，运行配置的 post-version 工作，并消费已经应用的 changeset。最终表格展示实际写入的版本。
+审查 Git diff，再运行仓库原有的测试。把生成文件提交到 `release` 分支，或者让生成的 GitHub Actions 工作流维护发布拉取请求。
 
-</ExpectedOutput>
+## 5. 发布
 
-检查 Git diff 并测试 workspace。把生成的文件提交到 `release` 分支，或者让生成的 GitHub Actions workflow 维护 release pull request。
+版本修改进入用于发布的分支后，为相关软件生态提供所需的软件包仓库凭据。
 
-## 6. 预览并发布
-
-Version 变更合入用于发布的分支后，配置 ecosystem 所需的 registry 凭据，然后运行：
+先预览发布执行：
 
 ```bash
 smif publish --dry-run
 ```
 
-该命令校验 publish plan，并执行只读 registry preflight；它不会发布 package 或创建 Forge release。与 version 相同，显式配置为 dry-run 的命令仍可能执行。
+这条命令会验证软件包顺序并执行只读的版本存在性检查，但不会发布软件包，也不会创建代码托管平台 Release。
 
-确认顺序、版本、preflight 与命令参数正确后，执行发布：
+确认预览正确后执行：
 
 ```bash
 smif publish
 ```
 
-Package 按依赖顺序运行。报告会区分 registry 成功、主动跳过、失败与未开始的 package。在 CI 中，如果还需要创建配置的 GitHub Release 与 asset，请加入 `--github-release`。
+软件包按照依赖关系发布。最终报告会分别列出成功、跳过、失败和尚未开始的软件包。在持续集成环境中，如果还要创建已经配置的 GitHub Release 与附件，可以加入 `--github-release`。
 
 ## 发生失败时
 
-- **找不到 package：**使用 `.changes/config.toml` 中的 PackageId，而不是猜测的 registry name。
-- **Worktree 不干净：**检查或提交无关文件。只有确认当前 diff 正是预期输入时，才使用 `--allow-dirty`。
-- **Registry version 已存在：**Semifold 会跳过该版本的 registry 命令。启用 GitHub Release 后，它仍可补建缺失 release；已经存在的 release 不会触发 asset 恢复。
-- **部分 publish 失败：**根据最终报告区分 succeeded、failed 与 not-started package。修正失败的凭据、pre-check 或命令后重试；不要再次发布已经确认存在的 package。
+- <strong>找不到软件包：</strong>使用 `.changes/config.toml` 中 `[packages]` 的 `PackageId`，不要猜测软件包仓库名称。
+- <strong>工作区不干净：</strong>先检查并提交无关文件。`--allow-dirty` 表示有意接受当前 diff 作为输入，不会替你清理仓库。
+- <strong>软件包仓库中已经存在目标版本：</strong>Semifold 会跳过对应发布命令。启用 GitHub Release 时仍可以补建缺失的 Release；已经存在的 Release 不会触发附件恢复。
+- <strong>部分发布失败：</strong>根据最终报告中的成功、失败和尚未开始状态，修复失败的凭据、版本检查或命令后重试。不要手工再次发布已经确认存在的版本。
 
-至此，你已经走完 Semifold 的核心循环：changeset → status → version → publish。下一步可以在 pull request 中运行 `smif status`，并让生成的 workflow 维护 release branch。
+## 理解工作流后再做自动化
+
+交互提示是正常的学习和本地维护路径。持续集成与输入受限环境可以通过参数提供相同答案：
+
+```bash
+smif init --resolvers rust \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+
+smif commit --name add-api \
+  --package my-package=minor \
+  --tag feat \
+  --summary "开放新的公共 API。"
+```
+
+这些参数只是自动化兼容接口，不代表另一套发布模型，也不是开始使用 Semifold 的前置知识。
+
+至此，你已经走完基础生命周期：发现软件包、记录变更集、联动修改相关版本与变更日志，再按依赖关系发布。仓库需要更多策略时，继续阅读[配置概览](/zh/docs/configuration/overview/)。

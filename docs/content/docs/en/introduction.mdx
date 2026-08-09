@@ -1,66 +1,79 @@
 ---
-title: Introduction
-description: Understand what Semifold owns, how its plans are built, and where ecosystem-specific behavior begins and ends.
+title: What is Semifold?
+description: Understand the repository problem Semifold solves and how it works across different package ecosystems.
 ---
 
-Semifold separates **release decisions** from **release side effects**. It calculates what should happen first, presents that calculation as a plan, and only applies file or network changes through an explicit command.
+Semifold manages versions and releases for a repository that contains packages from more than one ecosystem.
 
-This matters in a mixed workspace: Cargo, npm, Python packaging, and C++ projects do not share manifest formats or publishing commands, but they still need one answer to “what releases, in which order, and why?”
+Imagine a product repository with a Rust core library, Node.js bindings, a Python client, and a C++ component. Each ecosystem already has a good package manifest and publishing tool. The difficult part is everything between them:
 
-## The five objects in the workflow
+- deciding which packages need a new version after one change;
+- updating internal requirements when a dependency moves;
+- keeping one understandable changelog history;
+- publishing in an order that respects relationships across languages;
+- recovering when one registry succeeds and another fails.
 
-### PackageId
+Semifold supplies that repository-wide layer. It does not replace Cargo, npm, Python packaging, CMake, or your registries.
 
-A PackageId is the stable key used in `.changes/config.toml` and changesets. An ecosystem adapter discovers a package's manifest name, version, dependencies, and candidate edits, but Semifold does not silently replace your configured identity with a registry name.
+## One workspace graph
 
-### Ecosystem adapter
+Every managed package becomes a node in one workspace dependency graph. A node contains:
 
-An adapter owns ecosystem-specific discovery, inspection, and edit planning. Built-in adapters cover Rust, Node.js, Python, and C++. Publishing credentials, Forge operations, and release orchestration stay outside the adapter boundary.
+- a stable `PackageId` used by configuration and changesets;
+- the manifest or registry name used by its ecosystem;
+- current version, path, and publishability;
+- manifest dependencies and optional explicit relationships;
+- the adapter responsible for reading and editing its manifest.
 
-### Changeset
+This normalized graph is why a Rust package can affect a Node.js or Python package without pretending their manifests are the same.
 
-A changeset is a small Markdown file under `.changes/`. Its front matter maps PackageIds to bump levels and optional changelog tags; its body explains the user-visible change.
+### Built-in and custom ecosystems
+
+Semifold includes adapters for Rust, Node.js, Python, and C++. They understand the package and workspace formats covered by their implementation and fixtures.
+
+<Availability status="next">
+  The next release adds repository-local JavaScript ecosystem plugins. A plugin implements the same discovery, inspection, and edit-planning boundary, so custom packages join the same graph instead of living in a separate release script.
+</Availability>
+
+## The work you do with Semifold
+
+### 1. Describe the repository
+
+`smif init` discovers packages and creates `.changes/config.toml`. The file gives every package a stable ID and records release policy that package manifests cannot express.
+
+As the repository changes, `smif config sync` compares current discovery with the saved configuration. It updates discovered facts without silently replacing intentional policy.
+
+### 2. Record a user-visible change
+
+A changeset is a small Markdown file that names affected package IDs, requested version bumps, changelog categories, and a summary. It travels with the code change and can be reviewed before versions move.
 
 ```md
 ---
-my-package: "minor:feat"
+native-core: "minor:feat"
+web-bindings: "patch:fix"
 ---
 
-Add the public API.
+Expose the new parser through the web bindings.
 ```
 
-`feat` chooses a changelog section. It does not mean “publish to the feature channel.” Stable and named channels are package release state configured separately.
+### 3. Update every affected version
 
-### Release plan
+`smif status` shows the direct changes and additional packages affected by dependency rules. `smif version` then updates package versions, internal requirements, changelogs, and consumed changesets through the adapters responsible for each manifest.
 
-`smif status` combines changesets, current package versions, dependency constraints, configured relationships, and release-channel state into an immutable plan. Each planned bump carries a reason, so reviewers can distinguish a direct changeset from a dependency-propagated release.
+The plan is valuable because it makes the decision reviewable, but the product capability is the consistent cross-ecosystem version update it describes.
 
-`smif version` uses the same planning path. If the workspace inputs change after you inspect status, run status again instead of assuming the old plan is still valid.
+### 4. Publish with ecosystem-specific rules
 
-### Publish plan
+`smif publish` orders packages by dependency, checks whether target versions already exist, and runs the configured command for each ecosystem. GitHub Release and asset work can be enabled separately.
 
-Publishing begins from the versions and changelogs present after versioning. The plan validates pre-checks and commands, orders packages by the workspace graph, and keeps registry and Forge outcomes separate. A partial failure therefore has explicit succeeded, failed, and not-started facts instead of a single ambiguous error.
+The final report distinguishes successful, skipped, failed, and not-started packages. That information lets a maintainer repair credentials or registry configuration and resume without guessing which versions already escaped.
 
-## What Semifold changes
+## What Semifold deliberately leaves to other tools
 
-During versioning, Semifold may update package versions, internal dependency requirements, changelogs, lockfiles through configured post-version commands, and pending changesets. Every file edit is planned and validated before it is written.
+Semifold does not build or test your packages, host a package registry, infer product policy from commit messages, or hide credentials inside plugins. Build and test commands remain in your existing tooling or explicit hooks; registry authentication remains in the execution environment.
 
-During publishing, Semifold may run configured registry commands and, when requested in CI, create GitHub Releases and upload declared assets. `--dry-run` skips mutating release effects, but still permits read-only registry preflight and commands explicitly configured with `dry-run = true`.
+## Learn the vocabulary as you need it
 
-## Released, next, and planned capabilities
+You do not need to memorize every internal term before starting. The [glossary](/docs/concepts/glossary/) explains `PackageId`, ecosystem adapters, changesets, release channels, registries, and plans with their practical differences.
 
-<Availability status="released">
-  <strong>Released:</strong> the four built-in ecosystems, deterministic release and publish plans, config sync/migration, release channels, templates, typed pre-checks, GitHub Release integration, workflow outputs, and non-interactive init/commit paths.
-</Availability>
-
-<Availability status="next">
-  <strong>On <code>main</code>, for the next release:</strong> repository-local JavaScript ecosystem plugins, the Boa single-file ESM runtime, scoped read/fetch capabilities, the TypeScript plugin SDK, and MCP changeset CRUD.
-</Availability>
-
-<Availability status="planned">
-  <strong>Not implemented:</strong> the companion Vite plugin for producing a single-file ESM bundle and detecting unsupported runtime capabilities. Do not depend on a Semifold Vite package or command yet.
-</Availability>
-
-## Where to go next
-
-Follow [Make your first release](/docs/getting-started/first-release/) to turn this model into a complete, reviewable workflow. The tutorial uses only capabilities released in `0.3.0-rc.5`.
+Next, [install Semifold](/docs/getting-started/installation/) and follow [your first release](/docs/getting-started/first-release/).

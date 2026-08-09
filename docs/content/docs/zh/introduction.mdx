@@ -1,66 +1,79 @@
 ---
-title: 介绍
-description: 理解 Semifold 负责什么、计划如何生成，以及 ecosystem 特有行为从哪里开始和结束。
+title: Semifold 是什么？
+description: 理解 Semifold 解决的仓库问题，以及它怎样连接不同的软件包生态。
 ---
 
-Semifold 将**发布决策**与**发布副作用**分开：先计算应该发生什么，并把结果展示为 plan；只有执行明确的命令后，才会应用文件或网络变更。
+Semifold 用来管理一座仓库中来自多种软件生态的软件包版本和发布。
 
-这对混合 workspace 尤其重要。Cargo、npm、Python packaging 与 C++ 项目并不共享 manifest 格式或发布命令，但它们仍需要统一回答：“哪些 package 要发布、顺序是什么、原因是什么？”
+设想一座产品仓库：底层是 Rust 核心库，上层有 Node.js 绑定和 Python 客户端，同时还包含一个 C++ 组件。每种生态本来就有成熟的清单格式和发布工具，真正困难的是它们之间的工作：
 
-## 工作流中的五个对象
+- 一项改动完成后，判断哪些软件包应该产生新版本；
+- 底层依赖升级时，一起修改其他语言软件包中的内部依赖要求；
+- 为整座仓库维护一套可以读懂的变更日志；
+- 按照跨语言依赖关系安排发布顺序；
+- 某个软件包仓库成功、另一个失败时，判断怎样恢复。
 
-### PackageId
+Semifold 补上的是这层整座仓库范围的版本与发布管理。它不会替代 Cargo、npm、Python 打包工具、CMake 或软件包仓库。
 
-PackageId 是 `.changes/config.toml` 与 changeset 使用的稳定 key。Ecosystem adapter 会发现 package 的 manifest name、version、dependency 与候选修改，但 Semifold 不会悄悄用 registry name 替换你配置的身份。
+## 一张工作区依赖图
 
-### Ecosystem adapter
+每个受管理的软件包都会成为工作区依赖图中的一个节点。节点包含：
 
-Adapter 负责 ecosystem 特有的 discovery、inspection 与 edit planning。内置 adapter 覆盖 Rust、Node.js、Python 与 C++。发布凭据、Forge 操作和发布编排仍位于 adapter 边界之外。
+- 配置和变更集使用的稳定软件包 ID（`PackageId`）；
+- 对应软件生态使用的清单名称或软件包仓库名称；
+- 当前版本、路径，以及是否需要发布；
+- 清单依赖和可选的显式关系；
+- 负责读取和修改该清单的生态适配器。
 
-### Changeset
+正是这张统一后的图，让 Rust 软件包的变化可以影响 Node.js 或 Python 软件包，同时不需要假装它们的清单格式完全相同。
 
-Changeset 是 `.changes/` 下的一份小型 Markdown 文件。Front matter 把 PackageId 映射到 bump level 和可选 changelog tag，正文则解释面向用户的变化。
+### 内置与自定义软件生态
+
+Semifold 内置 Rust、Node.js、Python 和 C++ 生态适配器。每个适配器理解实现与测试样例已经覆盖的软件包和工作区格式。
+
+<Availability status="next">
+  下一版本会加入仓库内 JavaScript 生态插件。插件实现相同的软件包发现、信息读取与修改规划边界，因此自定义软件包也能进入同一张工作区图，而不必躲在另一套发布脚本中。
+</Availability>
+
+## 使用 Semifold 时实际要做的事
+
+### 1. 描述整座仓库
+
+`smif init` 发现软件包并创建 `.changes/config.toml`。这个文件为每个软件包分配稳定 ID，并保存清单文件无法表达的发布策略。
+
+仓库结构变化后，`smif config sync` 会比较当前发现结果与已保存配置。它更新自动发现的事实，但不会悄悄覆盖维护者有意制定的策略。
+
+### 2. 记录一项用户可见的变化
+
+变更集（changeset）是一份小型 Markdown 文件，其中写明受影响的软件包 ID、期望的版本提升、变更日志分类和摘要。它会与代码改动一起接受审查，并且早于真正的版本变化。
 
 ```md
 ---
-my-package: "minor:feat"
+native-core: "minor:feat"
+web-bindings: "patch:fix"
 ---
 
-Add the public API.
+在 Web 绑定中开放新的解析器。
 ```
 
-`feat` 选择 changelog section，并不表示“发布到 feature channel”。Stable 或 named channel 是单独配置的 package 发布状态。
+### 3. 联动修改所有受影响的版本
 
-### Release plan
+`smif status` 展示直接变更，以及依赖规则额外影响的软件包。`smif version` 随后通过各清单所属的生态适配器，修改软件包版本、内部依赖要求和变更日志，并消费已经应用的变更集。
 
-`smif status` 把 changeset、当前 package version、依赖约束、显式关系与 release-channel 状态合并为不可变 plan。每个计划中的 bump 都带有原因，reviewer 可以区分直接 changeset 与依赖传播产生的发布。
+发布计划（release plan）的价值在于让这项决定可以审查；Semifold 真正提供的产品能力，是计划所描述的一致跨生态版本修改。
 
-`smif version` 使用同一条规划路径。如果你检查 status 后 workspace 输入又发生变化，请重新运行 status，不要假定旧 plan 仍然有效。
+### 4. 按照各生态自己的规则发布
 
-### Publish plan
+`smif publish` 根据依赖关系排列软件包，检查目标版本是否已经存在，再为每种软件生态运行已配置的发布命令。GitHub Release 和附件可以单独启用。
 
-Publish 从 version 完成后已经存在的版本与 changelog 出发。Plan 校验 pre-check 和命令，按 workspace graph 排序 package，并分别记录 registry 与 Forge 结果。因此，部分失败会明确给出 succeeded、failed 与 not-started 事实，而不是只有一个含糊的错误。
+最终报告会区分成功、跳过、失败和尚未开始的软件包。维护者可以修复凭据或软件包仓库配置后恢复，而不必猜测哪些版本已经对外发布。
 
-## Semifold 会修改什么
+## Semifold 有意不接管的工作
 
-Version 阶段可能修改 package version、内部依赖约束、changelog、由 post-version 命令维护的 lockfile，以及待处理 changeset。所有文件修改都会先完成规划与校验，再写入磁盘。
+Semifold 不负责构建或测试软件包，不托管软件包仓库，不从提交消息猜测产品策略，也不会把凭据交给生态插件。构建和测试仍由仓库现有工具或明确的钩子负责；软件包仓库凭据仍留在执行环境中。
 
-Publish 阶段可能运行配置的 registry 命令；在 CI 中明确要求时，还可以创建 GitHub Release 并上传声明的 asset。`--dry-run` 会跳过有副作用的发布操作，但仍允许只读 registry preflight，以及显式配置 `dry-run = true` 的命令。
+## 在需要时学习术语
 
-## 已发布、下一版本与计划中能力
+开始使用前不需要背诵所有内部概念。[术语表](/zh/docs/concepts/glossary/)用实际区别解释了软件包 ID、生态适配器、变更集、发布通道、软件包仓库和各种计划。
 
-<Availability status="released">
-  <strong>已发布：</strong>四种内置 ecosystem、确定性 release/publish plan、config sync/migration、release channel、模板、强类型 pre-check、GitHub Release、workflow output，以及非交互 init/commit 路径。
-</Availability>
-
-<Availability status="next">
-  <strong>已经合入 <code>main</code>、等待下一版本：</strong>仓库内 JavaScript ecosystem plugin、Boa 单文件 ESM runtime、受限 read/fetch capability、TypeScript plugin SDK，以及 MCP changeset CRUD。
-</Availability>
-
-<Availability status="planned">
-  <strong>尚未实现：</strong>生成单文件 ESM bundle 并检查不受支持 runtime capability 的配套 Vite plugin。现在不要依赖不存在的 Semifold Vite package 或命令。
-</Availability>
-
-## 下一步
-
-按照[完成第一次发布](/zh/docs/getting-started/first-release/)把这套模型转化为一条完整、可审查的工作流。教程只使用 `0.3.0-rc.5` 已发布的能力。
+下一步可以[安装 Semifold](/zh/docs/getting-started/installation/)，然后跟随[第一次发布教程](/zh/docs/getting-started/first-release/)。

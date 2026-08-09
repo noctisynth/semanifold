@@ -1,49 +1,51 @@
 ---
 title: 文档
-description: 先理解 Semifold 的发布模型，再完成第一个确定性的 release plan。
+description: 学习怎样用 Semifold 统一管理跨语言单仓库中的软件包版本、依赖、变更日志和发布。
 ---
 
+Semifold 是面向跨语言单仓库的版本与发布工具。它连接使用不同清单文件和软件包仓库的软件包，再以整座仓库为范围管理变更集、相关版本修改、变更日志和按依赖发布。
+
 <Availability status="released">
-  <strong>已发布基线：Semifold 0.3.0-rc.5。</strong>本文档中的默认路径只描述该版本已经提供的能力；仅存在于 `main` 的功能会单独标注。
+  <strong>当前已发布基线：Semifold 0.3.0-rc.5。</strong>已经在 `main` 实现但尚未发布的功能（包括生态插件）会明确标记为“下一版本”。
 </Availability>
 
-Semifold 面向同时包含 Rust、Node.js、Python、C++ 或多种 ecosystem 的仓库。它负责发现 package、计算 changeset，并让每个命令对待发布工作形成确定且一致的理解。
-
-## 发布模型
-
-```text
-代码变更
-  -> changeset
-  -> 不可变 release plan（`smif status`）
-  -> 版本修改与 release pull request
-  -> 按依赖排序的 publish plan
-  -> registry / Forge 报告
-```
-
-Changeset 记录的是**发布意图**：哪些 PackageId 发生了变化、版本应该如何提升，以及 changelog 应包含什么。`smif status` 会把全部待处理意图和依赖规则转换成 release plan，让你在修改任何版本文件之前完成检查。
-
-`smif version` 应用同一个 release plan。之后，`smif publish` 根据 workspace 中已经写入的版本和 changelog，生成一个独立、按依赖排序的 publish plan。
-
-## 选择你的路径
+## 选择你现在要完成的事情
 
 <Cards>
+  <Card title="安装 Semifold" href="/zh/docs/getting-started/installation/">
+    通过安装脚本、Cargo、npm 或 PyPI 安装已经发布的命令行工具。
+  </Card>
   <Card title="完成第一次发布" href="/zh/docs/getting-started/first-release/">
-    初始化一个 Rust 仓库、创建 changeset、检查计划，并安全地运行 version 与 publish。
+    初始化仓库、创建变更集、检查受影响的软件包，再执行版本修改和发布。
   </Card>
   <Card title="理解 Semifold" href="/zh/docs/introduction/">
-    理解 PackageId、ecosystem discovery、changeset、release plan 与 publish plan 的边界。
+    理解清单文件、稳定软件包 ID、依赖、变更集和发布命令怎样连接起来。
   </Card>
-  <Card title="查询命令" href="/zh/docs/reference/cli/">
-    快速查看当前公开的 CLI 命令与所有命令共享的选项。
+  <Card title="配置仓库" href="/zh/docs/configuration/overview/">
+    学习 `.changes/config.toml` 的结构和日常维护方式。
+  </Card>
+  <Card title="扩展软件生态" href="/zh/docs/plugins/overview/">
+    使用下一版本的 JavaScript 插件运行时与 TypeScript SDK 接入自定义软件包格式。
+  </Card>
+  <Card title="查询术语" href="/zh/docs/concepts/glossary/">
+    区分软件包、PackageId、软件生态、变更集、发布通道、软件包仓库和各种计划。
   </Card>
 </Cards>
 
-## 最先需要掌握的五件事
+## 整座仓库的版本与发布生命周期
 
-1. **PackageId** 是 Semifold 配置中的稳定标识，可能与发布到 registry 的名称不同。
-2. Changeset tag 只负责 changelog 分类，不负责选择 release channel。
-3. 只要输入没有变化，`status` 预览的计划就是 `version` 将要应用的计划。
-4. Manifest 内部依赖和显式 `depends-on` 具有不同的传播规则。
-5. Publish 按依赖顺序执行，并分别报告 succeeded、skipped、failed 与 not-started package。
+```text
+来自不同软件生态的软件包
+  -> 一张包含依赖关系的工作区图
+  -> 记录用户可见变化的变更集
+  -> 联动修改相关版本与变更日志
+  -> 按每种生态自己的规则依次发布
+```
 
-第一次运行前，不需要配置所有 resolver、模板、pre-check 或 release channel。先从一个 ecosystem 和一个 changeset 开始，再有意识地扩展 workspace。
+每个软件包的生态适配器负责理解自己的清单文件。Semifold 则负责适配器之间的关系：稳定的软件包身份、跨生态依赖传播、变更意图、发布通道、变更日志、发布顺序和失败恢复报告。
+
+## 推荐阅读顺序
+
+如果你刚接触 Semifold，请先读[介绍](/zh/docs/introduction/)，不要从完整配置参考开始。然后找一座小仓库完成[第一次发布教程](/zh/docs/getting-started/first-release/)。遇到陌生概念时，随时查看[术语表](/zh/docs/concepts/glossary/)。
+
+[CLI 参考](/zh/docs/reference/cli/)适合查找命令，不适合作为理解工作流的起点。

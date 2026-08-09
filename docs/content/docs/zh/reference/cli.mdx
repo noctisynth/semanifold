@@ -6,7 +6,7 @@ description: Semifold 0.3.0-rc.5 的公开命令面与全局执行选项。
 安装后的 binary 名称为 `smif`，`semifold` 是等价的完整名称。运行 `smif <command> --help` 可以查看某个命令接受的全部选项。
 
 <Availability status="released">
-  本参考样例已经对照 **Semifold 0.3.0-rc.5** 的公开命令面检查。
+  本参考样例已经对照 <strong>Semifold 0.3.0-rc.5</strong> 的公开命令面检查。
 </Availability>
 
 ## 语法
@@ -19,27 +19,35 @@ smif [OPTIONS] [COMMAND]
 
 | 命令 | 用途 | 默认产生副作用 |
 | --- | --- | --- |
-| `commit`（`add`） | 根据选中的 package、bump level、tag 与 summary paragraph 创建一份 changeset。 | 是 |
-| `init` | 发现 package 并初始化 `.changes/config.toml`；可以同时生成 GitHub Actions workflow。 | 是 |
-| `config` | 迁移配置，或把当前发现的 package 同步到已有配置。 | 取决于 subcommand |
-| `status` | 计算并展示待处理 release plan。 | 否 |
-| `version` | 计算、准备并应用 package version、dependency、changelog 与 changeset 修改。 | 是 |
-| `publish` | 生成并执行按依赖排序的 publish plan。 | 是 |
-| `ci` | 运行 Semifold 的 version 或 publish CI 编排。 | 是 |
-| `mcp` | 启动 Model Context Protocol server。 | 取决于 tool |
+| `commit`（`add`） | 根据选中的软件包、版本提升级别、分类标签与摘要创建一份变更集。 | 是 |
+| `init` | 发现软件包并初始化 `.changes/config.toml`；可以同时生成 GitHub Actions 工作流。 | 是 |
+| `config` | 迁移配置，或把当前发现的软件包同步到已有配置。 | 取决于子命令 |
+| `status` | 计算并展示待处理的发布计划。 | 否 |
+| `version` | 计算、准备并应用软件包版本、依赖要求、变更日志与变更集修改。 | 是 |
+| `publish` | 生成并执行按依赖排序的发布执行计划。 | 是 |
+| `ci` | 在持续集成中编排版本修改或发布。 | 是 |
+| `mcp` | 启动模型上下文协议（MCP）服务器。 | 取决于工具 |
 
 ## 全局选项
 
 | 选项 | 含义 |
 | --- | --- |
-| `--dry-run` | 启用预览执行。Semifold 的文件、registry 与 Forge 修改会被跳过；只读 registry preflight，以及配置 `dry-run = true` 的命令仍可能运行。 |
+| `--dry-run` | 启用预演。Semifold 会跳过文件、软件包仓库和代码托管平台修改；只读的版本存在性检查，以及配置 `dry-run = true` 的命令仍可能运行。 |
 | `--debug` | 显示额外诊断信息。敏感配置值不属于公开 debug 输出契约。 |
 | `-h`、`--help` | 输出当前命令层级的帮助。 |
-| `-V`、`--version` | 输出 Semifold binary version。 |
+| `-V`、`--version` | 输出 Semifold 可执行文件版本。 |
 
-## 常用非交互调用
+## 常用命令
 
-### 初始化一种 ecosystem
+### 初始化一种软件生态
+
+本地使用时直接运行交互式初始化：
+
+```bash
+smif init
+```
+
+持续集成或输入受限环境可以显式提供相同答案：
 
 ```bash
 smif init --resolvers rust \
@@ -51,7 +59,15 @@ smif init --resolvers rust \
 
 如果明确选择对应的空行为，使用 `--no-resolvers`、`--no-default-tags` 或 `--no-github-actions`。已经初始化的 workspace 新增或删除 package 时，应使用 `config sync`。
 
-### 创建 changeset
+### 创建变更集
+
+本地使用时由交互提示选择软件包、版本提升级别、分类与摘要：
+
+```bash
+smif commit
+```
+
+自动化环境可以写成：
 
 ```bash
 smif commit \
@@ -61,9 +77,9 @@ smif commit \
   --summary "Add the public API."
 ```
 
-`--package PACKAGE=LEVEL` 与 `--summary` 都可以重复传入。Package 没有内联 `=LEVEL` 时，由 `--level` 提供默认值。完整非交互命令需要在 `--tag TAG` 与 `--no-tag` 中明确选择一个。
+`--package PACKAGE=LEVEL` 与 `--summary` 都可以重复传入。软件包没有内联 `=LEVEL` 时，由 `--level` 提供默认值。完整的自动化命令需要在 `--tag TAG` 与 `--no-tag` 中明确选择一个。
 
-### 检查并执行 version
+### 检查并执行版本修改
 
 ```bash
 smif status
@@ -71,7 +87,7 @@ smif version --dry-run
 smif version
 ```
 
-Worktree 不干净时，`version` 默认拒绝执行；只有显式传入 `--allow-dirty` 才会继续。该选项表示接受当前 diff 作为输入，并不是处理无关修改的通用手段。
+Git 工作区不干净时，`version` 默认拒绝执行；只有显式传入 `--allow-dirty` 才会继续。该选项表示接受当前差异作为输入，并不是处理无关修改的通用手段。
 
 ### 预览并发布
 
@@ -80,10 +96,10 @@ smif publish --dry-run
 smif publish
 ```
 
-`publish --allow-dirty` 允许从不干净的 worktree 发布。`publish --github-release` 按配置创建每个 package 的 GitHub Release，并且只能在 CI 环境使用。
+`publish --allow-dirty` 允许从不干净的工作区发布。`publish --github-release` 按配置创建每个软件包的 GitHub Release，并且只能在持续集成环境使用。
 
-## Exit 与输出行为
+## 退出状态与输出行为
 
-人类可读输出会适配 TTY、CI、Unicode 与 `NO_COLOR`。非 TTY 输出保持稳定，不包含光标控制序列。Publish 失败会返回非零 exit status，同时保留包含 succeeded、skipped、failed 与 not-started package 的结构化报告。
+面向人的输出会适配交互终端、持续集成、Unicode 与 `NO_COLOR`。非交互终端输出保持稳定，不包含光标控制序列。发布失败会返回非零退出状态，同时保留区分成功、跳过、失败和尚未开始软件包的结构化报告。
 
-GitHub Actions workflow 可以选择接收 `version` 与 `publish` 的版本化结构化 output。这些 output 直接从命令使用的 release context、publish plan 与 publish report 派生，而不是事后重新推断。
+GitHub Actions 工作流可以选择接收 `version` 与 `publish` 的带版本结构化输出。这些输出直接从命令实际使用的版本与发布事实派生，不会在执行后重新猜测。

@@ -1230,6 +1230,15 @@ inspect、plan-edits、不可变 workspace/version 快照、候选 file edit 和
 schema version。plugin version 与 protocol schema 独立演进。协议 DTO 位于 adapter 边界，不能把
 脚本 runtime 类型泄漏到 `semifold-core` 或 engine application service。
 
+通过 digest 和 metadata 校验的 loaded plugin 直接实现现有 `EcosystemAdapter`，不再增加第二套
+resolver 抽象。plugin 的文件和网络 capability 在注册时绑定规范化项目根；adapter 每次调用仍必须
+确认调用方项目根规范化后与绑定根完全一致，并只向脚本传递 `project-root = "."`，避免插件把宿主
+绝对路径当作稳定输入。workspace package、dependency、released package 与候选 edit 在进入协议或
+返回领域层前统一按稳定键排序；首版插件版本模型限定为 SemVer，因此 `encode_version()` 使用严格
+SemVer 的规范文本。插件操作失败时，`AdapterError` 必须保留完整结构化诊断；成功输出仍需经过生态
+归属、PackageId 唯一性、规范相对路径、符号链接边界、edit source 引用、重复目标和当前文件 SHA-256
+校验，hash 计算必须流式执行，不能按不可信候选文件大小分配等量内存。
+
 ## 8. Crate 和模块边界
 
 建议使用四层结构，避免过度拆分：

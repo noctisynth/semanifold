@@ -74,6 +74,8 @@ pub trait EcosystemAdapter: Send + Sync {
 pub enum AdapterError {
     #[error(transparent)]
     Manifest(#[from] ResolveError),
+    #[error(transparent)]
+    Plugin(#[from] crate::plugin::adapter::PluginAdapterError),
     #[error("invalid adapter input: {reason}")]
     InvalidInput { reason: String },
     #[error(

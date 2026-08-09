@@ -482,7 +482,7 @@
   - [x] 注入受项目边界与预算约束的文件 capability
   - [x] 以稳定 ecosystem ID、仓库内相对路径和 SHA-256 内容锁加载插件注册表
   - [x] 注入默认拒绝、按 HTTPS origin 授权且可替换 backend 的 `fetch` capability
-- [ ] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
+- [x] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
 - [ ] 禁止插件直接写文件、运行发布命令、取得 registry/Forge 宿主凭据或创建 Forge release
 - [ ] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
 - [ ] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID

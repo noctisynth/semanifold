@@ -20,7 +20,9 @@ pub use config_sync::{
 };
 pub use dependency::{Dependency, DependencyKind, DependencySource};
 pub use error::DomainError;
-pub use file_edit::{EditSource, FileEdit, FileEditExpectation, FileHash, SharedVersionEdit};
+pub use file_edit::{
+    EditSource, FileEdit, FileEditExpectation, FileHash, FileHashError, SharedVersionEdit,
+};
 pub use package::{
     Ecosystem, EcosystemId, EcosystemIdError, PackageId, PackageSnapshot, VersionSource,
     VersionSourceId,

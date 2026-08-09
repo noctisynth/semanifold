@@ -21,10 +21,30 @@ impl FileHash {
         Self(format!("{:x}", Sha256::digest(bytes)))
     }
 
+    /// Restores a canonical SHA-256 value received across a serialized boundary.
+    pub fn from_sha256(value: impl Into<String>) -> Result<Self, FileHashError> {
+        let value = value.into();
+        if value.len() == 64
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            Ok(Self(value))
+        } else {
+            Err(FileHashError::InvalidSha256 { value })
+        }
+    }
+
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum FileHashError {
+    #[error("file SHA-256 must contain exactly 64 lowercase hexadecimal characters: {value}")]
+    InvalidSha256 { value: String },
 }
 
 /// Domain operation that produced a planned file edit.
@@ -69,7 +89,7 @@ pub struct FileEdit {
 
 #[cfg(test)]
 mod tests {
-    use super::FileHash;
+    use super::{FileHash, FileHashError};
 
     #[test]
     fn hashes_source_bytes_with_sha256() {
@@ -77,5 +97,20 @@ mod tests {
             FileHash::from_bytes(b"semifold").as_str(),
             "acfa94237c0f2abcae06590ebe6bb12455e24f07a9608a2418d618b540aee4e0"
         );
+    }
+
+    #[test]
+    fn restores_only_canonical_sha256_values() {
+        let value = "acfa94237c0f2abcae06590ebe6bb12455e24f07a9608a2418d618b540aee4e0";
+
+        assert_eq!(FileHash::from_sha256(value).unwrap().as_str(), value);
+        assert!(matches!(
+            FileHash::from_sha256(value.to_uppercase()),
+            Err(FileHashError::InvalidSha256 { .. })
+        ));
+        assert!(matches!(
+            FileHash::from_sha256("short"),
+            Err(FileHashError::InvalidSha256 { .. })
+        ));
     }
 }

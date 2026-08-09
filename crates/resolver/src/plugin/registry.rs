@@ -80,6 +80,7 @@ impl PluginDefinition {
 /// A digest-verified plugin bound to its project-scoped host capabilities.
 #[derive(Clone)]
 pub struct LoadedPlugin {
+    project_root: Utf8PathBuf,
     definition: PluginDefinition,
     metadata: PluginMetadataV1,
     source: Arc<str>,
@@ -97,6 +98,11 @@ impl std::fmt::Debug for LoadedPlugin {
 }
 
 impl LoadedPlugin {
+    #[must_use]
+    pub fn project_root(&self) -> &Utf8Path {
+        &self.project_root
+    }
+
     #[must_use]
     pub const fn definition(&self) -> &PluginDefinition {
         &self.definition
@@ -215,6 +221,7 @@ impl PluginRegistry {
                     .with_shared_http_client(Arc::new(DenyPluginHttpClient))
             };
             let plugin = LoadedPlugin {
+                project_root: project_root.clone(),
                 definition,
                 metadata,
                 source: Arc::from(source),

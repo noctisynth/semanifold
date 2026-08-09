@@ -1206,8 +1206,9 @@ JavaScript 与 declaration files；其源码和类型 fixture 的 TypeScript 编
 JavaScript runtime 依赖。package 的 `prepack` 必须从受版本控制的源码重建 `dist`，发布工作流必须先安装
 锁定的 SDK 开发依赖，再由现有 Node.js resolver 在 package 目录执行带 provenance 的公开 npm publish；
 不能依赖开发者提交生成目录或在 release job 中临时变更 lockfile。npm package 必须声明与当前 GitHub
-仓库一致的 repository metadata；release job 使用满足 npm trusted publishing 要求的 Node 24 与固定 npm 11
-CLI，在 GitHub-hosted runner 上以既有 `id-token: write` 权限仅使用 OIDC。SDK 首版先由 maintainer 在本地
+仓库一致的 repository metadata；release job 通过 `actions/setup-node` 配置 Node 24 和 npm registry，并直接
+使用该 Node 版本自带且满足 trusted publishing 最低版本要求的 npm CLI，不再单独安装或固定 npm。在
+GitHub-hosted runner 上以既有 `id-token: write` 权限仅使用 OIDC。SDK 首版先由 maintainer 在本地
 应用 version、以本机 npm 身份运行默认不创建 Forge release 的 `smif publish`，再将 version 提交合入 base
 branch；对应 CD 通过 registry preflight 跳过已经发布的 npm 版本，只补建 GitHub Release。首发后再为
 package 配置 trusted publisher，当前仓库的 workflow 不为 bootstrap 注入任何 npm token。

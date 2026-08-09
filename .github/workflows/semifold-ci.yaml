@@ -107,8 +107,6 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Setup npm trusted publishing CLI
-        run: npm install --global npm@11.18.0
       - name: Install SDK dependencies
         run: pnpm install --frozen-lockfile --filter @semifold/plugin-sdk
       - name: Download build artifacts

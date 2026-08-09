@@ -6,10 +6,10 @@ description: 启动通过标准输入输出提供、具有版本修订保护的�
 `smif mcp` 在标准输入输出上启动 JSON-RPC MCP 服务器。它用于已经配置的 MCP 客户端，不是交互式终端命令。
 
 ```bash
-smif mcp --project-root /path/to/repository
+smif mcp
 ```
 
-`-C`、`--project-root` 和可见别名 `--cd` 用来选择仓库。没有指定时，Semifold 从当前目录查找项目。项目采用延迟加载，因此一次无效工具请求不会终止服务器。
+默认情况下，Semifold 从当前目录查找项目。如果 MCP 客户端不是从仓库目录启动服务器，可以使用 `--project-root /path/to/repository` 明确指定仓库根目录。项目采用延迟加载，因此一次无效工具请求不会终止服务器。
 
 ## 已发布工具
 

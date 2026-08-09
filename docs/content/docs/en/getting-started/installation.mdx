@@ -5,9 +5,7 @@ description: Install the latest published Semifold CLI and verify that the smif 
 
 The published command is available as both `smif` and `semifold`. This documentation uses the shorter `smif` form.
 
-<Availability status="released">
-  The latest published Semifold release is <strong>0.3.0-rc.6</strong>. It includes the ecosystem plugin runtime and the first release of the TypeScript plugin SDK.
-</Availability>
+Unless you need to reproduce an older environment, install the latest release. Each default command below resolves the current `latest` version.
 
 ## Recommended: installation script
 
@@ -32,14 +30,14 @@ The script installs to `%USERPROFILE%\.local\bin` by default. Add that directory
   </Tab>
 </Tabs>
 
-To select a version or installation directory, pass arguments to the downloaded script:
+To change the installation directory, pass an argument to the downloaded script:
 
 <Tabs items={['macOS / Linux', 'Windows PowerShell']}>
   <Tab>
 
 ```bash
 curl -L https://semifold.noctisynth.org/install/install.sh | \
-  sh -s -- 0.3.0-rc.6 --install-dir "$HOME/bin"
+  sh -s -- --install-dir "$HOME/bin"
 ```
 
   </Tab>
@@ -47,7 +45,7 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
 
 ```powershell
 & ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
-  0.3.0-rc.6 -InstallDir "$HOME\bin"
+  -InstallDir "$HOME\bin"
 ```
 
   </Tab>
@@ -61,21 +59,21 @@ Choose the registry already trusted in your environment:
   <Tab>
 
 ```bash
-cargo install semifold --version 0.3.0-rc.6
+cargo install semifold
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-npm install --global semifold@0.3.0-rc.6
+npm install --global semifold
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-pipx install semifold==0.3.0rc6
+pipx install semifold
 ```
 
   </Tab>
@@ -89,12 +87,6 @@ Open a new shell after changing `PATH`, then run:
 smif --version
 ```
 
-<ExpectedOutput title="Expected output">
-
-```text
-semifold 0.3.0-rc.6
-```
-
-</ExpectedOutput>
+If the command prints the installed Semifold version without an error, the installation is ready.
 
 You can now continue to [your first release](/docs/getting-started/first-release/) or read [what Semifold manages](/docs/introduction/) first.

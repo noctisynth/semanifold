@@ -5,10 +5,6 @@ description: 定义版本为 1 的 JavaScript 生态适配器，完成打包、�
 
 本指南展示一条完整的接入路径。示例软件包格式在每个软件包目录中保存 `manifest.json`，其中包含 `name`、`version` 和 `dependencies` 字段。
 
-<Availability status="released">
-  本指南面向已经发布的 `semifold 0.3.0-rc.6` 运行时和 `@semifold/plugin-sdk 0.1.0-rc.0`。
-</Availability>
-
 ## 1. 选择稳定的软件生态 ID
 
 使用自己控制的反向域名 ID，例如 `com.example.game`。`rust`、`nodejs` 等内置 ID 已被保留。
@@ -16,7 +12,7 @@ description: 定义版本为 1 的 JavaScript 生态适配器，完成打包、�
 创建源码目录，并安装带类型的 SDK：
 
 ```bash
-pnpm add --save-dev @semifold/plugin-sdk@0.1.0-rc.0
+pnpm add --save-dev @semifold/plugin-sdk
 ```
 
 ## 2. 导出元数据与入口函数

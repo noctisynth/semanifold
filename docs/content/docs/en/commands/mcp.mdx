@@ -6,10 +6,10 @@ description: Start the stdio MCP server that exposes safe, revision-aware change
 `smif mcp` starts a JSON-RPC MCP server on standard input and output. It is intended for a configured MCP client, not for an interactive terminal session.
 
 ```bash
-smif mcp --project-root /path/to/repository
+smif mcp
 ```
 
-`-C`, `--project-root`, and the visible `--cd` alias select the repository. Without one, Semifold locates the project from the current directory. Project loading is lazy so one invalid tool request does not terminate the server.
+By default, Semifold locates the project from the current directory. If the MCP client does not start the server from the repository, use `--project-root /path/to/repository` to select the repository root explicitly. Project loading is lazy so one invalid tool request does not terminate the server.
 
 ## Published tools
 

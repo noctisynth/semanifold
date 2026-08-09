@@ -5,10 +5,6 @@ description: Define a schema-v1 JavaScript adapter, bundle it, register its capa
 
 This guide shows the complete integration path. The example package format stores one `manifest.json` per package with `name`, `version`, and `dependencies` fields.
 
-<Availability status="released">
-  This guide targets the published `semifold 0.3.0-rc.6` runtime and `@semifold/plugin-sdk 0.1.0-rc.0`.
-</Availability>
-
 ## 1. Choose a stable ecosystem ID
 
 Use a reverse-domain ID that you control, for example `com.example.game`. Built-in IDs such as `rust` and `nodejs` are reserved.
@@ -16,7 +12,7 @@ Use a reverse-domain ID that you control, for example `com.example.game`. Built-
 Create a source directory and install the typed SDK:
 
 ```bash
-pnpm add --save-dev @semifold/plugin-sdk@0.1.0-rc.0
+pnpm add --save-dev @semifold/plugin-sdk
 ```
 
 ## 2. Export metadata and an entrypoint

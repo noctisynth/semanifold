@@ -4,5 +4,6 @@ pub mod adapter;
 pub mod changeset;
 pub mod config;
 pub mod error;
+pub mod plugin;
 pub mod resolver;
 pub mod utils;

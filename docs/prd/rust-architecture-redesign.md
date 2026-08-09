@@ -1168,8 +1168,31 @@ resolver 职责。
 
 插件输入必须是不可变快照，输出必须可序列化和确定性排序。同一输入重复执行应产生相同结果；
 host 不信任插件返回的路径、文件内容或依赖关系，所有结果都必须经过与内置 adapter 相同的验证。
-运行时选择（JavaScript、Lua、二者或其他沙箱形式）、插件分发与锁定方式、权限模型、超时/资源
-限制、脚本 API 的兼容策略，以及首版是否只支持 SemVer，均在实现前单独决策。
+
+首版插件运行时只支持 JavaScript，并通过嵌入式 QuickJS 执行单文件 ECMAScript module；不同时支持
+Lua，也不内置 TypeScript 转译。host 不安装通用 module loader，插件不能 import 其他文件或原生
+module。运行时使用最小 intrinsic 集合，不提供文件系统、网络、环境变量、子进程、时钟、随机数或
+动态 module API。插件只能调用 host 显式注入的 `listFiles` 与 `readText` 只读 capability；每次调用
+都要经过项目根目录、声明的 glob、符号链接、文件数量和字节预算校验，返回路径按字典序排序。
+
+首版限制固定而非可配置：插件源文件最大 1 MiB，单次 operation 最长 5 秒，QuickJS heap 最大
+64 MiB、stack 最大 512 KiB；单个读取文件最大 4 MiB、一次 operation 累计读取最大 32 MiB，最多
+返回 10,000 个路径。超时通过 QuickJS interrupt handler 中断，内存或栈超限、capability 越界与
+读取预算耗尽都转换为结构化插件诊断。host 不复用已超时、超限或抛出未捕获异常的 runtime。
+
+首版只加载仓库内、相对项目根目录的单文件 `.js` 插件，不支持 URL、registry 或运行时下载。配置
+以稳定 `EcosystemId` 注册插件路径，并强制固定脚本内容的 SHA-256；加载前必须校验 digest，注册表
+按 `EcosystemId` 排序并拒绝重复 ID 或覆盖 `rust`、`node`、`python`、`cpp` 四个内置 ID。
+`EcosystemId` 使用小写 ASCII 点分段，每段以字母开头、以字母或数字结尾，中间允许数字与连字符；
+最长 128 字节。插件元数据包含 SemVer plugin version，
+但可执行内容以 digest 为最终锁定事实。首版 package version model 仅支持 SemVer，与现有
+`VersionMap` 和 release planner 保持一致。
+
+host 与插件只交换 UTF-8 JSON。首版协议 schema version 为整数 `1`，覆盖 metadata、discover、
+inspect、plan-edits、不可变 workspace/version 快照、候选 file edit 和结构化诊断。host 只接受
+自己支持的 schema version；同一 schema 可以增加可选字段，删除字段、改变字段语义或类型必须提升
+schema version。plugin version 与 protocol schema 独立演进。协议 DTO 位于 adapter 边界，不能把
+脚本 runtime 类型泄漏到 `semifold-core` 或 engine application service。
 
 ## 8. Crate 和模块边界
 
@@ -2372,8 +2395,9 @@ adapter 暴露旧 `ResolvedPackage`。
     若允许默认 HTTP，则只对旧 `url` 结构兼容，command pre-check 仍必须显式声明 `type`。
 12. GitHub Actions workflow output 的 key、版本化 JSON schema、启用方式、dry-run/失败路径语义
     和写入失败优先级。
-13. ecosystem 插件首版选择 JavaScript、Lua 或同时支持二者；同时确定运行时沙箱、capability、
-    资源限制、插件分发/锁定、ABI 兼容周期，以及版本模型是否限定为 SemVer。
+13. [已决定] ecosystem 插件首版只支持嵌入式 QuickJS 执行的单文件 JavaScript ESM；使用无 ambient
+    I/O 的最小运行时、显式只读文件 capability 和固定资源限制。插件只从仓库内路径加载并以
+    SHA-256 锁定，协议使用独立 schema version，首版 package version model 仅支持 SemVer。
 
 ### 19.1 低优先级优化：首次发布状态
 

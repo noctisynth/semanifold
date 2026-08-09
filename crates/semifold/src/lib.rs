@@ -41,6 +41,12 @@ pub fn run() -> anyhow::Result<()> {
         cli::init::run(init, &location)?;
         return Ok(());
     }
+    if let Some(Commands::Config(config)) = &cli.command
+        && let Some(result) = cli::config::run_before_project_load(config, &location, cli.dry_run)
+    {
+        result?;
+        return Ok(());
+    }
     let project = location
         .load()
         .map_err(|error| anyhow::anyhow!(t!("cli.project_load_failed", error = error)))?;

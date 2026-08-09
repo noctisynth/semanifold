@@ -97,6 +97,8 @@
 - [x] 新增 `smif config channel set <channel> --package <PackageId>` 与 `--all`
 - [x] 新增 `smif config channel clear --package <PackageId>` 与 `--all`
 - [x] 支持 `smif config channel ... --check`
+- [x] `config channel set` 在 Node.js package 的 `npm publish` 缺少显式 `--tag` 时提示目标 package 与 channel，不自动改写命令
+- [x] `config migrate` 在严格 `Project` 加载前直接从原始 TOML 规划、验证并原子应用迁移
 - [x] 新增 `smif config sync`
 - [x] 新增 `smif config sync --check`
 - [x] 新增 `smif config sync --prune`
@@ -550,5 +552,5 @@
 - [x] 将 publish pre-check 改为带 `type` 的 `http` / `command` 强类型配置
 - [x] HTTP pre-check 仅将 200 视为存在、404 视为不存在，其他状态均失败
 - [x] command pre-check 实现固定 JSON Lines stdin/stdout 契约，并在 dry-run 中照常执行
-- [ ] 决定旧 HTTP pre-check 缺少 `type` 时是否默认按 HTTP 解析；若继续严格解析，则将
-  `config migrate` 调整到严格 `Project` 加载之前执行
+- [x] 旧 HTTP pre-check 缺少 `type` 时继续严格解析，并由严格 `Project` 加载前执行的
+  `config migrate` 补充 `type = "http"`

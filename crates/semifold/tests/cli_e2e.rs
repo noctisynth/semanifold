@@ -772,6 +772,78 @@ fn config_migrate_and_channel_check_preserve_expected_file_state() {
 }
 
 #[test]
+fn config_migrate_repairs_legacy_pre_check_before_strict_project_loading() {
+    let root = temporary_project(
+        "config-bootstrap",
+        r#"[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[packages.app]
+path = "."
+resolver = "rust"
+
+[resolver.rust.pre-check]
+url = ""
+"#,
+    );
+    let config_path = root.join(".changes/config.toml");
+    let original = fs::read_to_string(&config_path).unwrap();
+
+    let check = run_smif(&root, &["config", "migrate", "--check"]);
+
+    assert!(!check.status.success(), "{check:?}");
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+
+    let migrate = run_smif(&root, &["config", "migrate"]);
+
+    assert!(migrate.status.success(), "{migrate:?}");
+    let migrated = fs::read_to_string(&config_path).unwrap();
+    assert!(migrated.contains("type = \"http\""), "{migrated}");
+    let status = run_smif(&root, &["status"]);
+    assert!(status.status.success(), "{status:?}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn channel_set_warns_when_node_npm_publish_has_no_dist_tag() {
+    let root = temporary_project(
+        "channel-npm-tag",
+        r#"[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[packages.app]
+path = "."
+resolver = "nodejs"
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish"]
+"#,
+    );
+
+    let set = run_smif(
+        &root,
+        &["config", "channel", "set", "alpha", "--package", "app"],
+    );
+
+    assert!(set.status.success(), "{set:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&set.stdout),
+        String::from_utf8_lossy(&set.stderr)
+    );
+    assert!(output.contains("app"), "{output}");
+    assert!(output.contains("--tag alpha"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn channel_preserve_is_consumed_only_after_successful_version() {
     let root = temporary_project("channel-preserve", &config(""));
     let config_path = root.join(".changes/config.toml");

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use semifold_resolver::{config, error::ResolveError};
 use thiserror::Error;
 
@@ -17,9 +17,7 @@ pub struct Project {
 
 impl Project {
     pub fn load(location: ProjectLocation) -> Result<Self, ProjectLoadError> {
-        let config_path = location
-            .existing_config
-            .ok_or(ProjectLoadError::ConfigNotFound)?;
+        let config_path = location.config_path()?.to_path_buf();
         let changeset_dir = config_path
             .parent()
             .map(Utf8PathBuf::from)
@@ -88,14 +86,22 @@ impl ProjectLocation {
     }
 
     pub fn load(self) -> Result<Project, ProjectLoadError> {
-        if self.existing_config.is_none()
-            && !CHANGESET_DIRECTORIES
-                .iter()
-                .any(|directory| self.root.join(directory).is_dir())
-        {
-            return Err(ProjectLoadError::ChangesetDirectoryNotFound);
-        }
+        self.config_path()?;
         Project::load(self)
+    }
+
+    pub fn config_path(&self) -> Result<&Utf8Path, ProjectLoadError> {
+        if let Some(config_path) = self.existing_config.as_deref() {
+            return Ok(config_path);
+        }
+        if CHANGESET_DIRECTORIES
+            .iter()
+            .any(|directory| self.root.join(directory).is_dir())
+        {
+            Err(ProjectLoadError::ConfigNotFound)
+        } else {
+            Err(ProjectLoadError::ChangesetDirectoryNotFound)
+        }
     }
 }
 

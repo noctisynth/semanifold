@@ -1715,6 +1715,11 @@ smif config migrate --check
 - `--check` 在存在可迁移条目时返回非零且不写文件；全局 `--dry-run` 只报告将要迁移的条目，退出成功；
 - 成功迁移后再次运行不得产生 diff。
 
+`config migrate` 是配置引导命令：CLI 只发现仓库、changeset 目录和配置文件路径，随后直接从原始
+TOML 生成迁移计划，并对迁移后的内容执行严格 `Config` 反序列化验证；不得在该命令之前通过
+`ProjectLocation::load()` 解析旧配置或执行 workspace discovery。除 `init`、`mcp` 及该迁移入口
+外，其余项目命令仍先严格加载完整 `Project`。迁移应用继续使用原子写回。
+
 该命令是格式迁移工具，不替代 `config sync`，也不自动将 stable package 显式改写为 `channel = "stable"`。
 
 ### 13.2.2 发布通道管理
@@ -1747,6 +1752,13 @@ dry-run、规划失败、文件应用失败或 post-version 失败都不得消�
 `--bump`。二者都使用 `toml_edit::DocumentMut` 与原子写回，保留目标 table 的其他字段、注释和所有非目标 package。无实际变化时不得写入文件。
 
 全局 `--dry-run` 只输出将修改的 package 而不写入；`--check` 断言目标已处于请求状态，存在需要修改的 package 时返回非零。JSON 配置不受支持。
+
+当 `channel set` 实际需要修改的目标中包含 Node.js package，且其内置 `nodejs` resolver 配置了
+未显式携带 `--tag` 或 `--tag=<value>` 的 `npm publish` 命令时，CLI 必须警告这些 package，并提示
+在发布前为 npm 命令补充目标 channel 对应的 dist-tag。该检查在 `--check` 和全局 `--dry-run`
+下同样执行，但只提供诊断：不得自动改写 publish 命令，不检查或覆盖用户已经显式设置的 tag，
+也不改变自定义命令。原因是一个 resolver 配置可能被不同 channel 的 package 共享，静态写入当前
+channel 会改变其他 package 的发布语义。
 
 ### 13.3 同步计划
 

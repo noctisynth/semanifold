@@ -146,7 +146,7 @@ impl<D> SemifoldService<D> {
         project: &Project,
         options: &ConfigSyncOptions,
     ) -> Result<ConfigSyncPlan, AppError> {
-        ensure_toml_config(project)?;
+        ensure_toml_config(&project.config_path)?;
         let scope = config_sync_scope(&project.config, &options.resolvers)?;
         let changesets =
             resolver::get_changesets(project.changeset_dir.as_std_path(), &project.config)?;
@@ -161,8 +161,15 @@ impl<D> SemifoldService<D> {
     }
 
     pub fn plan_config_migration(&self, project: &Project) -> Result<ConfigMutationPlan, AppError> {
-        let content = read_editable_config(project)?;
-        let plan = plan_config_migration(project.config_path.clone(), &content)
+        self.plan_config_migration_at(&project.config_path)
+    }
+
+    pub fn plan_config_migration_at(
+        &self,
+        config_path: &Utf8Path,
+    ) -> Result<ConfigMutationPlan, AppError> {
+        let content = read_editable_config_at(config_path)?;
+        let plan = plan_config_migration(config_path.to_path_buf(), &content)
             .map_err(AppError::ConfigMutation)?;
         validate_config_mutation(&plan)?;
         Ok(plan)
@@ -249,17 +256,21 @@ impl<D: EngineDependencies> SemifoldService<D> {
 }
 
 fn read_editable_config(project: &Project) -> Result<String, AppError> {
-    ensure_toml_config(project)?;
-    std::fs::read_to_string(&project.config_path).map_err(|source| {
+    read_editable_config_at(&project.config_path)
+}
+
+fn read_editable_config_at(config_path: &Utf8Path) -> Result<String, AppError> {
+    ensure_toml_config(config_path)?;
+    std::fs::read_to_string(config_path).map_err(|source| {
         AppError::ConfigMutation(ConfigMutationError::Read {
-            path: project.config_path.clone(),
+            path: config_path.to_path_buf(),
             source,
         })
     })
 }
 
-fn ensure_toml_config(project: &Project) -> Result<(), AppError> {
-    if project.config_path.extension() == Some("toml") {
+fn ensure_toml_config(config_path: &Utf8Path) -> Result<(), AppError> {
+    if config_path.extension() == Some("toml") {
         Ok(())
     } else {
         Err(AppError::UnsupportedConfigFormat)

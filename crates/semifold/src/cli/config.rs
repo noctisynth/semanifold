@@ -1,10 +1,11 @@
 use anyhow::anyhow;
+use camino::Utf8Path;
 use clap::{Parser, Subcommand, ValueEnum};
 use rust_i18n::t;
 use semifold_core::{ConfigSyncWarning, EcosystemId};
 use semifold_engine::{
-    AppError, ChannelUpdate, ConfigMutationError, ConfigSyncOptions, Project, SemifoldService,
-    SystemDependencies, config_sync::ConfigSyncPlanningError,
+    AppError, ChannelUpdate, ConfigMutationError, ConfigSyncOptions, Project, ProjectLocation,
+    SemifoldService, SystemDependencies, config_sync::ConfigSyncPlanningError,
 };
 use semifold_resolver::config::ChannelBump;
 
@@ -114,15 +115,36 @@ struct ChannelTarget {
 }
 
 pub(crate) fn run(command: &Config, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+    render_header(dry_run);
+    match &command.command {
+        Commands::Sync(options) => sync(options, project, dry_run),
+        Commands::Migrate(options) => migrate(options, &project.config_path, dry_run),
+        Commands::Channel(channel) => manage_channel(channel, project, dry_run),
+    }
+}
+
+pub(crate) fn run_before_project_load(
+    command: &Config,
+    location: &ProjectLocation,
+    dry_run: bool,
+) -> Option<anyhow::Result<()>> {
+    let Commands::Migrate(options) = &command.command else {
+        return None;
+    };
+    Some((|| {
+        render_header(dry_run);
+        let config_path = location
+            .config_path()
+            .map_err(|error| anyhow!(t!("cli.project_load_failed", error = error)))?;
+        migrate(options, config_path, dry_run)
+    })())
+}
+
+fn render_header(dry_run: bool) {
     let terminal = Terminal::detect();
     terminal.heading(&t!("cli.config.heading"));
     if dry_run {
         terminal.dry_run(&t!("cli.common.dry_run_banner"));
-    }
-    match &command.command {
-        Commands::Sync(options) => sync(options, project, dry_run),
-        Commands::Migrate(options) => migrate(options, project, dry_run),
-        Commands::Channel(channel) => manage_channel(channel, project, dry_run),
     }
 }
 
@@ -278,6 +300,17 @@ fn update_channel(
         return Ok(());
     }
 
+    if let Some(channel) = channel {
+        let packages = node_packages_missing_npm_dist_tag(project, &plan.packages);
+        if !packages.is_empty() {
+            terminal.warning(&t!(
+                "cli.config.node_npm_channel_tag_missing",
+                packages = packages.join(", "),
+                channel = channel
+            ));
+        }
+    }
+
     let requested = channel.unwrap_or("stable");
     terminal.line(t!(
         "cli.config.updating_channel",
@@ -300,12 +333,69 @@ fn update_channel(
     Ok(())
 }
 
-fn migrate(options: &Migrate, project: &Project, dry_run: bool) -> anyhow::Result<()> {
+fn node_packages_missing_npm_dist_tag(
+    project: &Project,
+    target_packages: &[String],
+) -> Vec<String> {
+    let Some(resolver) = project.config.resolver.get(&EcosystemId::NODE) else {
+        return Vec::new();
+    };
+    if !resolver.publish.iter().any(npm_publish_missing_dist_tag) {
+        return Vec::new();
+    }
+    target_packages
+        .iter()
+        .filter(|package| {
+            project
+                .config
+                .packages
+                .get(package.as_str())
+                .is_some_and(|config| config.resolver == EcosystemId::NODE)
+        })
+        .cloned()
+        .collect()
+}
+
+fn npm_publish_missing_dist_tag(command: &semifold_resolver::config::CommandConfig) -> bool {
+    if command.command != "npm" {
+        return false;
+    }
+    let Some(arguments) = command.args.as_deref() else {
+        return false;
+    };
+    let publishes = arguments.iter().any(|argument| argument == "publish");
+    let has_dist_tag = has_npm_dist_tag(arguments);
+    publishes && !has_dist_tag
+}
+
+fn has_npm_dist_tag(arguments: &[String]) -> bool {
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if argument
+            .strip_prefix("--tag=")
+            .is_some_and(|tag| !tag.is_empty())
+        {
+            return true;
+        }
+        if argument == "--tag"
+            && arguments
+                .next()
+                .is_some_and(|tag| !tag.is_empty() && !tag.starts_with('-'))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn migrate(options: &Migrate, config_path: &Utf8Path, dry_run: bool) -> anyhow::Result<()> {
     let terminal = Terminal::detect();
     let service = SemifoldService::new(SystemDependencies);
-    let plan = service.plan_config_migration(project).map_err(|error| {
-        render_config_mutation_error(error, t!("cli.config.command_migrate").as_ref())
-    })?;
+    let plan = service
+        .plan_config_migration_at(config_path)
+        .map_err(|error| {
+            render_config_mutation_error(error, t!("cli.config.command_migrate").as_ref())
+        })?;
     if plan.packages.is_empty() {
         terminal.summary(
             StepOutcome::Skipped,
@@ -388,8 +478,8 @@ mod tests {
     use semifold_resolver::config;
 
     use super::{
-        ChannelBumpArg, ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate, sync,
-        update_channel,
+        ChannelBumpArg, ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate,
+        node_packages_missing_npm_dist_tag, sync, update_channel,
     };
 
     fn plan_migration(content: &str) -> Result<ConfigMutationPlan, ConfigMutationError> {
@@ -641,7 +731,7 @@ version-mode = "semantic"
         fs::write(&path, original).unwrap();
         let project = project_from_config_path(path.clone());
 
-        let error = migrate(&Migrate { check: true }, &project, false).unwrap_err();
+        let error = migrate(&Migrate { check: true }, &project.config_path, false).unwrap_err();
 
         assert!(
             error.to_string().contains("migration is required"),
@@ -671,7 +761,7 @@ url = ""
         fs::write(&path, original).unwrap();
         let project = project_from_config_path(path.clone());
 
-        migrate(&Migrate { check: false }, &project, false).unwrap();
+        migrate(&Migrate { check: false }, &project.config_path, false).unwrap();
 
         let migrated = fs::read_to_string(&path).unwrap();
         assert!(migrated.contains("[resolver.rust.pre-check]"));
@@ -796,6 +886,77 @@ resolver = "rust"
         assert!(error.to_string().contains("do not match"));
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn identifies_only_targeted_node_packages_when_npm_publish_lacks_a_dist_tag() {
+        let config_path = PathBuf::from("config.toml");
+        let config = config::load_config_from_str(
+            &config_path,
+            r#"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[packages.node-app]
+path = "node-app"
+resolver = "nodejs"
+
+[packages.rust-app]
+path = "rust-app"
+resolver = "rust"
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish"]
+"#,
+        )
+        .unwrap();
+        let project = project_with_config_path(config_path, config);
+
+        assert_eq!(
+            node_packages_missing_npm_dist_tag(
+                &project,
+                &["node-app".to_string(), "rust-app".to_string()]
+            ),
+            ["node-app"]
+        );
+    }
+
+    #[test]
+    fn accepts_both_npm_dist_tag_argument_forms() {
+        for arguments in [
+            "[\"publish\", \"--tag\", \"alpha\"]",
+            "[\"publish\", \"--tag=alpha\"]",
+        ] {
+            let config_path = PathBuf::from("config.toml");
+            let config = config::load_config_from_str(
+                &config_path,
+                &format!(
+                    r#"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[packages.app]
+path = "."
+resolver = "nodejs"
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = {arguments}
+"#
+                ),
+            )
+            .unwrap();
+            let project = project_with_config_path(config_path, config);
+
+            assert!(node_packages_missing_npm_dist_tag(&project, &["app".to_string()]).is_empty());
+        }
     }
 
     #[test]

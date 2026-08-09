@@ -124,7 +124,7 @@ fn commit_accepts_complete_arguments_with_stdin_closed() {
             "app=minor",
             "--tag",
             "chore",
-            "--summary",
+            "-m",
             "Exercise the parameter-only path.",
         ],
     );

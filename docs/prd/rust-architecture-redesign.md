@@ -791,7 +791,7 @@ CLI 不提供全局或命令级 `--non-interactive` 模式。交互提示只是�
 - `init` 使用既有 `--target`、重复 `--resolvers`、`--base-branch` 与 `--release-branch`，并增加
   `--no-resolvers`、`--default-tags` / `--no-default-tags`、`--write-ci` / `--no-write-ci` 和
   `--allow-non-root`。在仓库子目录运行时，只有缺少 `--allow-non-root` 才允许交互确认；
-- `commit` 使用 `--name`、`--summary`、重复 `--package PACKAGE[=LEVEL]`、作为缺省 bump 的
+- `commit` 使用 `--name`、`--summary`（短参数 `-m`）、重复 `--package PACKAGE[=LEVEL]`、作为缺省 bump 的
   `--level`，以及 `--tag` / `--no-tag`。每个 package 可以在参数中携带独立 bump；未携带时使用
   `--level`，两者都缺失时才允许交互选择。参数路径与交互路径最终都只构造同一个
   `ChangesetDraft`，不能复制 changeset 校验或写入逻辑。

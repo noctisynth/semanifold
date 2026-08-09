@@ -72,7 +72,7 @@ pub(crate) struct Commit {
     pub name: Option<String>,
     #[arg(short, long, help = t!("cli.commit.flags.level"))]
     pub level: Option<Level>,
-    #[arg(short, long, help = t!("cli.commit.flags.summary"))]
+    #[arg(short = 'm', long, help = t!("cli.commit.flags.summary"))]
     pub summary: Option<String>,
     #[arg(
         short = 'p',

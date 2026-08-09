@@ -1,7 +1,6 @@
 ---
 "@semifold/plugin-sdk": minor:feat
 semifold-resolver: patch:fix
-semifold: patch:fix
 ---
 
 Introduce the versioned TypeScript SDK for ecosystem plugins with exact schema v1 wire types,

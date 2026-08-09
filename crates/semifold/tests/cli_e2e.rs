@@ -208,35 +208,6 @@ fn init_workflow_exposes_semifold_step_outputs_to_later_jobs() {
 }
 
 #[test]
-fn init_nodejs_workflow_uses_oidc_without_a_registry_token() {
-    let root = temporary_repository("init-nodejs-oidc-workflow");
-
-    let init = run_smif(
-        &root,
-        &[
-            "init",
-            "--resolvers",
-            "nodejs",
-            "--default-tags",
-            "--base-branch",
-            "main",
-            "--release-branch",
-            "release",
-            "--github-actions",
-        ],
-    );
-
-    assert!(init.status.success(), "{init:?}");
-    let workflow = fs::read_to_string(root.join(".github/workflows/semifold-ci.yaml")).unwrap();
-    assert!(workflow.contains("id-token: write"), "{workflow}");
-    assert!(workflow.contains("node-version: 24"), "{workflow}");
-    assert!(workflow.contains("npm@11.18.0"), "{workflow}");
-    assert!(!workflow.contains("NPM_TOKEN"), "{workflow}");
-    assert!(!workflow.contains("NODE_AUTH_TOKEN"), "{workflow}");
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
 fn ci_version_branch_writes_the_version_workflow_output() {
     let root = temporary_project("ci-version-output", &config("channel = \"stable\""));
     let github_output = root.join("github-output");

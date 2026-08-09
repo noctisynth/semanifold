@@ -536,13 +536,6 @@ CI/CD 问题并发布新版本。`PublishPlan`
 `ForgeClient` 上传。缺失或无效的显式 asset、glob 未匹配到预期产物以及读取失败必须进入该
 package 的结构化失败报告，不得静默省略。
 
-registry 中尚不存在的新 package 无法预先建立 npm trusted publisher 时，首次发布必须由 maintainer
-在本地完成：先应用 version 结果，再以本机交互式 npm 身份运行默认不创建 Forge release 的
-`smif publish`，最后将已经发布版本对应的 version 提交合入 base branch。后续 CD 重新规划 publish 时，registry
-preflight 会把该版本识别为已存在，跳过所有 registry 命令并只创建尚缺失的 GitHub Release。自动化
-workflow 不得接收 `NPM_TOKEN`、`NODE_AUTH_TOKEN` 或其他长期 npm write token；首发完成并在 npm
-配置 trusted publisher 后，所有后续自动 registry 发布只使用 GitHub OIDC。
-
 执行结果始终表示为结构化报告：
 
 ```rust
@@ -1214,8 +1207,10 @@ JavaScript runtime 依赖。package 的 `prepack` 必须从受版本控制的源
 锁定的 SDK 开发依赖，再由现有 Node.js resolver 在 package 目录执行带 provenance 的公开 npm publish；
 不能依赖开发者提交生成目录或在 release job 中临时变更 lockfile。npm package 必须声明与当前 GitHub
 仓库一致的 repository metadata；release job 使用满足 npm trusted publishing 要求的 Node 24 与固定 npm 11
-CLI，在 GitHub-hosted runner 上以既有 `id-token: write` 权限仅使用 OIDC。SDK 首版遵循前述本地首发流程，
-对应 CD 只补建 GitHub Release，不为 bootstrap 注入任何 npm token。
+CLI，在 GitHub-hosted runner 上以既有 `id-token: write` 权限仅使用 OIDC。SDK 首版先由 maintainer 在本地
+应用 version、以本机 npm 身份运行默认不创建 Forge release 的 `smif publish`，再将 version 提交合入 base
+branch；对应 CD 通过 registry preflight 跳过已经发布的 npm 版本，只补建 GitHub Release。首发后再为
+package 配置 trusted publisher，当前仓库的 workflow 不为 bootstrap 注入任何 npm token。
 
 SDK 的所有 wire types 使用与 Rust 协议相同的 kebab-case JSON 字段，并以 `V1` 后缀表达 schema 边界；
 不得增加一层自动 camelCase 转换。公共构造 API 首版固定为 `definePluginMetadata`、`definePlugin`、

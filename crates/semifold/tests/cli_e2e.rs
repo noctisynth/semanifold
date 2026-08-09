@@ -3,11 +3,11 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-fn temporary_project(name: &str, config: &str) -> PathBuf {
+fn temporary_repository(name: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -16,7 +16,7 @@ fn temporary_project(name: &str, config: &str) -> PathBuf {
         "semifold-cli-e2e-{name}-{}-{nonce}",
         std::process::id()
     ));
-    fs::create_dir_all(root.join(".changes")).unwrap();
+    fs::create_dir_all(&root).unwrap();
     let git_init = Command::new("git")
         .args(["init", "--quiet"])
         .current_dir(&root)
@@ -28,6 +28,12 @@ fn temporary_project(name: &str, config: &str) -> PathBuf {
         "[package]\nname = \"app\"\nversion = \"1.0.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
+    root
+}
+
+fn temporary_project(name: &str, config: &str) -> PathBuf {
+    let root = temporary_repository(name);
+    fs::create_dir_all(root.join(".changes")).unwrap();
     fs::write(root.join(".changes/config.toml"), config).unwrap();
     fs::write(
         root.join(".changes/feature.md"),
@@ -48,6 +54,7 @@ fn run_smif(root: &Path, arguments: &[&str]) -> Output {
         .env_remove("GITHUB_REPOSITORY")
         .env_remove("GITHUB_SERVER_URL")
         .env_remove("GITHUB_TOKEN")
+        .stdin(Stdio::null())
         .output()
         .unwrap()
 }
@@ -56,6 +63,51 @@ fn config(package: &str) -> String {
     format!(
         "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\n# keep this comment\npath = \".\"\nresolver = \"rust\"\n{package}\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n"
     )
+}
+
+#[test]
+fn init_accepts_complete_arguments_with_stdin_closed() {
+    let root = temporary_repository("init-arguments");
+
+    let init = run_smif(
+        &root,
+        &[
+            "init",
+            "--resolvers",
+            "rust",
+            "--default-tags",
+            "--base-branch",
+            "main",
+            "--release-branch",
+            "release",
+            "--no-write-ci",
+        ],
+    );
+
+    assert!(init.status.success(), "{init:?}");
+    let config = fs::read_to_string(root.join(".changes/config.toml")).unwrap();
+    assert!(config.contains("base = \"main\""), "{config}");
+    assert!(config.contains("release = \"release\""), "{config}");
+    assert!(config.contains("[[resolver.rust.publish]]"), "{config}");
+    assert!(config.contains("[tags]"), "{config}");
+    assert!(!root.join(".github/workflows/semifold-ci.yaml").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
+    let root = temporary_repository("init-missing-arguments");
+
+    let init = run_smif(&root, &["init"]);
+
+    assert!(!init.status.success(), "{init:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(output.contains("--resolvers or --no-resolvers"), "{output}");
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

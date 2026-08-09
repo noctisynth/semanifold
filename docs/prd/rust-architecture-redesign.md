@@ -776,6 +776,29 @@ checkout；`.changes` 或 `.changesets` 根目录中非 removed 的 Markdown 文
 changeset，并处理全部分页。comment 必须单独列出这些 changeset，空状态以该集合为空为准，不能将
 base 已有的 changeset 错误归因给当前 PR；全量 `ReleasePlan` 仍是版本表的事实来源。
 
+#### CLI 参数与交互契约
+
+CLI 不提供全局或命令级 `--non-interactive` 模式。交互提示只是参数缺省时面向终端用户的便利回退，
+不是任何命令完成业务操作的必要输入通道。每个可交互输入都必须有语义等价、可组合且可在 help 中
+发现的命令行参数；调用方提供完整参数后，命令不得读取 stdin、打开 prompt 或要求人工确认，从而
+允许 CI/CD、无 stdin 子进程和受限 Agent 调度环境使用同一条命令。参数不完整且 stdin 或提示输出
+不是终端时必须立即返回本地化错误，指出当前缺失输入及其等价参数，不能等待、采用隐藏默认值或
+抛出底层终端错误。布尔确认必须提供互斥的显式正反参数；能够合法选择空集合或 `None` 的输入也必须
+有显式参数，避免把“未传参”和“选择为空”混为一谈。
+
+首个覆盖范围是所有仍依赖 `inquire` 的命令：
+
+- `init` 使用既有 `--target`、重复 `--resolvers`、`--base-branch` 与 `--release-branch`，并增加
+  `--no-resolvers`、`--default-tags` / `--no-default-tags`、`--write-ci` / `--no-write-ci` 和
+  `--allow-non-root`。在仓库子目录运行时，只有缺少 `--allow-non-root` 才允许交互确认；
+- `commit` 使用 `--name`、`--summary`、重复 `--package PACKAGE[=LEVEL]`、作为缺省 bump 的
+  `--level`，以及 `--tag` / `--no-tag`。每个 package 可以在参数中携带独立 bump；未携带时使用
+  `--level`，两者都缺失时才允许交互选择。参数路径与交互路径最终都只构造同一个
+  `ChangesetDraft`，不能复制 changeset 校验或写入逻辑。
+
+端到端测试必须关闭 stdin，并分别证明完整参数路径成功、缺少参数时快速失败且给出参数提示；TTY
+交互行为只保留为输入收集适配层，不进入 engine。
+
 #### 分层模板变量作用域
 
 模板渲染必须在 `ReleasePlan` 完成和必需事实收集后执行。不同场景使用不同的

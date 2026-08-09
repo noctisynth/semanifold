@@ -5,6 +5,7 @@ dirty_repo = "Git repository is dirty. Please commit or stash your changes first
 
 [cli.common]
 dry_run_banner = "DRY RUN — no Semifold files or Forge resources will be changed"
+interactive_input_unavailable = "Cannot prompt for %{prompt}; provide %{arguments}"
 
 [cli.commands]
 commit = "Commit a new changeset"
@@ -63,9 +64,15 @@ non_utf8_target = "Initialization target path is not valid UTF-8: %{path}"
 [cli.init.flags]
 target = "Target directory to store changesets"
 resolvers = "Resolvers to use for workspace resolution"
+no_resolvers = "Initialize without workspace resolvers"
 force = "Re-initialize an existing Semifold setup; use config sync for workspace package changes"
 base_branch = "Base branch to use for release"
 release_branch = "Release branch to use for release"
+default_tags = "Add the default changelog tags"
+no_default_tags = "Do not add default changelog tags"
+write_ci = "Write GitHub Actions workflows"
+no_write_ci = "Do not write GitHub Actions workflows"
+allow_non_root = "Use the discovered repository root when invoked from a subdirectory"
 
 [cli.status]
 heading = "Semifold release plan"

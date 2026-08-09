@@ -5,6 +5,7 @@ dirty_repo = "Git 仓库不干净。请先提交或暂存您的更改，或使�
 
 [cli.common]
 dry_run_banner = "模拟运行 — 不会修改 Semifold 文件或 Forge 资源"
+interactive_input_unavailable = "无法交互询问%{prompt}；请提供参数 %{arguments}"
 
 [cli.commands]
 commit = "提交一个新的变更集"
@@ -63,9 +64,15 @@ non_utf8_target = "初始化目标路径不是有效的 UTF-8：%{path}"
 [cli.init.flags]
 target = "要存储变更集的目标目录"
 resolvers = "要使用的工作区解析器"
+no_resolvers = "初始化时不使用工作区解析器"
 force = "重新初始化已有的 Semifold 配置；工作区包变更请使用 config sync"
 base_branch = "要使用的基础分支"
 release_branch = "要使用的发布分支"
+default_tags = "添加默认 changelog 标签"
+no_default_tags = "不添加默认 changelog 标签"
+write_ci = "写入 GitHub Actions 工作流"
+no_write_ci = "不写入 GitHub Actions 工作流"
+allow_non_root = "从子目录调用时使用已发现的仓库根目录"
 
 [cli.status]
 heading = "Semifold 发布计划"

@@ -8,7 +8,10 @@ use semifold_engine::{
 };
 use semifold_resolver::resolver::ResolverType;
 
-use crate::cli::terminal::{StepOutcome, Terminal};
+use crate::cli::{
+    require_interactive,
+    terminal::{StepOutcome, Terminal},
+};
 
 #[derive(rust_embed::Embed)]
 #[folder = "assets"]
@@ -20,12 +23,24 @@ pub(crate) struct Init {
     pub target: Option<PathBuf>,
     #[arg(short, long, help = t!("cli.init.flags.resolvers"))]
     pub resolvers: Vec<ResolverType>,
+    #[arg(long, conflicts_with = "resolvers", help = t!("cli.init.flags.no_resolvers"))]
+    pub no_resolvers: bool,
     #[arg(short, long, default_value_t = false, help = t!("cli.init.flags.force"))]
     pub force: bool,
     #[arg(long, help = t!("cli.init.flags.base_branch"))]
     pub base_branch: Option<String>,
     #[arg(long, help = t!("cli.init.flags.release_branch"))]
     pub release_branch: Option<String>,
+    #[arg(long, conflicts_with = "no_default_tags", help = t!("cli.init.flags.default_tags"))]
+    pub default_tags: bool,
+    #[arg(long, conflicts_with = "default_tags", help = t!("cli.init.flags.no_default_tags"))]
+    pub no_default_tags: bool,
+    #[arg(long, conflicts_with = "no_write_ci", help = t!("cli.init.flags.write_ci"))]
+    pub write_ci: bool,
+    #[arg(long, conflicts_with = "write_ci", help = t!("cli.init.flags.no_write_ci"))]
+    pub no_write_ci: bool,
+    #[arg(long, help = t!("cli.init.flags.allow_non_root"))]
+    pub allow_non_root: bool,
 }
 
 pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()> {
@@ -41,12 +56,15 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
     let mut target_dir = std::env::current_dir()?;
     if location.root.as_std_path() != target_dir {
         terminal.warning(&t!("cli.init.not_repo_root"));
-        if !Confirm::new(&t!("cli.init.continue"))
-            .with_default(false)
-            .prompt()?
-        {
-            terminal.summary(StepOutcome::Skipped, &t!("cli.init.aborted"));
-            return Ok(());
+        if !init.allow_non_root {
+            require_interactive(&t!("cli.init.continue"), "--allow-non-root")?;
+            if !Confirm::new(&t!("cli.init.continue"))
+                .with_default(false)
+                .prompt()?
+            {
+                terminal.summary(StepOutcome::Skipped, &t!("cli.init.aborted"));
+                return Ok(());
+            }
         }
         target_dir = location.root.clone().into_std_path_buf();
     }
@@ -60,7 +78,8 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
 
     log::debug!("target: {}", target.display());
 
-    let resolvers = if init.resolvers.is_empty() {
+    let resolvers = if init.resolvers.is_empty() && !init.no_resolvers {
+        require_interactive(&t!("cli.init.resolvers"), "--resolvers or --no-resolvers")?;
         MultiSelect::new(
             &t!("cli.init.resolvers"),
             ResolverType::value_variants().to_vec(),
@@ -71,10 +90,17 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
     };
     log::debug!("resolvers: {resolvers:?}");
 
-    let tags = if Confirm::new(&t!("cli.init.tags"))
-        .with_default(true)
-        .prompt()?
-    {
+    let use_default_tags = if init.default_tags {
+        true
+    } else if init.no_default_tags {
+        false
+    } else {
+        require_interactive(&t!("cli.init.tags"), "--default-tags or --no-default-tags")?;
+        Confirm::new(&t!("cli.init.tags"))
+            .with_default(true)
+            .prompt()?
+    };
+    let tags = if use_default_tags {
         BTreeMap::from_iter([
             ("chore".to_string(), "Chores".to_string()),
             ("feat".to_string(), "New Features".to_string()),
@@ -89,6 +115,7 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
     let base_branch = if let Some(base_branch) = &init.base_branch {
         base_branch.clone()
     } else {
+        require_interactive(&t!("cli.init.base_branch"), "--base-branch")?;
         Text::new(&t!("cli.init.base_branch"))
             .with_default("main")
             .prompt()?
@@ -97,14 +124,22 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
     let release_branch = if let Some(release_branch) = &init.release_branch {
         release_branch.clone()
     } else {
+        require_interactive(&t!("cli.init.release_branch"), "--release-branch")?;
         Text::new(&t!("cli.init.release_branch"))
             .with_default("release")
             .prompt()?
     };
 
-    let write_ci = Confirm::new(&t!("cli.init.write_ci"))
-        .with_default(true)
-        .prompt()?;
+    let write_ci = if init.write_ci {
+        true
+    } else if init.no_write_ci {
+        false
+    } else {
+        require_interactive(&t!("cli.init.write_ci"), "--write-ci or --no-write-ci")?;
+        Confirm::new(&t!("cli.init.write_ci"))
+            .with_default(true)
+            .prompt()?
+    };
 
     let workflows = if write_ci {
         let ci_asset = CIAsset::get("semifold-ci.yaml.jinja")

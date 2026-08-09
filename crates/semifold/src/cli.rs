@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use clap::{Parser, Subcommand, builder::styling};
 use rust_i18n::t;
 use semifold_core::RepositoryContext;
@@ -25,6 +27,18 @@ pub(crate) fn repository_context() -> Option<RepositoryContext> {
         web_url: format!("{}/{owner}/{name}", host.trim_end_matches('/')),
         commit: None,
     })
+}
+
+pub(crate) fn require_interactive(prompt: &str, arguments: &str) -> anyhow::Result<()> {
+    if std::io::stdin().is_terminal() && std::io::stderr().is_terminal() {
+        Ok(())
+    } else {
+        anyhow::bail!(t!(
+            "cli.common.interactive_input_unavailable",
+            prompt = prompt,
+            arguments = arguments
+        ))
+    }
 }
 
 #[derive(Subcommand, Debug)]

@@ -1,0 +1,21 @@
+{
+  "schema-version": 1,
+  "diagnostics": [
+    {
+      "plugin": "com.example.engine",
+      "operation": "discover",
+      "severity": "error",
+      "code": "discovery-failed",
+      "message": "Discovery failed",
+      "package": "engine"
+    },
+    {
+      "plugin": "com.example.engine",
+      "operation": "discover",
+      "severity": "warning",
+      "code": "partial-discovery",
+      "message": "Some manifests were ignored"
+    }
+  ],
+  "status": "failure"
+}

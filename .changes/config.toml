@@ -14,6 +14,11 @@ path = "docs"
 resolver = "nodejs"
 channel = "rc"
 
+[packages."@semifold/plugin-sdk"]
+path = "packages/plugin-sdk"
+resolver = "nodejs"
+channel = "rc"
+
 [packages.semifold]
 path = "crates/semifold"
 resolver = "rust"
@@ -63,3 +68,7 @@ dry-run = true
 type = "http"
 url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
 retry = [2, 5, 15, 30]
+
+[[resolver.nodejs.publish]]
+command = "npm"
+args = ["publish", "--provenance", "--access", "public"]

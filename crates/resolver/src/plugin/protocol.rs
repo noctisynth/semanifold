@@ -558,4 +558,31 @@ mod tests {
             Err(PluginProtocolError::FailureWithoutErrorDiagnostic)
         );
     }
+
+    #[test]
+    fn typescript_sdk_fixtures_match_the_rust_schema_v1_contract() {
+        let metadata: PluginMetadataV1 = serde_json::from_str(include_str!(
+            "../../../../packages/plugin-sdk/test/fixtures/plugin-metadata-v1.json"
+        ))
+        .unwrap();
+        assert_eq!(metadata.validate(), Ok(()));
+
+        let plugin = plugin_id();
+        assert_eq!(metadata.ecosystem, plugin);
+        let request = PluginRequestV1::new(PluginCallV1::Discover(PluginDiscoverInputV1 {
+            project_root: ".".to_string(),
+        }));
+
+        for fixture in [
+            include_str!(
+                "../../../../packages/plugin-sdk/test/fixtures/plugin-discover-success-v1.json"
+            ),
+            include_str!(
+                "../../../../packages/plugin-sdk/test/fixtures/plugin-discover-failure-v1.json"
+            ),
+        ] {
+            let response: PluginResponseV1 = serde_json::from_str(fixture).unwrap();
+            assert_eq!(response.validate_for(&request, &plugin), Ok(()));
+        }
+    }
 }

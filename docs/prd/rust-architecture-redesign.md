@@ -1198,6 +1198,33 @@ host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用
 插件编译为单文件 ESM，并在构建期拒绝残留 import、Node.js builtin、动态 module 加载以及 Semifold
 运行时不支持的 Web API；构建检查是开发反馈，不替代 host 的运行时校验。
 
+首个 SDK package 固定为 `@semifold/plugin-sdk`，源码位于 `packages/plugin-sdk`，以 ESM-only、零运行时
+依赖的 npm package 独立发布。初始 manifest 版本使用 `0.0.0`，并由首个 minor changeset 进入
+`0.1.0-rc.0`，避免在引入 release plan 前手工伪造已发布版本。SDK 以 ES2022 为最低输出目标，生成
+JavaScript 与 declaration files；其源码和类型 fixture 的 TypeScript 编译环境只加载 ECMAScript 标准库，
+显式排除 DOM 与 Node.js ambient 类型。SDK package 不负责 bundle 插件，也不成为 Semifold CLI 的
+JavaScript runtime 依赖。package 的 `prepack` 必须从受版本控制的源码重建 `dist`，发布工作流必须先安装
+锁定的 SDK 开发依赖，再由现有 Node.js resolver 在 package 目录执行带 provenance 的公开 npm publish；
+不能依赖开发者提交生成目录或在 release job 中临时变更 lockfile。npm package 必须声明与当前 GitHub
+仓库一致的 repository metadata；release job 使用满足 npm trusted publishing 要求的 Node 24 与固定 npm 11
+CLI，在 GitHub-hosted runner 上以既有 `id-token: write` 权限优先使用 OIDC。首次发布尚不能配置 trusted
+publisher 时，可通过可选的 `NPM_TOKEN` secret 完成 bootstrap；建立 trust 后不再依赖长期 write token。
+
+SDK 的所有 wire types 使用与 Rust 协议相同的 kebab-case JSON 字段，并以 `V1` 后缀表达 schema 边界；
+不得增加一层自动 camelCase 转换。公共构造 API 首版固定为 `definePluginMetadata`、`definePlugin`、
+`createPluginDiagnostic`、`createPluginSuccess` 与 `createPluginFailure`：metadata helper 固定 schema version
+和三个必需 operation，并对 read pattern 去重排序；entrypoint helper 只提供类型约束，不吞掉异常；response
+helper 根据 request 写入 operation，failure helper 必须自行构造至少一条 error diagnostic。SemVer、生态 ID、
+路径、hash、诊断归属和 response/request operation 一致性仍由 Rust host 做最终验证，SDK 不复制一套可能
+漂移的安全校验器。
+
+SDK 只为实际注册的 Boa 能力声明 ambient globals。文件能力通过入口参数中的 `PluginHostV1` 暴露，包含
+`listFiles(pattern)` 与 `readText(path)`；网络侧只声明当前 Boa runtime 真正支持的 `fetch` request init、
+response、headers 子集，以及不包含 `searchParams` 等未实现成员的 `URL` 子集。它不加载完整 `lib.dom`，
+也不声明 `window`、`document`、`process`、`Buffer`、任意文件系统或子进程 API。SDK 的类型 fixture 必须在
+无 DOM/Node ambient 的条件下覆盖 metadata、三类 request/output、诊断、failure、文件读取、fetch 与 URL；
+运行时测试必须验证 helper 生成的 JSON 与 Rust schema v1 形状一致，并验证 metadata 的稳定排序和冻结行为。
+
 运行时不提供任意文件系统、环境变量或子进程访问。插件只能调用 host 显式注入的 `listFiles`、
 `readText` 与标准形态的 `fetch` capability。文件路径使用 `/` 分隔、相对项目根目录且不得包含空路径、
 绝对路径、反斜杠、`.` 或 `..` 分段。`listFiles` 只接受与 metadata `read-patterns` 中某一项逐字相同的

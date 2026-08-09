@@ -488,6 +488,14 @@
 - [x] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
 - [x] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID
 
+### TypeScript SDK 与构建工具
+
+- [x] 新增独立发布的 `@semifold/plugin-sdk` ESM package，并接入 pnpm workspace、Semifold release plan 与 npm publish workflow
+- [x] 导出 schema v1 的 kebab-case wire types、metadata/entrypoint/diagnostic/response 构造辅助函数
+- [x] 精确声明 `PluginHostV1` 与 Boa 实际支持的 `fetch`、`URL` 子集，不引入 DOM 或 Node.js ambient API
+- [x] 以无 DOM/Node ambient 的类型 fixture 和运行时 JSON 测试锁定 SDK/Rust 协议边界
+- [ ] 实现配套 Vite 插件的单文件 ESM bundle 与不支持能力检查
+
 ### 阶段完成条件
 
 - [x] 至少一个仓库外脚本插件完成单包、workspace、内部依赖和版本修改 fixture

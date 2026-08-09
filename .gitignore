@@ -1,5 +1,7 @@
 /target
 /artifacts
+/packages/*/dist
+.pnpm-store
 node_modules
 .DS_Store
 .copilot

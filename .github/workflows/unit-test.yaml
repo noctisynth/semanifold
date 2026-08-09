@@ -18,6 +18,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install SDK dependencies
+        run: pnpm install --frozen-lockfile --filter @semifold/plugin-sdk
+      - name: Test plugin SDK
+        run: pnpm --filter @semifold/plugin-sdk test
       - name: Build
         run: cargo build --workspace
       - name: Format check

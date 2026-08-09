@@ -1,0 +1,20 @@
+{
+  "schema-version": 1,
+  "diagnostics": [
+    {
+      "plugin": "com.example.engine",
+      "operation": "discover",
+      "severity": "info",
+      "code": "discovery-started",
+      "message": "Discovery started",
+      "path": "packages"
+    }
+  ],
+  "status": "success",
+  "output": {
+    "operation": "discover",
+    "output": {
+      "packages": []
+    }
+  }
+}

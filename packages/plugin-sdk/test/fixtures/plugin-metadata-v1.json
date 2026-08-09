@@ -1,0 +1,7 @@
+{
+  "schema-version": 1,
+  "ecosystem": "com.example.engine",
+  "plugin-version": "1.2.3",
+  "operations": ["discover", "inspect", "plan-edits"],
+  "read-patterns": ["alpha.json", "zeta.json"]
+}

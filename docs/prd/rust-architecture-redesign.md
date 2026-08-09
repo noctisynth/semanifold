@@ -1181,9 +1181,11 @@ host 不信任插件返回的路径、文件内容或依赖关系，所有结果
 首版插件运行时只支持 JavaScript，并通过纯 Rust 的嵌入式 Boa 执行单文件 ECMAScript module；不同时
 支持 Lua，也不在 Semifold CLI 内置 TypeScript 转译。host 使用拒绝所有 import 的 module loader，
 运行时产物必须是已经 bundle 的单文件 ESM，不能加载其他文件、远程 module 或原生 module。插件以
-命名导出的 `metadata` 对象声明身份和能力，以默认导出的同步或异步函数作为统一入口，接收
-schema-versioned request 并返回 response；协议 DTO 不得暴露 Boa 类型。读取 metadata 时网络始终
-禁用，避免注册表发现阶段产生外部副作用。
+命名导出的 `metadata` 对象声明身份和能力，以默认导出的同步或异步函数作为统一入口，固定接收
+`(request, host)` 并返回 response；schema-versioned request、response 与 host capability 均不得暴露
+Boa 类型。`host` 是每次 operation 新建并冻结的 capability 对象，首版提供返回 Promise 的
+`listFiles(pattern)` 与 `readText(path)`；未配置相应 host backend 时能力默认拒绝。读取 metadata 时
+不创建文件 capability 且网络始终禁用，避免注册表发现阶段产生外部副作用。
 
 插件开发体验由独立发布到 npm 的 TypeScript SDK 提供。SDK 只包含协议类型、构造辅助函数和允许的
 host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用能力。后续配套 Vite 插件负责把
@@ -1191,15 +1193,20 @@ host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用
 运行时不支持的 Web API；构建检查是开发反馈，不替代 host 的运行时校验。
 
 运行时不提供任意文件系统、环境变量或子进程访问。插件只能调用 host 显式注入的 `listFiles`、
-`readText` 与标准形态的 `fetch` capability。文件读取每次都要经过项目根目录、声明的 glob、符号链接、
-文件数量和字节预算校验，返回路径按字典序排序。网络默认拒绝；插件配置必须声明允许的 HTTPS origin，
+`readText` 与标准形态的 `fetch` capability。文件路径使用 `/` 分隔、相对项目根目录且不得包含空路径、
+绝对路径、反斜杠、`.` 或 `..` 分段。`listFiles` 只接受与 metadata `read-patterns` 中某一项逐字相同的
+glob，避免以不可靠的 glob 子集推断扩大授权；`readText` 只接受匹配至少一个已声明 glob 的规范相对
+路径。两项能力每次调用都要经过项目根目录、解析后的符号链接边界、普通文件类型、文件数量和字节
+预算校验；匹配到越过项目根目录的符号链接必须报错，不能静默忽略。`listFiles` 的结果去重后按 UTF-8
+字典序排序，且 glob 默认不隐式匹配以 `.` 开头的路径段。网络默认拒绝；插件配置必须声明允许的 HTTPS origin，
 host 自定义 fetch backend 对初始 URL 和每次重定向执行协议、origin、解析后地址、超时、请求次数、
 并发数及请求/响应字节预算校验。插件不能读取 ambient credential；需要认证的值必须由未来独立的
 命名 secret capability 显式授权，首版不实现该能力。
 
 首版限制固定而非可配置：插件源文件最大 1 MiB，Boa 每次 operation 使用全新 Context，循环迭代上限
 为 10,000,000、递归深度上限为 256，并使用 Boa 的 VM stack limit；单个读取文件最大 4 MiB，一次
-operation 累计读取最大 32 MiB，最多返回 10,000 个路径。单个网络请求最长 10 秒、最多跟随 5 次
+operation 通过 `readText` 累计返回最大 32 MiB，`listFiles` 累计最多返回 10,000 个路径，重复调用同样
+计入累计预算。单个网络请求最长 10 秒、最多跟随 5 次
 重定向、响应体最大 8 MiB；一次 operation 最多 8 个请求且累计响应体最大 32 MiB。Boa 当前没有可与
 QuickJS heap limit 等价的硬内存上限，因此 host 还必须限制 request、response、诊断和所有 capability
 载荷大小；在允许未审查的第三方插件前，运行时必须迁移到独立进程以取得 wall-clock 与内存硬隔离。

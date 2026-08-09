@@ -1,20 +1,26 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use boa_engine::module::IdleModuleLoader;
 use boa_engine::object::builtins::JsPromise;
+use boa_engine::object::{IntegrityLevel, ObjectInitializer};
 use boa_engine::{
-    Context, Finalize, JsData, JsError, JsResult, JsString, JsValue, Module, Source, Trace,
-    js_string,
+    Context, Finalize, JsArgs, JsData, JsError, JsResult, JsString, JsValue, Module,
+    NativeFunction, Source, Trace, js_string,
 };
 use boa_runtime::fetch::Fetcher;
 use boa_runtime::fetch::request::JsRequest;
 use boa_runtime::fetch::response::JsResponse;
 use semifold_core::EcosystemId;
 
+use super::file::{
+    DenyPluginFileClient, MAX_FILE_BYTES, MAX_OPERATION_FILE_BYTES, MAX_OPERATION_PATHS,
+    PluginFileClient, PluginFileError, matches_pattern, validate_file_path, validate_pattern_path,
+};
 use super::protocol::{PluginMetadataV1, PluginProtocolError, PluginRequestV1, PluginResponseV1};
 
 const MAX_SOURCE_BYTES: usize = 1024 * 1024;
@@ -132,6 +138,158 @@ impl Fetcher for BoaFetcher {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct PluginFileBudget {
+    returned_paths: usize,
+    returned_bytes: usize,
+}
+
+#[derive(Clone, Trace, Finalize, JsData)]
+struct BoaFileHost {
+    #[unsafe_ignore_trace]
+    client: Arc<dyn PluginFileClient>,
+    #[unsafe_ignore_trace]
+    budget: Arc<Mutex<PluginFileBudget>>,
+    max_file_bytes: usize,
+    max_operation_file_bytes: usize,
+    max_operation_paths: usize,
+}
+
+impl fmt::Debug for BoaFileHost {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BoaFileHost")
+            .finish_non_exhaustive()
+    }
+}
+
+impl BoaFileHost {
+    fn charge_paths(&self, count: usize) -> Result<(), PluginFileError> {
+        let mut budget = self
+            .budget
+            .lock()
+            .map_err(|_| PluginFileError::BudgetStateUnavailable)?;
+        let actual = budget.returned_paths.saturating_add(count);
+        if actual > self.max_operation_paths {
+            return Err(PluginFileError::TooManyPaths {
+                actual,
+                maximum: self.max_operation_paths,
+            });
+        }
+        budget.returned_paths = actual;
+        Ok(())
+    }
+
+    fn charge_bytes(&self, path: &str, count: usize) -> Result<(), PluginFileError> {
+        if count > self.max_file_bytes {
+            return Err(PluginFileError::FileTooLarge {
+                path: path.to_owned(),
+                actual: count,
+                maximum: self.max_file_bytes,
+            });
+        }
+        let mut budget = self
+            .budget
+            .lock()
+            .map_err(|_| PluginFileError::BudgetStateUnavailable)?;
+        let actual = budget.returned_bytes.saturating_add(count);
+        if actual > self.max_operation_file_bytes {
+            return Err(PluginFileError::OperationBytesExceeded {
+                actual,
+                maximum: self.max_operation_file_bytes,
+            });
+        }
+        budget.returned_bytes = actual;
+        Ok(())
+    }
+}
+
+async fn boa_list_files(
+    _this: &JsValue,
+    arguments: &[JsValue],
+    context: &RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (pattern, host) = {
+        let mut context = context.borrow_mut();
+        let pattern = string_argument(arguments, 0, "listFiles", &mut context)?;
+        validate_pattern_path(&pattern).map_err(JsError::from_rust)?;
+        let host = context
+            .get_data::<BoaFileHost>()
+            .cloned()
+            .ok_or(PluginFileError::HostUnavailable)
+            .map_err(JsError::from_rust)?;
+        (pattern, host)
+    };
+
+    let mut paths = host
+        .client
+        .list_files(&pattern)
+        .await
+        .map_err(JsError::from_rust)?;
+    for path in &paths {
+        validate_file_path(path).map_err(JsError::from_rust)?;
+        if !matches_pattern(&pattern, path).map_err(JsError::from_rust)? {
+            return Err(JsError::from_rust(
+                PluginFileError::ReturnedPathDoesNotMatch {
+                    path: path.clone(),
+                    pattern,
+                },
+            ));
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    host.charge_paths(paths.len()).map_err(JsError::from_rust)?;
+    let value =
+        serde_json::Value::Array(paths.into_iter().map(serde_json::Value::String).collect());
+    JsValue::from_json(&value, &mut context.borrow_mut())
+}
+
+async fn boa_read_text(
+    _this: &JsValue,
+    arguments: &[JsValue],
+    context: &RefCell<&mut Context>,
+) -> JsResult<JsValue> {
+    let (path, host) = {
+        let mut context = context.borrow_mut();
+        let path = string_argument(arguments, 0, "readText", &mut context)?;
+        validate_file_path(&path).map_err(JsError::from_rust)?;
+        let host = context
+            .get_data::<BoaFileHost>()
+            .cloned()
+            .ok_or(PluginFileError::HostUnavailable)
+            .map_err(JsError::from_rust)?;
+        (path, host)
+    };
+
+    let content = host
+        .client
+        .read_text(&path)
+        .await
+        .map_err(JsError::from_rust)?;
+    host.charge_bytes(&path, content.len())
+        .map_err(JsError::from_rust)?;
+    Ok(JsString::from(content).into())
+}
+
+fn string_argument(
+    arguments: &[JsValue],
+    index: usize,
+    method: &'static str,
+    context: &mut Context,
+) -> JsResult<String> {
+    let value = arguments.get_or_undefined(index);
+    if !value.is_string() {
+        return Err(JsError::from_rust(PluginFileError::InvalidArgument {
+            method,
+        }));
+    }
+    value
+        .to_string(context)?
+        .to_std_string()
+        .map_err(JsError::from_rust)
+}
+
 #[derive(Clone, Copy, Debug)]
 struct BoaLimits {
     max_source_bytes: usize,
@@ -140,6 +298,9 @@ struct BoaLimits {
     max_loop_iterations: u64,
     max_recursion_depth: usize,
     max_vm_stack_values: usize,
+    max_file_bytes: usize,
+    max_operation_file_bytes: usize,
+    max_operation_paths: usize,
 }
 
 impl Default for BoaLimits {
@@ -151,6 +312,9 @@ impl Default for BoaLimits {
             max_loop_iterations: MAX_LOOP_ITERATIONS,
             max_recursion_depth: MAX_RECURSION_DEPTH,
             max_vm_stack_values: MAX_VM_STACK_VALUES,
+            max_file_bytes: MAX_FILE_BYTES,
+            max_operation_file_bytes: MAX_OPERATION_FILE_BYTES,
+            max_operation_paths: MAX_OPERATION_PATHS,
         }
     }
 }
@@ -159,6 +323,7 @@ impl Default for BoaLimits {
 #[derive(Clone)]
 pub struct BoaPluginRuntime {
     http_client: Arc<dyn PluginHttpClient>,
+    file_client: Arc<dyn PluginFileClient>,
     limits: BoaLimits,
 }
 
@@ -181,8 +346,15 @@ impl BoaPluginRuntime {
     pub fn new(http_client: impl PluginHttpClient) -> Self {
         Self {
             http_client: Arc::new(http_client),
+            file_client: Arc::new(DenyPluginFileClient),
             limits: BoaLimits::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_file_client(mut self, file_client: impl PluginFileClient) -> Self {
+        self.file_client = Arc::new(file_client);
+        self
     }
 
     /// Loads and validates the named `metadata` export in a fresh Boa context.
@@ -198,6 +370,9 @@ impl BoaPluginRuntime {
         let metadata = serde_json::from_value::<PluginMetadataV1>(value)
             .map_err(PluginRuntimeError::MetadataDeserialization)?;
         metadata.validate()?;
+        for pattern in &metadata.read_patterns {
+            validate_pattern_path(pattern)?;
+        }
         Ok(metadata)
     }
 
@@ -229,8 +404,13 @@ impl BoaPluginRuntime {
         };
         let request_value = JsValue::from_json(&request_json, &mut context)
             .map_err(|error| PluginRuntimeError::RequestConversion(error.to_string()))?;
+        let host_value = self.file_host(&mut context)?;
         let result = entrypoint
-            .call(&JsValue::undefined(), &[request_value], &mut context)
+            .call(
+                &JsValue::undefined(),
+                &[request_value, host_value],
+                &mut context,
+            )
             .map_err(|error| PluginRuntimeError::EntrypointInvocation(error.to_string()))?;
         let result = JsPromise::resolve(result, &mut context)
             .await_blocking(&mut context)
@@ -251,6 +431,35 @@ impl BoaPluginRuntime {
             .map_err(PluginRuntimeError::ResponseDeserialization)?;
         response.validate_for(request, plugin)?;
         Ok(response)
+    }
+
+    fn file_host(&self, context: &mut Context) -> Result<JsValue, PluginRuntimeError> {
+        context.insert_data(BoaFileHost {
+            client: self.file_client.clone(),
+            budget: Arc::new(Mutex::new(PluginFileBudget::default())),
+            max_file_bytes: self.limits.max_file_bytes,
+            max_operation_file_bytes: self.limits.max_operation_file_bytes,
+            max_operation_paths: self.limits.max_operation_paths,
+        });
+        let host = ObjectInitializer::new(context)
+            .function(
+                NativeFunction::from_async_fn(boa_list_files),
+                js_string!("listFiles"),
+                1,
+            )
+            .function(
+                NativeFunction::from_async_fn(boa_read_text),
+                js_string!("readText"),
+                1,
+            )
+            .build();
+        let frozen = host
+            .set_integrity_level(IntegrityLevel::Frozen, context)
+            .map_err(|error| PluginRuntimeError::RuntimeInitialization(error.to_string()))?;
+        if !frozen {
+            return Err(PluginRuntimeError::HostInitialization);
+        }
+        Ok(host.into())
     }
 
     fn load_module(
@@ -299,6 +508,19 @@ impl BoaPluginRuntime {
         self.limits.max_loop_iterations = maximum;
         self
     }
+
+    #[cfg(test)]
+    fn with_file_limits(
+        mut self,
+        max_file_bytes: usize,
+        max_operation_file_bytes: usize,
+        max_operation_paths: usize,
+    ) -> Self {
+        self.limits.max_file_bytes = max_file_bytes;
+        self.limits.max_operation_file_bytes = max_operation_file_bytes;
+        self.limits.max_operation_paths = max_operation_paths;
+        self
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -311,6 +533,8 @@ pub enum PluginRuntimeError {
     ResponseTooLarge { actual: usize, maximum: usize },
     #[error("failed to initialize Boa plugin runtime: {0}")]
     RuntimeInitialization(String),
+    #[error("failed to freeze the Boa plugin capability host")]
+    HostInitialization,
     #[error("failed to parse plugin module: {0}")]
     ModuleParsing(String),
     #[error("failed to evaluate plugin module: {0}")]
@@ -343,6 +567,8 @@ pub enum PluginRuntimeError {
     ResponseDeserialization(#[source] serde_json::Error),
     #[error(transparent)]
     Protocol(#[from] PluginProtocolError),
+    #[error(transparent)]
+    FileCapability(#[from] PluginFileError),
 }
 
 #[cfg(test)]
@@ -461,6 +687,146 @@ mod tests {
                 })
             })
         }
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingFileClient {
+        paths: Vec<String>,
+        content: String,
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl PluginFileClient for RecordingFileClient {
+        fn list_files(
+            &self,
+            pattern: &str,
+        ) -> super::super::file::PluginFileFuture<'_, Vec<String>> {
+            let pattern = pattern.to_owned();
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(format!("list:{pattern}"));
+                Ok(self.paths.clone())
+            })
+        }
+
+        fn read_text(&self, path: &str) -> super::super::file::PluginFileFuture<'_, String> {
+            let path = path.to_owned();
+            Box::pin(async move {
+                self.calls.lock().unwrap().push(format!("read:{path}"));
+                Ok(self.content.clone())
+            })
+        }
+    }
+
+    #[test]
+    fn exposes_a_frozen_async_file_host_with_deterministic_listings() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let runtime = BoaPluginRuntime::default().with_file_client(RecordingFileClient {
+            paths: vec![
+                "packages/zeta/package.json".to_owned(),
+                "packages/alpha/package.json".to_owned(),
+                "packages/alpha/package.json".to_owned(),
+            ],
+            content: "alpha".to_owned(),
+            calls: calls.clone(),
+        });
+        let source = module_source(
+            r#"async function(request, host) {
+                if (!Object.isFrozen(host)) {
+                    throw new Error("host must be frozen");
+                }
+                const files = await host.listFiles("packages/**/package.json");
+                if (files.join(",") !== "packages/alpha/package.json,packages/zeta/package.json") {
+                    throw new Error(`unexpected files: ${files.join(",")}`);
+                }
+                const content = await host.readText(files[0]);
+                if (content !== "alpha") {
+                    throw new Error(`unexpected content: ${content}`);
+                }
+                return {
+                    "schema-version": request["schema-version"],
+                    diagnostics: [],
+                    status: "success",
+                    output: {
+                        operation: request.operation,
+                        output: { packages: [] }
+                    }
+                };
+            }"#,
+        );
+
+        runtime.execute(&source, &request(), &plugin_id()).unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec![
+                "list:packages/**/package.json".to_owned(),
+                "read:packages/alpha/package.json".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn file_access_is_denied_without_an_injected_backend() {
+        let source = module_source(
+            r#"async function(_request, host) {
+                await host.listFiles("packages/**/package.json");
+            }"#,
+        );
+
+        assert!(matches!(
+            BoaPluginRuntime::default().execute(&source, &request(), &plugin_id()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("file access is not configured")
+        ));
+    }
+
+    #[test]
+    fn validates_declared_read_patterns_while_loading_metadata() {
+        let source = module_source("function() {}").replace(
+            "operations: [\"discover\", \"inspect\", \"plan-edits\"]",
+            "operations: [\"discover\", \"inspect\", \"plan-edits\"],\n                \"read-patterns\": [\"../secret.txt\"]",
+        );
+
+        assert!(matches!(
+            BoaPluginRuntime::default().metadata(&source),
+            Err(PluginRuntimeError::FileCapability(
+                PluginFileError::InvalidPattern { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn enforces_cumulative_file_capability_budgets_per_operation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let runtime = BoaPluginRuntime::default()
+            .with_file_client(RecordingFileClient {
+                paths: vec!["alpha.json".to_owned(), "zeta.json".to_owned()],
+                content: "123456".to_owned(),
+                calls,
+            })
+            .with_file_limits(8, 10, 3);
+        let path_source = module_source(
+            r#"async function(_request, host) {
+                await host.listFiles("*.json");
+                await host.listFiles("*.json");
+            }"#,
+        );
+        let byte_source = module_source(
+            r#"async function(_request, host) {
+                await host.readText("alpha.json");
+                await host.readText("zeta.json");
+            }"#,
+        );
+
+        assert!(matches!(
+            runtime.execute(&path_source, &request(), &plugin_id()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("returned 4 paths") && message.contains("maximum is 3")
+        ));
+        assert!(matches!(
+            runtime.execute(&byte_source, &request(), &plugin_id()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("returned 12 bytes") && message.contains("maximum is 10")
+        ));
     }
 
     #[test]

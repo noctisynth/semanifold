@@ -477,16 +477,19 @@
 
 ### Host 与 adapter 集成
 
-- [ ] 实现脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
+- [ ] 实现 Boa 脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
+  - [x] 嵌入 Boa，以拒绝 import 的 loader 执行单文件 ESM，并支持同步或异步默认入口
+  - [ ] 注入受项目边界与预算约束的文件 capability
+  - [ ] 注入默认拒绝、按 HTTPS origin 授权且可替换 backend 的 `fetch` capability
 - [ ] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
-- [ ] 为插件提供显式文件读取 capability；禁止其直接写文件、运行发布命令、访问 registry 或 Forge
+- [ ] 禁止插件直接写文件、运行发布命令、取得 registry/Forge 宿主凭据或创建 Forge release
 - [ ] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
 - [ ] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID
 
 ### 阶段完成条件
 
 - [ ] 至少一个仓库外脚本插件完成单包、workspace、内部依赖和版本修改 fixture
-- [ ] 同一插件输入重复运行产生稳定结果，越界路径、非法 edit、超时和协议不兼容均返回结构化错误
+- [ ] 同一插件输入与 capability 响应记录重复运行产生稳定结果，越界路径、非法 edit、预算超限和协议不兼容均返回结构化错误
 - [ ] ecosystem 插件不改变 publish/pre-check/Forge 的既有应用层职责边界
 
 ## 最终验收

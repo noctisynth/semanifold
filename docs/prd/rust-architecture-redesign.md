@@ -1153,8 +1153,9 @@ resolver 职责。
 脚本插件不能直接实现 Rust trait；host 应提供稳定、带 schema version 的序列化协议，将插件调用
 映射为与 `EcosystemAdapter` 等价的 `discover`、`inspect` 和 `plan-edits` 能力。插件返回
 `PackageInspection`、依赖声明和候选 `FileEdit`，由 host 继续执行路径规范化、PackageId 唯一性、
-依赖图、文件 hash、冲突和项目根边界校验。插件不得直接写文件、运行发布命令、访问 registry 或
-创建 Forge release；publish hook、pre-check 与外部副作用仍由 engine 的既有端口统一编排。
+依赖图、文件 hash、冲突和项目根边界校验。插件不得直接写文件、运行发布命令、取得 registry 或
+Forge 的宿主凭据，也不得创建 Forge release；publish hook、pre-check 与这些特权外部副作用仍由
+engine 的既有端口统一编排。普通 HTTP 请求只能通过显式授权的网络 capability 发出。
 
 为支持动态生态，现有闭集 `Ecosystem` / `ResolverType` 最终需要引入稳定的动态
 `EcosystemId`，同时为四个内置生态保留固定 ID。插件注册、配置同步与 package 配置必须引用该
@@ -1173,19 +1174,36 @@ resolver 职责。
 开放为动态 ID。迁移期间遇到尚未注册 adapter 的动态 ID 必须返回明确错误，不能回退到任一内置
 resolver。
 
-插件输入必须是不可变快照，输出必须可序列化和确定性排序。同一输入重复执行应产生相同结果；
+插件输入必须是不可变快照，输出必须可序列化和确定性排序。在相同输入及相同 capability 响应记录
+下重复执行应产生相同结果；网络响应被视为显式外部输入，测试和重放必须使用可注入的 fetch backend。
 host 不信任插件返回的路径、文件内容或依赖关系，所有结果都必须经过与内置 adapter 相同的验证。
 
-首版插件运行时只支持 JavaScript，并通过嵌入式 QuickJS 执行单文件 ECMAScript module；不同时支持
-Lua，也不内置 TypeScript 转译。host 不安装通用 module loader，插件不能 import 其他文件或原生
-module。运行时使用最小 intrinsic 集合，不提供文件系统、网络、环境变量、子进程、时钟、随机数或
-动态 module API。插件只能调用 host 显式注入的 `listFiles` 与 `readText` 只读 capability；每次调用
-都要经过项目根目录、声明的 glob、符号链接、文件数量和字节预算校验，返回路径按字典序排序。
+首版插件运行时只支持 JavaScript，并通过纯 Rust 的嵌入式 Boa 执行单文件 ECMAScript module；不同时
+支持 Lua，也不在 Semifold CLI 内置 TypeScript 转译。host 使用拒绝所有 import 的 module loader，
+运行时产物必须是已经 bundle 的单文件 ESM，不能加载其他文件、远程 module 或原生 module。插件以
+命名导出的 `metadata` 对象声明身份和能力，以默认导出的同步或异步函数作为统一入口，接收
+schema-versioned request 并返回 response；协议 DTO 不得暴露 Boa 类型。读取 metadata 时网络始终
+禁用，避免注册表发现阶段产生外部副作用。
 
-首版限制固定而非可配置：插件源文件最大 1 MiB，单次 operation 最长 5 秒，QuickJS heap 最大
-64 MiB、stack 最大 512 KiB；单个读取文件最大 4 MiB、一次 operation 累计读取最大 32 MiB，最多
-返回 10,000 个路径。超时通过 QuickJS interrupt handler 中断，内存或栈超限、capability 越界与
-读取预算耗尽都转换为结构化插件诊断。host 不复用已超时、超限或抛出未捕获异常的 runtime。
+插件开发体验由独立发布到 npm 的 TypeScript SDK 提供。SDK 只包含协议类型、构造辅助函数和允许的
+host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用能力。后续配套 Vite 插件负责把
+插件编译为单文件 ESM，并在构建期拒绝残留 import、Node.js builtin、动态 module 加载以及 Semifold
+运行时不支持的 Web API；构建检查是开发反馈，不替代 host 的运行时校验。
+
+运行时不提供任意文件系统、环境变量或子进程访问。插件只能调用 host 显式注入的 `listFiles`、
+`readText` 与标准形态的 `fetch` capability。文件读取每次都要经过项目根目录、声明的 glob、符号链接、
+文件数量和字节预算校验，返回路径按字典序排序。网络默认拒绝；插件配置必须声明允许的 HTTPS origin，
+host 自定义 fetch backend 对初始 URL 和每次重定向执行协议、origin、解析后地址、超时、请求次数、
+并发数及请求/响应字节预算校验。插件不能读取 ambient credential；需要认证的值必须由未来独立的
+命名 secret capability 显式授权，首版不实现该能力。
+
+首版限制固定而非可配置：插件源文件最大 1 MiB，Boa 每次 operation 使用全新 Context，循环迭代上限
+为 10,000,000、递归深度上限为 256，并使用 Boa 的 VM stack limit；单个读取文件最大 4 MiB，一次
+operation 累计读取最大 32 MiB，最多返回 10,000 个路径。单个网络请求最长 10 秒、最多跟随 5 次
+重定向、响应体最大 8 MiB；一次 operation 最多 8 个请求且累计响应体最大 32 MiB。Boa 当前没有可与
+QuickJS heap limit 等价的硬内存上限，因此 host 还必须限制 request、response、诊断和所有 capability
+载荷大小；在允许未审查的第三方插件前，运行时必须迁移到独立进程以取得 wall-clock 与内存硬隔离。
+循环、递归、栈、capability 或载荷预算超限均转换为结构化插件诊断，host 不复用失败的 Context。
 
 首版只加载仓库内、相对项目根目录的单文件 `.js` 插件，不支持 URL、registry 或运行时下载。配置
 以稳定 `EcosystemId` 注册插件路径，并强制固定脚本内容的 SHA-256；加载前必须校验 digest，注册表
@@ -2402,9 +2420,10 @@ adapter 暴露旧 `ResolvedPackage`。
     若允许默认 HTTP，则只对旧 `url` 结构兼容，command pre-check 仍必须显式声明 `type`。
 12. GitHub Actions workflow output 的 key、版本化 JSON schema、启用方式、dry-run/失败路径语义
     和写入失败优先级。
-13. [已决定] ecosystem 插件首版只支持嵌入式 QuickJS 执行的单文件 JavaScript ESM；使用无 ambient
-    I/O 的最小运行时、显式只读文件 capability 和固定资源限制。插件只从仓库内路径加载并以
-    SHA-256 锁定，协议使用独立 schema version，首版 package version model 仅支持 SemVer。
+13. [已决定] ecosystem 插件首版只支持纯 Rust Boa 执行的单文件 JavaScript ESM；使用无 ambient
+    文件/进程 I/O 的最小运行时、显式只读文件与受控 `fetch` capability 和固定资源限制。插件只从
+    仓库内路径加载并以 SHA-256 锁定，协议使用独立 schema version，首版 package version model
+    仅支持 SemVer。TypeScript SDK 与 Vite 构建检查作为独立 npm 工具提供，不进入 CLI 运行时。
 
 ### 19.1 低优先级优化：首次发布状态
 

@@ -1,6 +1,7 @@
 # Semifold 架构重构 TODO
 
-> 详细设计见 [Rust 架构重设计方案](docs/prd/rust-architecture-redesign.md)。
+> Rust 详细设计见 [Rust 架构重设计方案](docs/prd/rust-architecture-redesign.md)，文档站详细设计见
+> [文档体验重构方案](docs/prd/documentation-redesign.md)。
 
 ## 总体目标
 
@@ -560,3 +561,38 @@
 - [x] command pre-check 实现固定 JSON Lines stdin/stdout 契约，并在 dry-run 中照常执行
 - [x] 旧 HTTP pre-check 缺少 `type` 时继续严格解析，并由严格 `Project` 加载前执行的
   `config migrate` 补充 `type = "http"`
+
+## 文档体验重构
+
+### 事实与治理
+
+- [x] 审计最新 tag、当前 main、待发布 changeset 与未完成能力
+- [x] 记录当前 CLI、配置、plugin、MCP、CI/publish 能力与验证状态
+- [x] 建立独立文档重构 PRD，并从 Rust PRD 委托文档站范围
+- [x] 建立已发布、下一版本与计划中内容的 availability 规则和展示组件
+
+### Fumadocs 纵向切片
+
+- [x] 使用 Next.js、Fumadocs Core/UI/MDX 与 Tailwind 4 替换 Rspress
+- [x] 建立英文无前缀、中文 `/zh` 的显式静态路由
+- [x] 实现静态 ZBSearch、`llms.txt` 与 `llms-full.txt`
+- [x] 完成首页、Introduction、First Release 与 CLI reference 样例
+- [x] 验证 GitHub Pages deep link、404、移动端与双语搜索
+
+### 内容重写
+
+- [ ] 重写 getting started 与完整 release workflow
+- [ ] 补齐 workspace、四个内置 ecosystem 与跨生态依赖
+- [ ] 补齐 configuration、release channel、changelog template 与 publish pre-check
+- [ ] 重写 GitHub Actions、workflow outputs 与当前 MCP changeset CRUD
+- [ ] 为已实现 plugin runtime/SDK 编写下一版本文档，并明确 Vite plugin 尚未完成
+- [ ] 同步完成英文与中文内容，不依赖 fallback
+
+### 质量与迁移
+
+- [ ] 增加 `docs:check`、链接、locale parity、CLI drift 与示例 fixture 检查
+- [x] 建立旧 URL inventory 与静态 redirect pages
+- [x] 将部署产物切换为 `docs/out`，部署前运行当前 docs checks
+- [ ] 删除 Rspress 专用依赖、配置、组件与旧内容
+- [ ] 创建并验证 `@semifold/docs` changeset
+- [ ] 运行 production build、静态 direct-route smoke test 与 `smif status`

@@ -7,6 +7,10 @@
 node_modules
 dist/
 doc_build/
+.next/
+.source/
+out/
+*.tsbuildinfo
 
 # IDE
 .vscode/*

@@ -3,16 +3,29 @@
   "version": "1.1.0-beta.0",
   "private": true,
   "scripts": {
-    "build": "rspress build",
-    "dev": "rspress dev",
-    "preview": "rspress preview"
+    "build": "next build --webpack",
+    "check": "pnpm run typecheck && node scripts/check-locales.mjs && pnpm run build && node scripts/check-static-output.mjs",
+    "dev": "next dev",
+    "generate": "node scripts/generate-source.mjs",
+    "preview": "serve out --listen 4173",
+    "typecheck": "pnpm generate && tsc --noEmit"
   },
   "devDependencies": {
-    "@rsbuild/plugin-svgr": "^1.2.2",
-    "@tailwindcss/postcss": "^4.1.17",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdx": "^2.0.14",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.4",
-    "rspress": "^1.46.1",
-    "tailwindcss": "^4.1.17"
+    "@types/react-dom": "^19.2.4",
+    "serve": "^14.2.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "fumadocs-core": "^16.14.2",
+    "fumadocs-mdx": "^15.2.2",
+    "fumadocs-ui": "^16.14.2",
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }

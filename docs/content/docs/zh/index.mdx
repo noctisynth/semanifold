@@ -1,0 +1,49 @@
+---
+title: 文档
+description: 先理解 Semifold 的发布模型，再完成第一个确定性的 release plan。
+---
+
+<Availability status="released">
+  <strong>已发布基线：Semifold 0.3.0-rc.5。</strong>本文档中的默认路径只描述该版本已经提供的能力；仅存在于 `main` 的功能会单独标注。
+</Availability>
+
+Semifold 面向同时包含 Rust、Node.js、Python、C++ 或多种 ecosystem 的仓库。它负责发现 package、计算 changeset，并让每个命令对待发布工作形成确定且一致的理解。
+
+## 发布模型
+
+```text
+代码变更
+  -> changeset
+  -> 不可变 release plan（`smif status`）
+  -> 版本修改与 release pull request
+  -> 按依赖排序的 publish plan
+  -> registry / Forge 报告
+```
+
+Changeset 记录的是**发布意图**：哪些 PackageId 发生了变化、版本应该如何提升，以及 changelog 应包含什么。`smif status` 会把全部待处理意图和依赖规则转换成 release plan，让你在修改任何版本文件之前完成检查。
+
+`smif version` 应用同一个 release plan。之后，`smif publish` 根据 workspace 中已经写入的版本和 changelog，生成一个独立、按依赖排序的 publish plan。
+
+## 选择你的路径
+
+<Cards>
+  <Card title="完成第一次发布" href="/zh/docs/getting-started/first-release/">
+    初始化一个 Rust 仓库、创建 changeset、检查计划，并安全地运行 version 与 publish。
+  </Card>
+  <Card title="理解 Semifold" href="/zh/docs/introduction/">
+    理解 PackageId、ecosystem discovery、changeset、release plan 与 publish plan 的边界。
+  </Card>
+  <Card title="查询命令" href="/zh/docs/reference/cli/">
+    快速查看当前公开的 CLI 命令与所有命令共享的选项。
+  </Card>
+</Cards>
+
+## 最先需要掌握的五件事
+
+1. **PackageId** 是 Semifold 配置中的稳定标识，可能与发布到 registry 的名称不同。
+2. Changeset tag 只负责 changelog 分类，不负责选择 release channel。
+3. 只要输入没有变化，`status` 预览的计划就是 `version` 将要应用的计划。
+4. Manifest 内部依赖和显式 `depends-on` 具有不同的传播规则。
+5. Publish 按依赖顺序执行，并分别报告 succeeded、skipped、failed 与 not-started package。
+
+第一次运行前，不需要配置所有 resolver、模板、pre-check 或 release channel。先从一个 ecosystem 和一个 changeset 开始，再有意识地扩展 workspace。

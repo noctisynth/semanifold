@@ -33,12 +33,12 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Install dependencies
         run: pnpm install
-      - name: Build with Rspress
-        run: pnpm docs:build
+      - name: Check and build with Fumadocs
+        run: pnpm docs:check
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: docs/doc_build
+          path: docs/out
 
   deploy:
     environment:

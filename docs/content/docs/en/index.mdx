@@ -1,0 +1,49 @@
+---
+title: Documentation
+description: Start with Semifold's release model, then complete your first deterministic release plan.
+---
+
+<Availability status="released">
+  <strong>Released baseline: Semifold 0.3.0-rc.5.</strong> The default paths in this documentation describe capabilities available in that release. Features present only on `main` are labelled separately.
+</Availability>
+
+Semifold is a release manager for repositories that contain Rust, Node.js, Python, C++, or a mixture of those ecosystems. It discovers packages, evaluates changesets, and gives every command a deterministic view of the work to be released.
+
+## The release model
+
+```text
+code change
+  -> changeset
+  -> immutable release plan (`smif status`)
+  -> version edits and release pull request
+  -> dependency-ordered publish plan
+  -> registry / Forge report
+```
+
+A changeset records **release intent**: which PackageIds changed, how their versions should move, and what belongs in the changelog. `smif status` turns all pending intent and dependency rules into a release plan you can inspect before any version file is modified.
+
+`smif version` applies that same release plan. `smif publish` then reads the versions and changelogs already written to the workspace and builds a separate, dependency-ordered publish plan.
+
+## Choose a path
+
+<Cards>
+  <Card title="Make your first release" href="/docs/getting-started/first-release/">
+    Initialize a Rust repository, create a changeset, inspect the plan, and run version and publish safely.
+  </Card>
+  <Card title="Understand Semifold" href="/docs/introduction/">
+    Learn the boundaries between PackageId, ecosystem discovery, changesets, release plans, and publish plans.
+  </Card>
+  <Card title="Look up a command" href="/docs/reference/cli/">
+    Scan the current public CLI surface and the options shared by every command.
+  </Card>
+</Cards>
+
+## What to learn first
+
+1. A **PackageId** is Semifold's stable configuration identity. It can differ from the name published to a registry.
+2. A changeset tag groups changelog entries; it does not select a release channel.
+3. `status` previews the exact plan that `version` applies, provided the inputs have not changed.
+4. Internal manifest dependencies and explicit `depends-on` relationships have different propagation rules.
+5. Publishing is ordered by dependencies and reports succeeded, skipped, failed, and not-started packages separately.
+
+You do not need to configure every resolver, template, pre-check, or release channel before the first useful run. Begin with one ecosystem and one changeset, then expand the workspace deliberately.

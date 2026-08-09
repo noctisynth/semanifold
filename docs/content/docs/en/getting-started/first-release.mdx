@@ -1,0 +1,178 @@
+---
+title: Make your first release
+description: Initialize a Rust repository, record one change, inspect the release plan, and run version and publish with explicit safety checks.
+---
+
+By the end of this tutorial, you will have a Semifold configuration, a changeset, a reviewed release plan, versioned package files, and a publish command you can run with the correct registry credentials.
+
+<Availability status="released">
+  This tutorial targets **Semifold 0.3.0-rc.5** and uses its fully non-interactive CLI path.
+</Availability>
+
+## Before you begin
+
+Use a Git repository whose default branch is `main` and which contains at least one Rust package with a valid `Cargo.toml`. Begin with a clean worktree so the version diff is easy to review.
+
+You also need permission to add `.changes/` and GitHub workflow files. Registry credentials are only required for the final publish step.
+
+## 1. Install and verify Semifold
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+  </Tab>
+</Tabs>
+
+Start a new shell if the installer changed your `PATH`, then verify the released binary:
+
+```bash
+smif --version
+```
+
+<ExpectedOutput>
+
+```text
+semifold 0.3.0-rc.5
+```
+
+</ExpectedOutput>
+
+`semifold` is the equivalent long executable name. The documentation uses `smif` consistently.
+
+## 2. Initialize the repository
+
+Run this command from the repository root:
+
+```bash
+smif init --resolvers rust \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+```
+
+The arguments make every decision explicit, so the command does not need an interactive terminal.
+
+<ExpectedOutput title="Files created">
+
+<Files>
+  <Folder name=".changes" defaultOpen>
+    <File name="config.toml" />
+  </Folder>
+  <Folder name=".github" defaultOpen>
+    <Folder name="workflows" defaultOpen>
+      <File name="semifold-ci.yaml" />
+      <File name="semifold-status.yaml" />
+    </Folder>
+  </Folder>
+</Files>
+
+</ExpectedOutput>
+
+Open `.changes/config.toml` and confirm that every discovered package has the intended PackageId and path. The PackageId is the key under `[packages]`; use that key in the next command.
+
+If the repository already has a Semifold config and packages have changed, use `smif config sync` instead of re-running `init --force`.
+
+## 3. Record one release intent
+
+Make a small user-visible code change. Then create a changeset, replacing `my-package` with the PackageId from your config:
+
+```bash
+smif commit \
+  --name add-api \
+  --package my-package=minor \
+  --tag feat \
+  --summary "Add the public API."
+```
+
+This creates `.changes/add-api.md` without prompting:
+
+```md
+---
+my-package: "minor:feat"
+---
+
+Add the public API.
+```
+
+`minor` requests the version bump. `feat` selects the changelog section; it does not select a release channel.
+
+## 4. Inspect the immutable release plan
+
+```bash
+smif status
+```
+
+<ExpectedOutput title="What to verify in the status report">
+
+- The plan fingerprint is present.
+- `my-package` has the expected current and next version.
+- The reason points to the `add-api` changeset.
+- Any additional package has an understandable dependency-propagation reason.
+- The final summary reports a successful plan rather than an applied release.
+
+</ExpectedOutput>
+
+Stop here if the package set, bump level, or reason is wrong. Edit the changeset or config and run `smif status` again. Do not compensate for a wrong plan by manually editing package versions.
+
+## 5. Preview and apply version edits
+
+First ask Semifold to prepare the same release without writing its normal versioning side effects:
+
+```bash
+smif version --dry-run
+```
+
+Review the listed file edits and post-version commands. A global dry-run may still execute a command that your config explicitly marks `dry-run = true`; such a command must itself be safe for preview use.
+
+When the preview is correct, apply it:
+
+```bash
+smif version
+```
+
+<ExpectedOutput title="Version result">
+
+Semifold updates the package version and eligible internal dependency requirements, writes the changelog, runs configured post-version work, and consumes the applied changeset. The final table shows the versions actually written.
+
+</ExpectedOutput>
+
+Review the Git diff and test the workspace. Commit these generated files to the `release` branch or let the generated GitHub Actions workflow maintain the release pull request.
+
+## 6. Preview and publish
+
+After the version changes are merged into the branch from which you publish, configure the registry credentials required by your ecosystem. Then run:
+
+```bash
+smif publish --dry-run
+```
+
+This validates the publish plan and performs read-only registry preflight. It does not publish packages or create a Forge release. As with versioning, commands explicitly configured for dry-run may execute.
+
+If the order, versions, preflight, and command arguments are correct, publish:
+
+```bash
+smif publish
+```
+
+Packages run in dependency order. The report distinguishes successful registry work, intentional skips, failures, and packages that were not started. In CI, add `--github-release` when you also want the configured GitHub Releases and assets.
+
+## If something fails
+
+- **Package not found:** use the PackageId from `.changes/config.toml`, not an assumed registry name.
+- **Dirty worktree:** review or commit unrelated files. Use `--allow-dirty` only when that exact diff is intentional.
+- **Registry version already exists:** Semifold skips the registry command for that version. With GitHub Release enabled, it can still create a missing release; an existing release does not cause asset recovery.
+- **Partial publish:** use the final report to separate succeeded, failed, and not-started packages. Correct the failing credential, pre-check, or command, then re-run; do not republish packages already recorded as present.
+
+You have now completed the core Semifold loop: changeset → status → version → publish. The next useful step is to place `smif status` in pull requests and let the generated workflows maintain the release branch.

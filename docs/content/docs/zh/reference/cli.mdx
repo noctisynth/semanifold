@@ -1,0 +1,89 @@
+---
+title: CLI 参考
+description: Semifold 0.3.0-rc.5 的公开命令面与全局执行选项。
+---
+
+安装后的 binary 名称为 `smif`，`semifold` 是等价的完整名称。运行 `smif <command> --help` 可以查看某个命令接受的全部选项。
+
+<Availability status="released">
+  本参考样例已经对照 **Semifold 0.3.0-rc.5** 的公开命令面检查。
+</Availability>
+
+## 语法
+
+```text
+smif [OPTIONS] [COMMAND]
+```
+
+## 命令
+
+| 命令 | 用途 | 默认产生副作用 |
+| --- | --- | --- |
+| `commit`（`add`） | 根据选中的 package、bump level、tag 与 summary paragraph 创建一份 changeset。 | 是 |
+| `init` | 发现 package 并初始化 `.changes/config.toml`；可以同时生成 GitHub Actions workflow。 | 是 |
+| `config` | 迁移配置，或把当前发现的 package 同步到已有配置。 | 取决于 subcommand |
+| `status` | 计算并展示待处理 release plan。 | 否 |
+| `version` | 计算、准备并应用 package version、dependency、changelog 与 changeset 修改。 | 是 |
+| `publish` | 生成并执行按依赖排序的 publish plan。 | 是 |
+| `ci` | 运行 Semifold 的 version 或 publish CI 编排。 | 是 |
+| `mcp` | 启动 Model Context Protocol server。 | 取决于 tool |
+
+## 全局选项
+
+| 选项 | 含义 |
+| --- | --- |
+| `--dry-run` | 启用预览执行。Semifold 的文件、registry 与 Forge 修改会被跳过；只读 registry preflight，以及配置 `dry-run = true` 的命令仍可能运行。 |
+| `--debug` | 显示额外诊断信息。敏感配置值不属于公开 debug 输出契约。 |
+| `-h`、`--help` | 输出当前命令层级的帮助。 |
+| `-V`、`--version` | 输出 Semifold binary version。 |
+
+## 常用非交互调用
+
+### 初始化一种 ecosystem
+
+```bash
+smif init --resolvers rust \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+```
+
+如果明确选择对应的空行为，使用 `--no-resolvers`、`--no-default-tags` 或 `--no-github-actions`。已经初始化的 workspace 新增或删除 package 时，应使用 `config sync`。
+
+### 创建 changeset
+
+```bash
+smif commit \
+  --name add-api \
+  --package my-package=minor \
+  --tag feat \
+  --summary "Add the public API."
+```
+
+`--package PACKAGE=LEVEL` 与 `--summary` 都可以重复传入。Package 没有内联 `=LEVEL` 时，由 `--level` 提供默认值。完整非交互命令需要在 `--tag TAG` 与 `--no-tag` 中明确选择一个。
+
+### 检查并执行 version
+
+```bash
+smif status
+smif version --dry-run
+smif version
+```
+
+Worktree 不干净时，`version` 默认拒绝执行；只有显式传入 `--allow-dirty` 才会继续。该选项表示接受当前 diff 作为输入，并不是处理无关修改的通用手段。
+
+### 预览并发布
+
+```bash
+smif publish --dry-run
+smif publish
+```
+
+`publish --allow-dirty` 允许从不干净的 worktree 发布。`publish --github-release` 按配置创建每个 package 的 GitHub Release，并且只能在 CI 环境使用。
+
+## Exit 与输出行为
+
+人类可读输出会适配 TTY、CI、Unicode 与 `NO_COLOR`。非 TTY 输出保持稳定，不包含光标控制序列。Publish 失败会返回非零 exit status，同时保留包含 succeeded、skipped、failed 与 not-started package 的结构化报告。
+
+GitHub Actions workflow 可以选择接收 `version` 与 `publish` 的版本化结构化 output。这些 output 直接从命令使用的 release context、publish plan 与 publish report 派生，而不是事后重新推断。

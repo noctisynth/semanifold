@@ -1,0 +1,66 @@
+---
+title: 介绍
+description: 理解 Semifold 负责什么、计划如何生成，以及 ecosystem 特有行为从哪里开始和结束。
+---
+
+Semifold 将**发布决策**与**发布副作用**分开：先计算应该发生什么，并把结果展示为 plan；只有执行明确的命令后，才会应用文件或网络变更。
+
+这对混合 workspace 尤其重要。Cargo、npm、Python packaging 与 C++ 项目并不共享 manifest 格式或发布命令，但它们仍需要统一回答：“哪些 package 要发布、顺序是什么、原因是什么？”
+
+## 工作流中的五个对象
+
+### PackageId
+
+PackageId 是 `.changes/config.toml` 与 changeset 使用的稳定 key。Ecosystem adapter 会发现 package 的 manifest name、version、dependency 与候选修改，但 Semifold 不会悄悄用 registry name 替换你配置的身份。
+
+### Ecosystem adapter
+
+Adapter 负责 ecosystem 特有的 discovery、inspection 与 edit planning。内置 adapter 覆盖 Rust、Node.js、Python 与 C++。发布凭据、Forge 操作和发布编排仍位于 adapter 边界之外。
+
+### Changeset
+
+Changeset 是 `.changes/` 下的一份小型 Markdown 文件。Front matter 把 PackageId 映射到 bump level 和可选 changelog tag，正文则解释面向用户的变化。
+
+```md
+---
+my-package: "minor:feat"
+---
+
+Add the public API.
+```
+
+`feat` 选择 changelog section，并不表示“发布到 feature channel”。Stable 或 named channel 是单独配置的 package 发布状态。
+
+### Release plan
+
+`smif status` 把 changeset、当前 package version、依赖约束、显式关系与 release-channel 状态合并为不可变 plan。每个计划中的 bump 都带有原因，reviewer 可以区分直接 changeset 与依赖传播产生的发布。
+
+`smif version` 使用同一条规划路径。如果你检查 status 后 workspace 输入又发生变化，请重新运行 status，不要假定旧 plan 仍然有效。
+
+### Publish plan
+
+Publish 从 version 完成后已经存在的版本与 changelog 出发。Plan 校验 pre-check 和命令，按 workspace graph 排序 package，并分别记录 registry 与 Forge 结果。因此，部分失败会明确给出 succeeded、failed 与 not-started 事实，而不是只有一个含糊的错误。
+
+## Semifold 会修改什么
+
+Version 阶段可能修改 package version、内部依赖约束、changelog、由 post-version 命令维护的 lockfile，以及待处理 changeset。所有文件修改都会先完成规划与校验，再写入磁盘。
+
+Publish 阶段可能运行配置的 registry 命令；在 CI 中明确要求时，还可以创建 GitHub Release 并上传声明的 asset。`--dry-run` 会跳过有副作用的发布操作，但仍允许只读 registry preflight，以及显式配置 `dry-run = true` 的命令。
+
+## 已发布、下一版本与计划中能力
+
+<Availability status="released">
+  <strong>已发布：</strong>四种内置 ecosystem、确定性 release/publish plan、config sync/migration、release channel、模板、强类型 pre-check、GitHub Release、workflow output，以及非交互 init/commit 路径。
+</Availability>
+
+<Availability status="next">
+  <strong>已经合入 <code>main</code>、等待下一版本：</strong>仓库内 JavaScript ecosystem plugin、Boa 单文件 ESM runtime、受限 read/fetch capability、TypeScript plugin SDK，以及 MCP changeset CRUD。
+</Availability>
+
+<Availability status="planned">
+  <strong>尚未实现：</strong>生成单文件 ESM bundle 并检查不受支持 runtime capability 的配套 Vite plugin。现在不要依赖不存在的 Semifold Vite package 或命令。
+</Availability>
+
+## 下一步
+
+按照[完成第一次发布](/zh/docs/getting-started/first-release/)把这套模型转化为一条完整、可审查的工作流。教程只使用 `0.3.0-rc.5` 已发布的能力。

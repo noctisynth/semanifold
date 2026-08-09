@@ -1,0 +1,178 @@
+---
+title: 完成第一次发布
+description: 初始化 Rust 仓库、记录一次变更、检查 release plan，并在明确的安全检查下运行 version 与 publish。
+---
+
+完成本教程后，你会得到 Semifold 配置、一份 changeset、经过检查的 release plan、已经完成版本修改的 package 文件，以及一条可以在凭据就绪后执行的 publish 命令。
+
+<Availability status="released">
+  本教程面向 **Semifold 0.3.0-rc.5**，使用该版本完整的非交互 CLI 路径。
+</Availability>
+
+## 开始之前
+
+准备一个默认分支为 `main` 的 Git 仓库，其中至少包含一个具有有效 `Cargo.toml` 的 Rust package。请从干净的 worktree 开始，便于审查 version diff。
+
+你还需要新增 `.changes/` 与 GitHub workflow 文件的权限。只有最后的 publish 步骤需要 registry 凭据。
+
+## 1. 安装并验证 Semifold
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | sh
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+irm https://semifold.noctisynth.org/install/install.ps1 | iex
+```
+
+  </Tab>
+</Tabs>
+
+如果 installer 修改了 `PATH`，请打开一个新 shell，然后确认已发布 binary：
+
+```bash
+smif --version
+```
+
+<ExpectedOutput title="预期输出">
+
+```text
+semifold 0.3.0-rc.5
+```
+
+</ExpectedOutput>
+
+`semifold` 是等价的完整 executable name。本文档统一使用 `smif`。
+
+## 2. 初始化仓库
+
+在 repository root 运行：
+
+```bash
+smif init --resolvers rust \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+```
+
+所有决策都通过参数明确给出，因此命令不需要交互终端。
+
+<ExpectedOutput title="创建的文件">
+
+<Files>
+  <Folder name=".changes" defaultOpen>
+    <File name="config.toml" />
+  </Folder>
+  <Folder name=".github" defaultOpen>
+    <Folder name="workflows" defaultOpen>
+      <File name="semifold-ci.yaml" />
+      <File name="semifold-status.yaml" />
+    </Folder>
+  </Folder>
+</Files>
+
+</ExpectedOutput>
+
+打开 `.changes/config.toml`，确认发现的每个 package 都具有预期的 PackageId 与 path。PackageId 是 `[packages]` 下的 key；下一条命令需要使用这个 key。
+
+如果仓库已经存在 Semifold 配置，而 package 发生了变化，请使用 `smif config sync`，不要重复执行 `init --force`。
+
+## 3. 记录一项发布意图
+
+完成一个小型、面向用户的代码变更，然后创建 changeset。把 `my-package` 替换为配置中的 PackageId：
+
+```bash
+smif commit \
+  --name add-api \
+  --package my-package=minor \
+  --tag feat \
+  --summary "Add the public API."
+```
+
+命令不会发起交互，而是直接创建 `.changes/add-api.md`：
+
+```md
+---
+my-package: "minor:feat"
+---
+
+Add the public API.
+```
+
+`minor` 请求版本提升；`feat` 选择 changelog section，并不选择 release channel。
+
+## 4. 检查不可变 release plan
+
+```bash
+smif status
+```
+
+<ExpectedOutput title="需要在 status 报告中确认的内容">
+
+- 报告包含 plan fingerprint；
+- `my-package` 的当前版本与下一版本符合预期；
+- 原因指向 `add-api` changeset；
+- 额外出现的 package 都有可以解释的依赖传播原因；
+- 最终摘要表示 plan 生成成功，而不是已经应用发布。
+
+</ExpectedOutput>
+
+如果 package 集合、bump level 或原因不正确，请在这里停止。修改 changeset 或配置后重新运行 `smif status`。不要通过手工修改 package version 来补偿错误的 plan。
+
+## 5. 预览并应用版本修改
+
+先让 Semifold 准备同一个 release，但不写入正常的 version 副作用：
+
+```bash
+smif version --dry-run
+```
+
+检查列出的文件修改与 post-version 命令。全局 dry-run 仍可能执行配置中显式标记 `dry-run = true` 的命令；这类命令本身必须适合安全预览。
+
+确认预览正确后，应用计划：
+
+```bash
+smif version
+```
+
+<ExpectedOutput title="Version 结果">
+
+Semifold 修改 package version 与符合条件的内部依赖约束，写入 changelog，运行配置的 post-version 工作，并消费已经应用的 changeset。最终表格展示实际写入的版本。
+
+</ExpectedOutput>
+
+检查 Git diff 并测试 workspace。把生成的文件提交到 `release` 分支，或者让生成的 GitHub Actions workflow 维护 release pull request。
+
+## 6. 预览并发布
+
+Version 变更合入用于发布的分支后，配置 ecosystem 所需的 registry 凭据，然后运行：
+
+```bash
+smif publish --dry-run
+```
+
+该命令校验 publish plan，并执行只读 registry preflight；它不会发布 package 或创建 Forge release。与 version 相同，显式配置为 dry-run 的命令仍可能执行。
+
+确认顺序、版本、preflight 与命令参数正确后，执行发布：
+
+```bash
+smif publish
+```
+
+Package 按依赖顺序运行。报告会区分 registry 成功、主动跳过、失败与未开始的 package。在 CI 中，如果还需要创建配置的 GitHub Release 与 asset，请加入 `--github-release`。
+
+## 发生失败时
+
+- **找不到 package：**使用 `.changes/config.toml` 中的 PackageId，而不是猜测的 registry name。
+- **Worktree 不干净：**检查或提交无关文件。只有确认当前 diff 正是预期输入时，才使用 `--allow-dirty`。
+- **Registry version 已存在：**Semifold 会跳过该版本的 registry 命令。启用 GitHub Release 后，它仍可补建缺失 release；已经存在的 release 不会触发 asset 恢复。
+- **部分 publish 失败：**根据最终报告区分 succeeded、failed 与 not-started package。修正失败的凭据、pre-check 或命令后重试；不要再次发布已经确认存在的 package。
+
+至此，你已经走完 Semifold 的核心循环：changeset → status → version → publish。下一步可以在 pull request 中运行 `smif status`，并让生成的 workflow 维护 release branch。

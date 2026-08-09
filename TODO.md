@@ -438,6 +438,7 @@
 
 - [x] `status` 展示计划 fingerprint、bump、原因和明确完成摘要
 - [x] 优化 `status` GitHub PR comment，并为空计划解释合入后的未发布版本发布行为
+- [x] 让 `status` comment 的计划 commit SHA 使用 GitHub 可自动链接的裸文本
 - [x] 通过 GitHub PR Files API 检测并展示当前分支引入或变更的 changeset
 - [x] `version` 展示 plan/prepare/validate/apply/post-version/changeset 消费阶段与最终版本表
 - [x] `publish` 展示 preflight、命令、Forge、asset 与 succeeded/skipped/failed/not-started 摘要

@@ -433,6 +433,8 @@ mod tests {
         });
 
         assert!(body.starts_with(COMMENT_MARKER));
+        assert!(body.contains("Plan calculated through commit abc123."));
+        assert!(!body.contains("`abc123`"));
         assert!(body.contains("> [!NOTE]"));
         assert!(body.contains("`main`"));
         assert!(!body.contains("| --- |"));

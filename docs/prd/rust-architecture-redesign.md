@@ -775,6 +775,8 @@ PR 引入的 changeset 必须通过 GitHub PR Files API 相对 base 检测，不
 checkout；`.changes` 或 `.changesets` 根目录中非 removed 的 Markdown 文件视为当前 PR 引入或变更的
 changeset，并处理全部分页。comment 必须单独列出这些 changeset，空状态以该集合为空为准，不能将
 base 已有的 changeset 错误归因给当前 PR；全量 `ReleasePlan` 仍是版本表的事实来源。
+comment 中标识计划计算位置的完整 commit SHA 必须以裸文本输出，不使用反引号包裹，使 GitHub
+能够自动将其渲染为缩写且可点击的 commit 链接。
 
 #### CLI 参数与交互契约
 

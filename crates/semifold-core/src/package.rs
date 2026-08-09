@@ -37,7 +37,7 @@ pub struct EcosystemId(Cow<'static, str>);
 impl EcosystemId {
     pub const MAX_LENGTH: usize = 128;
     pub const RUST: Self = Self(Cow::Borrowed("rust"));
-    pub const NODE: Self = Self(Cow::Borrowed("node"));
+    pub const NODE: Self = Self(Cow::Borrowed("nodejs"));
     pub const PYTHON: Self = Self(Cow::Borrowed("python"));
     pub const CPP: Self = Self(Cow::Borrowed("cpp"));
 
@@ -71,14 +71,14 @@ impl EcosystemId {
 
     #[must_use]
     pub fn is_builtin(&self) -> bool {
-        matches!(self.as_str(), "rust" | "node" | "python" | "cpp")
+        matches!(self.as_str(), "rust" | "nodejs" | "python" | "cpp")
     }
 
     #[must_use]
     pub fn display_name(&self) -> &str {
         match self.as_str() {
             "rust" => "Rust",
-            "node" => "Node",
+            "nodejs" => "Node.js",
             "python" => "Python",
             "cpp" => "Cpp",
             _ => self.as_str(),
@@ -109,7 +109,7 @@ impl PartialOrd for EcosystemId {
 fn ecosystem_sort_key(ecosystem: &EcosystemId) -> u8 {
     match ecosystem.as_str() {
         "rust" => 0,
-        "node" => 1,
+        "nodejs" => 1,
         "python" => 2,
         "cpp" => 3,
         _ => 4,
@@ -267,10 +267,10 @@ mod tests {
     }
 
     #[test]
-    fn built_in_ecosystems_keep_their_existing_serialized_ids() {
+    fn built_in_ecosystems_use_config_aligned_serialized_ids() {
         let cases = [
             (Ecosystem::RUST, "rust"),
-            (Ecosystem::NODE, "node"),
+            (Ecosystem::NODE, "nodejs"),
             (Ecosystem::PYTHON, "python"),
             (Ecosystem::CPP, "cpp"),
         ];
@@ -308,7 +308,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 "rust",
-                "node",
+                "nodejs",
                 "python",
                 "cpp",
                 "com.example.alpha",

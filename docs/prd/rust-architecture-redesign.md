@@ -1218,7 +1218,7 @@ QuickJS heap limit 等价的硬内存上限，因此 host 还必须限制 reques
 
 首版只加载仓库内、相对项目根目录的单文件 `.js` 插件，不支持 URL、registry 或运行时下载。配置
 以稳定 `EcosystemId` 注册插件路径，并强制固定脚本内容的 SHA-256；加载前必须校验 digest，注册表
-按 `EcosystemId` 排序并拒绝重复 ID 或覆盖 `rust`、`node`、`python`、`cpp` 四个内置 ID。
+按 `EcosystemId` 排序并拒绝重复 ID 或覆盖 `rust`、`nodejs`、`python`、`cpp` 四个内置 ID。
 `EcosystemId` 使用小写 ASCII 点分段，每段以字母开头、以字母或数字结尾，中间允许数字与连字符；
 最长 128 字节。插件元数据包含 SemVer plugin version，
 但可执行内容以 digest 为最终锁定事实。首版 package version model 仅支持 SemVer，与现有

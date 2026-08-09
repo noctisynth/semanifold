@@ -77,7 +77,7 @@ impl ResolverRegistry {
     fn resolver_type(ecosystem: &EcosystemId) -> Option<ResolverType> {
         match ecosystem.as_str() {
             "rust" => Some(ResolverType::Rust),
-            "node" => Some(ResolverType::Nodejs),
+            "nodejs" => Some(ResolverType::Nodejs),
             "python" => Some(ResolverType::Python),
             "cpp" => Some(ResolverType::Cpp),
             _ => None,

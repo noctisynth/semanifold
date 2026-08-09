@@ -36,6 +36,7 @@ impl PackageDiscovery {
             let config = PackageConfig {
                 path: PathBuf::from(package.path.as_str()),
                 resolver: package.ecosystem.clone(),
+                publish: None,
                 channel: ReleaseChannel::Stable,
                 channel_bump: None,
                 assets: vec![],

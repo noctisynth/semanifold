@@ -41,6 +41,7 @@ impl NodejsResolver {
         PackageConfig {
             path: path.into(),
             resolver: EcosystemId::NODE,
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -419,6 +420,7 @@ impl NodejsResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: EcosystemId::NODE,
+                    publish: None,
                     channel: ReleaseChannel::Stable,
                     channel_bump: None,
                     assets: vec![],
@@ -435,6 +437,7 @@ impl NodejsResolver {
             &PackageConfig {
                 path: ".".into(),
                 resolver: EcosystemId::NODE,
+                publish: None,
                 channel: ReleaseChannel::Stable,
                 channel_bump: None,
                 assets: vec![],
@@ -471,6 +474,7 @@ impl NodejsResolver {
                         &PackageConfig {
                             path: rel_path,
                             resolver: EcosystemId::NODE,
+                            publish: None,
                             channel: ReleaseChannel::Stable,
                             channel_bump: None,
                             assets: vec![],
@@ -520,6 +524,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Nodejs.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

@@ -306,6 +306,8 @@
 - [x] 缺失 `CHANGELOG.md` 的 package 以 `MissingChangelog` 跳过全部发布流程
 - [x] 增加 package 级 `github-release` 三态策略；保持 public/private 缺省行为，并允许显式控制
   private package 的 GitHub Release 与 asset upload
+- [x] 增加 package 级可选 `publish` 覆盖；缺省沿用 manifest/plugin 发布标识，显式值覆盖
+  registry preflight 与发布命令资格，并由 config sync 保留
 
 ### 外部能力
 

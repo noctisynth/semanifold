@@ -49,6 +49,7 @@ fix = "问题修复"
 [packages.web]
 path = "packages/web"
 resolver = "nodejs"
+publish = false
 channel = "rc"
 channel-bump = "minor"
 depends-on = ["native-core"]
@@ -63,6 +64,7 @@ assets = [
 | --- | --- | --- | --- |
 | `path` | 路径 | 必需 | 相对于仓库根目录的软件包路径。 |
 | `resolver` | 软件生态 ID | 必需 | 该软件包使用的内置适配器或已注册插件。 |
+| `publish` | 布尔值 | 清单或插件发现结果 | 是否让 Semifold 对该软件包执行 registry pre-check 与发布命令。缺省时不写入配置。 |
 | `channel` | 字符串 | `stable` | 稳定通道，或 `rc`、`beta` 等命名发布通道。 |
 | `channel-bump` | `preserve`、`patch`、`minor` 或 `major` | 无 | 下一次进入命名通道时使用的一次性稳定基线提升方式。 |
 | `depends-on` | `PackageId` 数组 | `[]` | 清单文件无法表达的补充内部依赖关系。 |
@@ -70,6 +72,10 @@ assets = [
 | `assets` | 字符串或 `{ path, name }` 数组 | `[]` | 上传到该软件包 GitHub Release 的文件或 glob。 |
 
 旧的 `version-mode` 字段仍可读取，以便完成配置迁移。新配置应使用 `channel`。
+
+`publish` 是生态无关的显式覆盖。`publish = false` 可以阻止 Python、C++ 或内部工具进入软件包仓库流程；`publish = true` 可以覆盖 Rust `publish = false`、Node.js `private: true` 或插件返回的私有标识。覆盖只改变 Semifold 的有效发布资格，不会改写原生清单，也不会绕过 `cargo publish`、`npm publish` 等工具自身的限制。
+
+缺省的 `github-release` 策略基于覆盖后的有效发布资格：可发布软件包默认创建，私有软件包默认不创建。显式 `github-release = true` 或 `false` 仍可以单独覆盖代码托管平台行为。
 
 ## `[plugins.<ecosystem-id>]`
 

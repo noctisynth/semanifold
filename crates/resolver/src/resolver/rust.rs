@@ -71,6 +71,7 @@ impl RustResolver {
         PackageConfig {
             path: path.into(),
             resolver: EcosystemId::RUST,
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -607,6 +608,7 @@ impl RustResolver {
                 &PackageConfig {
                     path: ".".into(),
                     resolver: EcosystemId::RUST,
+                    publish: None,
                     channel: ReleaseChannel::Stable,
                     channel_bump: None,
                     assets: vec![],
@@ -655,6 +657,7 @@ impl RustResolver {
                     &PackageConfig {
                         path: rel_path.to_path_buf(),
                         resolver: EcosystemId::RUST,
+                        publish: None,
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: vec![],
@@ -707,6 +710,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Rust.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

@@ -243,6 +243,7 @@ name = "all"
 # retain this comment and every manual field
 path = "crates/app"
 resolver = "rust"
+publish = false
 channel = "stable"
 assets = ["README.md"]
 github-release = true
@@ -315,6 +316,7 @@ custom = "preserved"
         assert!(rendered.contains("[packages.renamed-package]"));
         assert!(rendered.contains("# retain this comment and every manual field"));
         assert!(rendered.contains("channel = \"stable\""));
+        assert!(rendered.contains("publish = false"));
         assert!(rendered.contains("assets = [\"README.md\"]"));
         assert!(rendered.contains("github-release = true"));
         assert!(rendered.contains("depends-on = [\"core\"]"));
@@ -327,7 +329,10 @@ custom = "preserved"
             "[packages.keep]\npath = \"crates/keep\"\nresolver = \"rust\"\ncustom = \"preserved\""
         ));
         assert!(!rendered.contains("[packages.old-name]"));
-        assert_eq!(editor.validate().unwrap().packages.len(), 4);
+        let validated = editor.validate().unwrap();
+        assert_eq!(validated.packages.len(), 4);
+        assert_eq!(validated.packages["renamed-package"].publish, Some(false));
+        assert_eq!(validated.packages["new-package"].publish, None);
 
         fs::remove_file(path).unwrap();
     }

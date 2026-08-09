@@ -54,7 +54,7 @@ CMake 适配器当前只接受稳定数字版本，因此不支持 `alpha`、`be
 
 ## 发布
 
-CMake 描述构建图，不规定统一的软件包仓库。Semifold 因而把检查、构建、上传和发布行为留在 `[resolver.cpp]` 的命令配置中，并在统一发布计划中按依赖顺序运行。
+CMake 描述构建图，不规定统一的软件包仓库，因此内置发现缺省把 C++ 软件包视为可发布。不需要 registry 流程的软件包应显式配置 `publish = false`。Semifold 把检查、构建、上传和发布行为留在 `[resolver.cpp]` 的命令配置中，并在统一发布计划中按依赖顺序运行。
 
 使用 `smif publish --dry-run` 检查将运行的预检与命令。命令在软件包目录中执行；复杂的 CMake 配置、打包或 registry 客户端逻辑应放在仓库脚本中，而不是依赖 shell 操作符写进 `args`。
 

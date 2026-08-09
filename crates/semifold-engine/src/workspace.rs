@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug)]
 struct ConfiguredInspection {
     package: PackageInspection,
+    publishable: bool,
     explicit_dependencies: Vec<PackageId>,
 }
 
@@ -51,6 +52,7 @@ pub(crate) fn load_workspace_graph_with_registry(
                 path,
             })?;
         resolved.push(ConfiguredInspection {
+            publishable: package_config.effective_publishable(inspection.publishable),
             package: inspection,
             explicit_dependencies: package_config.depends_on.clone(),
         });
@@ -114,7 +116,7 @@ fn workspace_graph_from_inspections(
                 version_source: resolved.package.version_source,
                 ecosystem: resolved.package.ecosystem,
                 path,
-                publishable: resolved.package.publishable,
+                publishable: resolved.publishable,
                 dependencies,
             })
         })
@@ -199,6 +201,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: resolver.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -333,6 +336,47 @@ mod tests {
                 .dependencies[0]
                 .package,
             PackageId::new("cpp-core")
+        );
+    }
+
+    #[test]
+    fn package_publish_override_wins_over_manifest_publishability() {
+        let root = TemporaryRoot::new();
+        root.write(
+            "node/private/package.json",
+            r#"{"name":"private-node","version":"1.0.0","private":true}"#,
+        );
+        root.write(
+            "python/public/pyproject.toml",
+            "[project]\nname = \"public-python\"\nversion = \"1.0.0\"\n",
+        );
+
+        let mut forced_public = package("node/private", ResolverType::Nodejs);
+        forced_public.publish = Some(true);
+        let mut forced_private = package("python/public", ResolverType::Python);
+        forced_private.publish = Some(false);
+        let config = Config {
+            branches: BranchesConfig {
+                base: "main".to_string(),
+                release: "release".to_string(),
+            },
+            tags: BTreeMap::new(),
+            changelog: Default::default(),
+            packages: BTreeMap::from([
+                ("node".to_string(), forced_public),
+                ("python".to_string(), forced_private),
+            ]),
+            plugins: BTreeMap::new(),
+            resolver: BTreeMap::new(),
+        };
+
+        let graph = load_workspace_graph(&root.0, &config).unwrap();
+        assert!(graph.package(&PackageId::new("node")).unwrap().publishable);
+        assert!(
+            !graph
+                .package(&PackageId::new("python"))
+                .unwrap()
+                .publishable
         );
     }
 

@@ -219,6 +219,13 @@ manifest 依赖，工作区加载必须失败。manifest 依赖始终按 `(Ecosy
 `DependencySource` 区分生态 manifest 推导的依赖与 `depends-on` 配置补充的依赖。两者都参与同一个
 `WorkspaceGraph`；同一 package 同时通过两种来源指向同一目标时，图边去重，但配置来源的发布传播语义仍必须保留。
 
+ecosystem adapter 返回的 `publishable` 表示从原生 manifest 推导出的缺省发布资格，例如 Rust
+`publish = false` 与 Node.js `private = true`。`PackageConfig` 增加可选布尔字段 `publish`：缺省时不写入
+配置，并沿用 adapter 结果；显式 `true` 或 `false` 时覆盖 adapter 结果，得到进入
+`PackageSnapshot.publishable` 的有效值。该覆盖只控制 Semifold 是否执行 registry preflight 与配置的
+发布命令，不修改原生 manifest；强制设为 `true` 时，用户仍需保证原生发布工具和自定义命令接受当前
+manifest。`config sync` 必须保留已有覆盖，新发现的软件包保持 `publish = None`。
+
 ### 6.2 `WorkspaceGraph`
 
 ```rust
@@ -506,8 +513,13 @@ repository/CI 事实。首版继续按确定性拓扑顺序检查当前配置中
 集合。private package 只跳过 registry preflight 与发布命令，不作为 package 级 skip reason；
 它是否创建 GitHub Release 由 package 发布策略独立决定。
 
+这里的 public/private 判断使用 package 的有效 `publishable`：`packages.<PackageId>.publish` 显式值
+优先于 ecosystem adapter 从 manifest 推导的缺省值。`publish = false` 因而可以让 Python、C++、插件
+生态或任意内部工具跳过 registry 流程；`publish = true` 则允许 Semifold 对原生 manifest 标记为
+private 的 package 执行配置的 preflight 与发布命令，但不负责改写或绕过原生工具自身的发布限制。
+
 `PackageConfig` 新增可选的 kebab-case 字段 `github-release`。该字段缺省时保持兼容策略：
-publishable package 默认创建 GitHub Release，private package 默认不创建；显式 `true` 允许任意
+有效 publishable package 默认创建 GitHub Release，private package 默认不创建；显式 `true` 允许任意
 package 创建，显式 `false` 禁止任意 package 创建。最终行为同时受运行入口的全局开关约束：
 `PublishOptions.create_forge_release = false` 始终禁止创建，不能被 package 配置覆盖。
 

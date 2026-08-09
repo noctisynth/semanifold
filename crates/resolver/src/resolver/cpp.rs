@@ -27,6 +27,7 @@ impl CppResolver {
         PackageConfig {
             path: path.into(),
             resolver: EcosystemId::CPP,
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -479,6 +480,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Cpp.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

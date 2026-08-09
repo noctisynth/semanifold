@@ -11,7 +11,7 @@ Rust 内置适配器读取和修改 `Cargo.toml`，支持单个 Cargo 软件包�
 
 每个软件包的 Cargo package name 是清单名称。初始化时它可作为 `PackageId` 建议，但已有配置中的 ID 才是变更集和依赖图使用的稳定身份。
 
-`publish = false` 表示不向 crates.io 或其他软件包仓库发布。私有 crate 仍参与版本计算、共享版本组、文件修改和依赖排序。
+Cargo 的 `publish = false` 默认表示不向 crates.io 或其他软件包仓库发布。软件包配置中的可选 `publish` 可以覆盖 Semifold 使用的有效资格；`publish = true` 不会删除 Cargo 字段，因此默认的 `cargo publish` 仍可能拒绝执行。私有 crate 仍参与版本计算、共享版本组、文件修改和依赖排序。
 
 ## 依赖识别
 

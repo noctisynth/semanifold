@@ -16,7 +16,7 @@ Semifold 从项目根读取以下工作区声明：
 
 清单中的 `name` 是依赖匹配使用的名称。显式 `version` 必须是有效语义化版本；缺少 `version` 的模板软件包暂时按 `0.0.0` 读取，并在第一次版本修改时写入目标版本。
 
-`private: true` 表示不执行 registry 发布，但软件包仍参与版本计划、依赖排序和文件修改。
+`private: true` 默认表示不执行 registry 发布，但软件包配置中的可选 `publish` 可以覆盖 Semifold 使用的有效资格。`publish = true` 不会删除 `package.json` 中的 `private`，因此默认的 `npm publish` 仍可能拒绝执行。私有软件包仍参与版本计划、依赖排序和文件修改。
 
 ## 依赖识别
 

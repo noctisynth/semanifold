@@ -151,6 +151,7 @@ impl PythonResolver {
         PackageConfig {
             path: path.into(),
             resolver: EcosystemId::PYTHON,
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -893,6 +894,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Python.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

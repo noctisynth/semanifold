@@ -16,6 +16,8 @@ Every discovered package provides at least:
 
 `smif init` uses these facts to create the initial `[packages]` configuration. `smif config sync` compares existing configuration with the latest discovery result. An adapter does not decide repository-wide versions, write files directly, run publish commands, or access GitHub.
 
+Discovered publishability is the default. Package configuration may override it with optional `publish = true` or `publish = false`; when omitted, Semifold keeps the marker inferred by Rust, Node.js, or a plugin. This override controls Semifold's registry flow only and does not edit the manifest.
+
 ## Built-in discovery boundaries
 
 | Ecosystem | Primary manifest or version source | Discovery entry point | Complete rules |

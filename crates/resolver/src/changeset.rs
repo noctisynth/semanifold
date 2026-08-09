@@ -292,6 +292,7 @@ mod tests {
                     PackageConfig {
                         path: PathBuf::from(name),
                         resolver: ResolverType::Rust.into(),
+                        publish: None,
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: vec![],

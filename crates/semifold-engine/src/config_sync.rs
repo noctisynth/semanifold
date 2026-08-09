@@ -211,6 +211,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: resolver.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

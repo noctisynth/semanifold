@@ -116,6 +116,9 @@ pub struct PackageConfig {
     pub path: PathBuf,
     /// Resolver type to use.
     pub resolver: EcosystemId,
+    /// Optional override for manifest- or plugin-derived publishability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publish: Option<bool>,
     /// Release channel to use. Stable is the default and is omitted when saved.
     #[serde(default, skip_serializing_if = "ReleaseChannel::is_stable")]
     pub channel: ReleaseChannel,
@@ -138,6 +141,8 @@ pub struct PackageConfig {
 struct PackageConfigInput {
     path: PathBuf,
     resolver: EcosystemId,
+    #[serde(default)]
+    publish: Option<bool>,
     #[serde(default)]
     channel: Option<ReleaseChannel>,
     #[serde(default)]
@@ -165,6 +170,7 @@ impl<'de> Deserialize<'de> for PackageConfig {
         Ok(Self {
             path: input.path,
             resolver: input.resolver,
+            publish: input.publish,
             channel,
             channel_bump: input.channel_bump,
             assets: input.assets,
@@ -175,6 +181,11 @@ impl<'de> Deserialize<'de> for PackageConfig {
 }
 
 impl PackageConfig {
+    #[must_use]
+    pub fn effective_publishable(&self, adapter_publishable: bool) -> bool {
+        self.publish.unwrap_or(adapter_publishable)
+    }
+
     #[must_use]
     pub fn github_release_enabled(&self, publishable: bool) -> bool {
         self.github_release.unwrap_or(publishable)
@@ -635,6 +646,50 @@ github-release = false
         let rendered = toml_edit::ser::to_string(&enabled).unwrap();
         assert!(rendered.contains("github-release = true"));
         assert!(!rendered.contains("github_release"));
+    }
+
+    #[test]
+    fn publish_policy_is_optional_and_round_trips_explicit_overrides() {
+        let default: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "python"
+"#,
+        )
+        .unwrap();
+        assert_eq!(default.publish, None);
+        let rendered = toml_edit::ser::to_string(&default).unwrap();
+        assert!(!rendered.contains("publish ="));
+
+        let enabled: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "rust"
+publish = true
+"#,
+        )
+        .unwrap();
+        assert_eq!(enabled.publish, Some(true));
+        assert!(
+            toml_edit::ser::to_string(&enabled)
+                .unwrap()
+                .contains("publish = true")
+        );
+
+        let disabled: PackageConfig = toml_edit::de::from_str(
+            r#"
+path = "."
+resolver = "python"
+publish = false
+"#,
+        )
+        .unwrap();
+        assert_eq!(disabled.publish, Some(false));
+        assert!(
+            toml_edit::ser::to_string(&disabled)
+                .unwrap()
+                .contains("publish = false")
+        );
     }
 
     #[test]

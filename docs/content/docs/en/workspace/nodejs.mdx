@@ -16,7 +16,7 @@ In workspace mode, the root `package.json` is also inspected and discovered as a
 
 The manifest `name` is used for dependency matching. An explicit `version` must be valid semver. A template package with no `version` is read as `0.0.0`, and its first version operation inserts the target version.
 
-`private: true` disables registry publishing while the package continues to participate in version plans, dependency ordering, and file edits.
+`private: true` disables registry publishing by default, but optional package configuration `publish` can override the effective eligibility used by Semifold. `publish = true` does not remove `private` from `package.json`, so the default `npm publish` command may still reject it. A private package continues to participate in version plans, dependency ordering, and file edits.
 
 ## Dependency inspection
 

@@ -9,7 +9,7 @@ description: Maintain .changes/config.toml after packages are added, moved, or r
 smif config sync
 ```
 
-Synchronization edits TOML while preserving formatting. Existing comments, field order, blank lines, publish commands, assets, channels, and `depends-on` values remain intact. Repeating the command with the same input produces no further diff.
+Synchronization edits TOML while preserving formatting. Existing comments, field order, blank lines, `publish` overrides, publish commands, assets, channels, and `depends-on` values remain intact. Newly discovered packages do not receive an automatic `publish` field. Repeating the command with the same input produces no further diff.
 
 ## Default synchronization behavior
 

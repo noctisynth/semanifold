@@ -16,7 +16,7 @@ When generated GitHub Actions are enabled, merging the prepared release pull req
 
 Semifold inspects current manifests and changelogs, orders packages through the workspace graph, expands configured commands, and performs every available registry pre-check before starting publish commands. Missing changelogs, versions already present, and package policy become explicit skip reasons.
 
-A private package skips registry preflight and publish commands only. It does not create a GitHub Release by default; with explicit `github-release = true` and `--github-release`, Semifold still creates its Release and uploads assets. The final status is a private-package skip only when no Forge work remains.
+A private package skips registry preflight and publish commands only. Effective private status uses package-level `publish` first and falls back to manifest or plugin discovery when it is omitted. A private package does not create a GitHub Release by default; with explicit `github-release = true` and `--github-release`, Semifold still creates its Release and uploads assets. The final status is a private-package skip only when no Forge work remains.
 
 HTTP checks treat `200` as existing and `404` as missing; unexpected status codes fail safely. Command checks use the configured JSON Lines contract.
 

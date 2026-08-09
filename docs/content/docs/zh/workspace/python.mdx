@@ -68,4 +68,4 @@ Python 版本只支持这些命名通道映射：
 
 实际的软件包仓库检查与发布命令来自 `[resolver.python]`，不由 Python 适配器直接执行。发布前先用 `smif publish --dry-run` 验证当前版本和预检。
 
-当前内置 Python 发现不会从项目元数据推断“私有软件包”，发现的软件包都会被视为可发布。请只把真正需要进入发布流程的 Python 项目保留在配置中；如果自定义格式带有私有标记，应由插件在发现结果中明确返回。GitHub Release 是否创建仍由软件包级 `github-release` 策略独立控制。
+当前内置 Python 发现不会从项目元数据推断“私有软件包”，发现的软件包缺省都会被视为可发布。不需要进入软件包仓库流程时，在对应 `[packages.<PackageId>]` 中显式设置 `publish = false`。GitHub Release 是否创建仍由软件包级 `github-release` 策略独立控制。

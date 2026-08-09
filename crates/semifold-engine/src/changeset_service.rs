@@ -514,6 +514,7 @@ mod tests {
                     PackageConfig {
                         path: "app".into(),
                         resolver: ResolverType::Rust.into(),
+                        publish: None,
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: Vec::new(),

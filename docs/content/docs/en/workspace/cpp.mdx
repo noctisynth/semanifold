@@ -54,7 +54,7 @@ The current CMake adapter accepts stable numeric versions only. Named channels s
 
 ## Publishing
 
-CMake describes a build graph but does not define one registry. Semifold therefore keeps checks, builds, uploads, and publish behavior in `[resolver.cpp]` command configuration and runs it in dependency order through the unified publish plan.
+CMake describes a build graph but does not define one registry, so built-in discovery treats C++ packages as publishable by default. Set `publish = false` explicitly for a package that should not enter the registry flow. Semifold keeps checks, builds, uploads, and publish behavior in `[resolver.cpp]` command configuration and runs it in dependency order through the unified publish plan.
 
 Use `smif publish --dry-run` to inspect preflight and command behavior. Commands run in the package directory. Put compound CMake configuration, packaging, or registry-client logic in a repository script instead of placing shell operators in `args`.
 

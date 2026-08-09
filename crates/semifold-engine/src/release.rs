@@ -305,6 +305,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Rust.into(),
+            publish: None,
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -317,6 +318,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Python.into(),
+            publish: None,
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -329,6 +331,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Nodejs.into(),
+            publish: None,
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

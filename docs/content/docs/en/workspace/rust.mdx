@@ -11,7 +11,7 @@ When the project-root `Cargo.toml` contains `[workspace]`, Semifold expands `wor
 
 The Cargo package name is its manifest name. It may seed a `PackageId` during initialization, but the ID in existing configuration is the stable identity used by changesets and graph edges.
 
-`publish = false` marks a crate as unavailable for registry publishing. A private crate still participates in version calculation, shared-version groups, file edits, and dependency ordering.
+Cargo `publish = false` makes a crate unavailable for registry publishing by default. Optional package configuration `publish` can override the effective eligibility used by Semifold. `publish = true` does not remove the Cargo field, so the default `cargo publish` command may still reject it. A private crate continues to participate in version calculation, shared-version groups, file edits, and dependency ordering.
 
 ## Dependency inspection
 

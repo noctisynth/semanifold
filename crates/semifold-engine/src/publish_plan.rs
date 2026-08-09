@@ -488,6 +488,7 @@ mod tests {
         PackageConfig {
             path: path.into(),
             resolver: ResolverType::Rust.into(),
+            publish: None,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -780,6 +781,29 @@ mod tests {
         .expect("Private package default publish plan must be created");
         assert!(default_plan.packages[0].context.package.private);
         assert!(default_plan.packages[0].forge.is_none());
+
+        config
+            .packages
+            .get_mut("core")
+            .expect("core package configuration must exist")
+            .publish = Some(true);
+        let forced_publish_plan = plan_publish(
+            &root,
+            &config,
+            &PublishOptions {
+                create_forge_release: true,
+                repository: Some(repository.clone()),
+            },
+        )
+        .await
+        .expect("Explicit publish override must affect the publish plan");
+        assert!(!forced_publish_plan.packages[0].context.package.private);
+        assert!(forced_publish_plan.packages[0].forge.is_some());
+        config
+            .packages
+            .get_mut("core")
+            .expect("core package configuration must exist")
+            .publish = None;
 
         config
             .packages

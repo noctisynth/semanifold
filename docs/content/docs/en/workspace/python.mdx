@@ -68,4 +68,4 @@ Other named channels cannot produce a supported Python version and fail planning
 
 Registry pre-checks and publish commands come from `[resolver.python]`; the Python adapter does not execute them directly. Use `smif publish --dry-run` to validate the current version and preflight before publishing.
 
-Built-in Python discovery does not currently infer a private-package marker from project metadata; every discovered Python package is treated as publishable. Keep only Python projects that should enter the release flow in configuration. A custom format with a private marker should return that fact from its plugin. Package-level `github-release` still controls GitHub Release behavior independently.
+Built-in Python discovery does not currently infer a private-package marker from project metadata; every discovered Python package is publishable by default. Set `publish = false` in the corresponding `[packages.<PackageId>]` when it should not enter the registry flow. Package-level `github-release` still controls GitHub Release behavior independently.

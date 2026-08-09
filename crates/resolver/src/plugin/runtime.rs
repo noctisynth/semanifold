@@ -1,7 +1,6 @@
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -21,6 +20,13 @@ use super::file::{
     DenyPluginFileClient, MAX_FILE_BYTES, MAX_OPERATION_FILE_BYTES, MAX_OPERATION_PATHS,
     PluginFileClient, PluginFileError, matches_pattern, validate_file_path, validate_pattern_path,
 };
+#[cfg(test)]
+use super::http::PluginHttpFuture;
+use super::http::{
+    BudgetedPluginHttpClient, BudgetedPluginHttpTransport, DenyPluginHttpClient, PluginHttpClient,
+    PluginHttpLimits, PluginHttpOrigin, PluginHttpRequest, PluginHttpResponse, PluginHttpTransport,
+    ScopedPluginHttpClient,
+};
 use super::protocol::{PluginMetadataV1, PluginProtocolError, PluginRequestV1, PluginResponseV1};
 
 pub(crate) const MAX_SOURCE_BYTES: usize = 1024 * 1024;
@@ -30,69 +36,33 @@ const MAX_LOOP_ITERATIONS: u64 = 10_000_000;
 const MAX_RECURSION_DEPTH: usize = 256;
 const MAX_VM_STACK_VALUES: usize = 10_240;
 
-/// Runtime-neutral request passed to the Semifold-controlled HTTP backend.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PluginHttpRequest {
-    pub method: String,
-    pub url: String,
-    pub headers: Vec<(String, Vec<u8>)>,
-    pub body: Vec<u8>,
-}
-
-/// Runtime-neutral response returned by the Semifold-controlled HTTP backend.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PluginHttpResponse {
-    pub url: String,
-    pub status: u16,
-    pub headers: Vec<(String, Vec<u8>)>,
-    pub body: Vec<u8>,
-}
-
-/// Error returned by a plugin HTTP backend without exposing its implementation type to Boa.
-#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("{message}")]
-pub struct PluginHttpError {
-    message: String,
-}
-
-pub type PluginHttpFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<PluginHttpResponse, PluginHttpError>> + Send + 'a>>;
-
-impl PluginHttpError {
-    #[must_use]
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-/// Host-controlled network capability used by JavaScript `fetch`.
-///
-/// Implementations are responsible for enforcing allowed origins, redirects, address ranges,
-/// timeouts and byte/request budgets before returning a response.
-pub trait PluginHttpClient: fmt::Debug + Send + Sync + 'static {
-    fn send(&self, request: PluginHttpRequest) -> PluginHttpFuture<'_>;
-}
-
-/// Default network capability. Plugins cannot access the network unless the host injects a client.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct DenyPluginHttpClient;
-
-impl PluginHttpClient for DenyPluginHttpClient {
-    fn send(&self, _request: PluginHttpRequest) -> PluginHttpFuture<'_> {
-        Box::pin(async {
-            Err(PluginHttpError::new(
-                "plugin network access is not configured",
-            ))
-        })
-    }
-}
-
 #[derive(Clone, Trace, Finalize, JsData)]
 struct BoaFetcher {
     #[unsafe_ignore_trace]
     client: Arc<dyn PluginHttpClient>,
+}
+
+#[derive(Clone)]
+enum BoaHttpBackend {
+    Client(Arc<dyn PluginHttpClient>),
+    Transport {
+        allowed_origins: BTreeSet<PluginHttpOrigin>,
+        transport: Arc<dyn PluginHttpTransport>,
+    },
+}
+
+impl fmt::Debug for BoaHttpBackend {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Client(_) => formatter.write_str("BoaHttpBackend::Client(..)"),
+            Self::Transport {
+                allowed_origins, ..
+            } => formatter
+                .debug_struct("BoaHttpBackend::Transport")
+                .field("allowed_origins", allowed_origins)
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 impl fmt::Debug for BoaFetcher {
@@ -301,6 +271,7 @@ struct BoaLimits {
     max_file_bytes: usize,
     max_operation_file_bytes: usize,
     max_operation_paths: usize,
+    http: PluginHttpLimits,
 }
 
 impl Default for BoaLimits {
@@ -315,6 +286,7 @@ impl Default for BoaLimits {
             max_file_bytes: MAX_FILE_BYTES,
             max_operation_file_bytes: MAX_OPERATION_FILE_BYTES,
             max_operation_paths: MAX_OPERATION_PATHS,
+            http: PluginHttpLimits::default(),
         }
     }
 }
@@ -322,7 +294,7 @@ impl Default for BoaLimits {
 /// Embedded Boa host for the schema-versioned Semifold plugin protocol.
 #[derive(Clone)]
 pub struct BoaPluginRuntime {
-    http_client: Arc<dyn PluginHttpClient>,
+    http_backend: BoaHttpBackend,
     file_client: Arc<dyn PluginFileClient>,
     limits: BoaLimits,
 }
@@ -345,7 +317,7 @@ impl BoaPluginRuntime {
     #[must_use]
     pub fn new(http_client: impl PluginHttpClient) -> Self {
         Self {
-            http_client: Arc::new(http_client),
+            http_backend: BoaHttpBackend::Client(Arc::new(http_client)),
             file_client: Arc::new(DenyPluginFileClient),
             limits: BoaLimits::default(),
         }
@@ -354,6 +326,36 @@ impl BoaPluginRuntime {
     #[must_use]
     pub fn with_file_client(mut self, file_client: impl PluginFileClient) -> Self {
         self.file_client = Arc::new(file_client);
+        self
+    }
+
+    #[must_use]
+    pub fn with_http_transport(
+        mut self,
+        allowed_origins: impl IntoIterator<Item = PluginHttpOrigin>,
+        transport: impl PluginHttpTransport,
+    ) -> Self {
+        self.http_backend = BoaHttpBackend::Transport {
+            allowed_origins: allowed_origins.into_iter().collect(),
+            transport: Arc::new(transport),
+        };
+        self
+    }
+
+    pub(crate) fn with_shared_http_transport(
+        mut self,
+        allowed_origins: BTreeSet<PluginHttpOrigin>,
+        transport: Arc<dyn PluginHttpTransport>,
+    ) -> Self {
+        self.http_backend = BoaHttpBackend::Transport {
+            allowed_origins,
+            transport,
+        };
+        self
+    }
+
+    pub(crate) fn with_shared_http_client(mut self, client: Arc<dyn PluginHttpClient>) -> Self {
+        self.http_backend = BoaHttpBackend::Client(client);
         self
     }
 
@@ -395,7 +397,7 @@ impl BoaPluginRuntime {
             });
         }
 
-        let (mut context, module) = self.load_module(source, self.http_client.clone())?;
+        let (mut context, module) = self.load_module(source, self.operation_http_client())?;
         let entrypoint = module
             .get_value(js_string!("default"), &mut context)
             .map_err(|error| PluginRuntimeError::MissingEntrypoint(error.to_string()))?;
@@ -462,6 +464,27 @@ impl BoaPluginRuntime {
         Ok(host.into())
     }
 
+    fn operation_http_client(&self) -> Arc<dyn PluginHttpClient> {
+        match &self.http_backend {
+            BoaHttpBackend::Client(client) => Arc::new(BudgetedPluginHttpClient::new(
+                client.clone(),
+                self.limits.http,
+            )),
+            BoaHttpBackend::Transport {
+                allowed_origins,
+                transport,
+            } => {
+                let transport: Arc<dyn PluginHttpTransport> = Arc::new(
+                    BudgetedPluginHttpTransport::new(transport.clone(), self.limits.http),
+                );
+                Arc::new(ScopedPluginHttpClient::from_shared(
+                    allowed_origins.clone(),
+                    transport,
+                ))
+            }
+        }
+    }
+
     fn load_module(
         &self,
         source: &str,
@@ -519,6 +542,12 @@ impl BoaPluginRuntime {
         self.limits.max_file_bytes = max_file_bytes;
         self.limits.max_operation_file_bytes = max_operation_file_bytes;
         self.limits.max_operation_paths = max_operation_paths;
+        self
+    }
+
+    #[cfg(test)]
+    fn with_http_limits(mut self, limits: PluginHttpLimits) -> Self {
+        self.limits.http = limits;
         self
     }
 }
@@ -668,6 +697,34 @@ mod tests {
 
     impl PluginHttpClient for RecordingHttpClient {
         fn send(&self, request: PluginHttpRequest) -> PluginHttpFuture<'_> {
+            Box::pin(async move {
+                self.requests.lock().unwrap().push(request.clone());
+                let response = json!({
+                    "schema-version": 1,
+                    "diagnostics": [],
+                    "status": "success",
+                    "output": {
+                        "operation": "discover",
+                        "output": { "packages": [] }
+                    }
+                });
+                Ok(PluginHttpResponse {
+                    url: request.url,
+                    status: 200,
+                    headers: vec![("content-type".to_owned(), b"application/json".to_vec())],
+                    body: serde_json::to_vec(&response).unwrap(),
+                })
+            })
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct RecordingHttpTransport {
+        requests: Arc<Mutex<Vec<PluginHttpRequest>>>,
+    }
+
+    impl PluginHttpTransport for RecordingHttpTransport {
+        fn send_once(&self, request: PluginHttpRequest) -> PluginHttpFuture<'_> {
             Box::pin(async move {
                 self.requests.lock().unwrap().push(request.clone());
                 let response = json!({
@@ -866,6 +923,77 @@ mod tests {
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].url, "https://api.example.test/plugin");
+    }
+
+    #[test]
+    fn routes_fetch_through_scoped_origins_and_denies_unlisted_targets() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let runtime = BoaPluginRuntime::default().with_http_transport(
+            [PluginHttpOrigin::parse("https://api.example.test").unwrap()],
+            RecordingHttpTransport {
+                requests: requests.clone(),
+            },
+        );
+        let allowed_source = module_source(
+            r#"async function() {
+                const response = await fetch("https://api.example.test/plugin");
+                return await response.json();
+            }"#,
+        );
+        let blocked_source = module_source(
+            r#"async function() {
+                await fetch("https://blocked.example.test/plugin");
+            }"#,
+        );
+
+        runtime
+            .execute(&allowed_source, &request(), &plugin_id())
+            .unwrap();
+        assert!(matches!(
+            runtime.execute(&blocked_source, &request(), &plugin_id()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("origin is not allowed")
+        ));
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].url, "https://api.example.test/plugin");
+    }
+
+    #[test]
+    fn applies_fresh_http_request_budgets_to_each_operation() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let limits = PluginHttpLimits {
+            max_operation_requests: 1,
+            ..PluginHttpLimits::default()
+        };
+        let runtime = BoaPluginRuntime::new(RecordingHttpClient {
+            requests: requests.clone(),
+        })
+        .with_http_limits(limits);
+        let one_fetch = module_source(
+            r#"async function() {
+                const response = await fetch("https://api.example.test/one");
+                return await response.json();
+            }"#,
+        );
+        let two_fetches = module_source(
+            r#"async function() {
+                await fetch("https://api.example.test/one");
+                await fetch("https://api.example.test/two");
+            }"#,
+        );
+
+        runtime
+            .execute(&one_fetch, &request(), &plugin_id())
+            .unwrap();
+        runtime
+            .execute(&one_fetch, &request(), &plugin_id())
+            .unwrap();
+        assert!(matches!(
+            runtime.execute(&two_fetches, &request(), &plugin_id()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("attempted 2 requests") && message.contains("maximum is 1")
+        ));
     }
 
     #[test]

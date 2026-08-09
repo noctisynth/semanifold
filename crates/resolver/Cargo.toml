@@ -25,6 +25,7 @@ http = "1.3"
 log = "0.4.27"
 pathdiff = "0.2.3"
 regex = "1.11.1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 saphyr = "0.0.6"
 semifold-core = { version = "0.1.0-rc.1", path = "../semifold-core" }
 semver = { version = "1.0.26", features = ["serde"] }
@@ -32,6 +33,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.142", features = ["preserve_order"] }
 sha2 = "0.10"
 thiserror = "2.0.15"
+tokio = { version = "1.48", features = ["rt-multi-thread", "net", "sync", "time"] }
 toml_edit = { version = "0.23.3", features = ["serde"] }
 
 [dev-dependencies]

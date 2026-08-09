@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
@@ -8,6 +8,9 @@ use semifold_core::EcosystemId;
 use sha2::{Digest, Sha256};
 
 use super::file::{PluginFileError, ScopedPluginFileClient};
+use super::http::{
+    DenyPluginHttpClient, PluginHttpOrigin, PluginHttpTransport, ReqwestPluginHttpTransport,
+};
 use super::protocol::{PluginMetadataV1, PluginRequestV1, PluginResponseV1};
 use super::runtime::{BoaPluginRuntime, MAX_SOURCE_BYTES, PluginRuntimeError};
 
@@ -17,6 +20,7 @@ pub struct PluginDefinition {
     ecosystem: EcosystemId,
     path: Utf8PathBuf,
     sha256: String,
+    allowed_origins: BTreeSet<PluginHttpOrigin>,
 }
 
 impl PluginDefinition {
@@ -39,7 +43,17 @@ impl PluginDefinition {
             ecosystem,
             path,
             sha256,
+            allowed_origins: BTreeSet::new(),
         })
+    }
+
+    #[must_use]
+    pub fn with_allowed_origins(
+        mut self,
+        allowed_origins: impl IntoIterator<Item = PluginHttpOrigin>,
+    ) -> Self {
+        self.allowed_origins = allowed_origins.into_iter().collect();
+        self
     }
 
     #[must_use]
@@ -55,6 +69,11 @@ impl PluginDefinition {
     #[must_use]
     pub fn sha256(&self) -> &str {
         &self.sha256
+    }
+
+    #[must_use]
+    pub const fn allowed_origins(&self) -> &BTreeSet<PluginHttpOrigin> {
+        &self.allowed_origins
     }
 }
 
@@ -110,7 +129,40 @@ impl PluginRegistry {
         definitions: impl IntoIterator<Item = PluginDefinition>,
         runtime: BoaPluginRuntime,
     ) -> Result<Self, PluginRegistryError> {
-        let project_root = canonical_project_root(project_root.into())?;
+        Self::load_inner(project_root.into(), definitions, runtime, None)
+    }
+
+    pub fn load_with_http_transport(
+        project_root: impl Into<Utf8PathBuf>,
+        definitions: impl IntoIterator<Item = PluginDefinition>,
+        runtime: BoaPluginRuntime,
+        transport: impl PluginHttpTransport,
+    ) -> Result<Self, PluginRegistryError> {
+        Self::load_inner(
+            project_root.into(),
+            definitions,
+            runtime,
+            Some(Arc::new(transport)),
+        )
+    }
+
+    pub fn load_with_reqwest(
+        project_root: impl Into<Utf8PathBuf>,
+        definitions: impl IntoIterator<Item = PluginDefinition>,
+        runtime: BoaPluginRuntime,
+    ) -> Result<Self, PluginRegistryError> {
+        let transport = ReqwestPluginHttpTransport::new()
+            .map_err(|source| PluginRegistryError::HttpTransportInitialization { source })?;
+        Self::load_with_http_transport(project_root, definitions, runtime, transport)
+    }
+
+    fn load_inner(
+        project_root: Utf8PathBuf,
+        definitions: impl IntoIterator<Item = PluginDefinition>,
+        runtime: BoaPluginRuntime,
+        http_transport: Option<Arc<dyn PluginHttpTransport>>,
+    ) -> Result<Self, PluginRegistryError> {
+        let project_root = canonical_project_root(project_root)?;
         let mut definitions = definitions.into_iter().collect::<Vec<_>>();
         definitions.sort_by(|left, right| {
             left.ecosystem
@@ -152,11 +204,21 @@ impl PluginRegistry {
                 source,
             })?;
             let ecosystem = metadata.ecosystem.clone();
+            let runtime = if let Some(transport) = &http_transport {
+                runtime.clone().with_shared_http_transport(
+                    definition.allowed_origins.clone(),
+                    transport.clone(),
+                )
+            } else {
+                runtime
+                    .clone()
+                    .with_shared_http_client(Arc::new(DenyPluginHttpClient))
+            };
             let plugin = LoadedPlugin {
                 definition,
                 metadata,
                 source: Arc::from(source),
-                runtime: runtime.clone().with_file_client(file_client),
+                runtime: runtime.with_file_client(file_client),
             };
             plugins.insert(ecosystem, plugin);
         }
@@ -411,6 +473,11 @@ pub enum PluginRegistryError {
         #[source]
         source: PluginFileError,
     },
+    #[error("failed to initialize plugin HTTP transport: {source}")]
+    HttpTransportInitialization {
+        #[source]
+        source: super::http::PluginHttpError,
+    },
     #[error("invalid internal plugin source limit: {reason}")]
     InternalLimit { reason: String },
 }
@@ -418,9 +485,13 @@ pub enum PluginRegistryError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+    use crate::plugin::http::{
+        PluginHttpFuture, PluginHttpRequest, PluginHttpResponse, PluginHttpTransport,
+    };
     use crate::plugin::protocol::{PluginCallV1, PluginDiscoverInputV1};
 
     fn fixture_root(test: &str) -> Utf8PathBuf {
@@ -488,6 +559,25 @@ mod tests {
         }))
     }
 
+    #[derive(Clone, Debug)]
+    struct RecordingTransport {
+        requests: Arc<Mutex<Vec<PluginHttpRequest>>>,
+    }
+
+    impl PluginHttpTransport for RecordingTransport {
+        fn send_once(&self, request: PluginHttpRequest) -> PluginHttpFuture<'_> {
+            Box::pin(async move {
+                self.requests.lock().unwrap().push(request.clone());
+                Ok(PluginHttpResponse {
+                    url: request.url,
+                    status: 200,
+                    headers: vec![("content-type".to_owned(), b"text/plain".to_vec())],
+                    body: b"ok".to_vec(),
+                })
+            })
+        }
+    }
+
     #[test]
     fn loads_in_stable_identity_order_and_binds_project_file_capabilities() {
         let root = fixture_root("stable-order");
@@ -511,6 +601,69 @@ mod tests {
             .unwrap()
             .execute(&discover_request())
             .unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn binds_definition_origins_to_an_injected_transport_and_defaults_to_deny() {
+        let root = fixture_root("network-origins");
+        let source = r#"
+            export const metadata = {
+                "schema-version": 1,
+                ecosystem: "com.example.network",
+                "plugin-version": "1.0.0",
+                operations: ["discover", "inspect", "plan-edits"]
+            };
+            export default async function(request) {
+                const response = await fetch("https://api.example.test/data");
+                if (await response.text() !== "ok") {
+                    throw new Error("unexpected transport response");
+                }
+                return {
+                    "schema-version": request["schema-version"],
+                    diagnostics: [],
+                    status: "success",
+                    output: {
+                        operation: request.operation,
+                        output: { packages: [] }
+                    }
+                };
+            };
+        "#;
+        let definition = write_plugin(&root, "network.js", source)
+            .with_allowed_origins([PluginHttpOrigin::parse("https://api.example.test").unwrap()]);
+
+        let denied = PluginRegistry::load(
+            root.clone(),
+            [definition.clone()],
+            BoaPluginRuntime::default(),
+        )
+        .unwrap();
+        assert!(matches!(
+            denied
+                .get(definition.ecosystem())
+                .unwrap()
+                .execute(&discover_request()),
+            Err(PluginRuntimeError::EntrypointInvocation(message))
+                if message.contains("network access is not configured")
+        ));
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let registry = PluginRegistry::load_with_http_transport(
+            root.clone(),
+            [definition.clone()],
+            BoaPluginRuntime::default(),
+            RecordingTransport {
+                requests: requests.clone(),
+            },
+        )
+        .unwrap();
+        registry
+            .get(definition.ecosystem())
+            .unwrap()
+            .execute(&discover_request())
+            .unwrap();
+        assert_eq!(requests.lock().unwrap().len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 

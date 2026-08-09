@@ -477,11 +477,11 @@
 
 ### Host 与 adapter 集成
 
-- [ ] 实现 Boa 脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
+- [x] 实现 Boa 脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
   - [x] 嵌入 Boa，以拒绝 import 的 loader 执行单文件 ESM，并支持同步或异步默认入口
   - [x] 注入受项目边界与预算约束的文件 capability
   - [x] 以稳定 ecosystem ID、仓库内相对路径和 SHA-256 内容锁加载插件注册表
-  - [ ] 注入默认拒绝、按 HTTPS origin 授权且可替换 backend 的 `fetch` capability
+  - [x] 注入默认拒绝、按 HTTPS origin 授权且可替换 backend 的 `fetch` capability
 - [ ] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
 - [ ] 禁止插件直接写文件、运行发布命令、取得 registry/Forge 宿主凭据或创建 Forge release
 - [ ] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验

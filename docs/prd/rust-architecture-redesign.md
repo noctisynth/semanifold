@@ -1198,16 +1198,20 @@ host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用
 glob，避免以不可靠的 glob 子集推断扩大授权；`readText` 只接受匹配至少一个已声明 glob 的规范相对
 路径。两项能力每次调用都要经过项目根目录、解析后的符号链接边界、普通文件类型、文件数量和字节
 预算校验；匹配到越过项目根目录的符号链接必须报错，不能静默忽略。`listFiles` 的结果去重后按 UTF-8
-字典序排序，且 glob 默认不隐式匹配以 `.` 开头的路径段。网络默认拒绝；插件配置必须声明允许的 HTTPS origin，
-host 自定义 fetch backend 对初始 URL 和每次重定向执行协议、origin、解析后地址、超时、请求次数、
-并发数及请求/响应字节预算校验。插件不能读取 ambient credential；需要认证的值必须由未来独立的
-命名 secret capability 显式授权，首版不实现该能力。
+字典序排序，且 glob 默认不隐式匹配以 `.` 开头的路径段。网络默认拒绝；插件配置必须声明允许的精确
+HTTPS origin。host 自定义 fetch client 对初始 URL 和每次重定向执行协议与 origin 校验，禁用 reqwest
+自动重定向和 ambient proxy；跨 origin 重定向即使目标也被授权，仍必须移除 authorization、cookie 和
+proxy authorization 等敏感请求头。具体 transport 使用独立、可复用的 Tokio runtime 驱动异步 reqwest，
+不依赖调用方是否已有 Tokio runtime，并通过自定义 DNS resolver 只把全部解析结果均为公网地址的目标
+交给连接器，避免域名、IP literal 和 DNS rebinding 绕过地址边界。插件不能读取 ambient credential；
+需要认证的值必须由未来独立的命名 secret capability 显式授权，首版不实现该能力。
 
 首版限制固定而非可配置：插件源文件最大 1 MiB，Boa 每次 operation 使用全新 Context，循环迭代上限
 为 10,000,000、递归深度上限为 256，并使用 Boa 的 VM stack limit；单个读取文件最大 4 MiB，一次
 operation 通过 `readText` 累计返回最大 32 MiB，`listFiles` 累计最多返回 10,000 个路径，重复调用同样
-计入累计预算。单个网络请求最长 10 秒、最多跟随 5 次
-重定向、响应体最大 8 MiB；一次 operation 最多 8 个请求且累计响应体最大 32 MiB。Boa 当前没有可与
+计入累计预算。单个网络请求最长 10 秒、请求体最大 8 MiB、响应体最大 8 MiB，最多跟随 5 次重定向；
+一次 operation 最多 8 个请求、最多 4 个并发请求，请求体与响应体分别累计最大 32 MiB。重定向产生的
+每次实际 HTTP exchange 都计入请求次数、并发数和 body 预算。Boa 当前没有可与
 QuickJS heap limit 等价的硬内存上限，因此 host 还必须限制 request、response、诊断和所有 capability
 载荷大小；在允许未审查的第三方插件前，运行时必须迁移到独立进程以取得 wall-clock 与内存硬隔离。
 循环、递归、栈、capability 或载荷预算超限均转换为结构化插件诊断，host 不复用失败的 Context。

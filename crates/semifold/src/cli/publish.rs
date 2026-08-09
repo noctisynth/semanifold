@@ -103,10 +103,8 @@ pub(crate) async fn publish(
                     t!("cli.publish.execution_failed").into_owned(),
                 );
                 render_publish_report(terminal, &plan, &execution.report, dry_run);
-                terminal.recovery(
-                    &t!("cli.publish.recovery_heading"),
-                    &t!("cli.publish.recovery_action"),
-                );
+                let recovery = recovery_action(&execution.report);
+                terminal.recovery(&t!("cli.publish.recovery_heading"), &recovery);
                 let output = PublishWorkflowOutput::from_plan_and_report(
                     &plan,
                     &execution.report,
@@ -163,9 +161,10 @@ fn render_publish_report(
                 t!("cli.publish.status_succeeded"),
                 forge_detail(package.forge),
             ),
-            PublishStatus::Skipped(reason) => {
-                (t!("cli.publish.status_skipped"), skip_detail(reason))
-            }
+            PublishStatus::Skipped(reason) => (
+                t!("cli.publish.status_skipped"),
+                skipped_detail(reason, package.forge),
+            ),
             PublishStatus::Failed(stage) => {
                 (t!("cli.publish.status_failed"), failure_detail(stage))
             }
@@ -238,6 +237,27 @@ fn skip_detail(reason: PublishSkipReason) -> std::borrow::Cow<'static, str> {
     }
 }
 
+fn skipped_detail(
+    reason: PublishSkipReason,
+    forge: ForgeDisposition,
+) -> std::borrow::Cow<'static, str> {
+    if reason == PublishSkipReason::RegistryVersionExists {
+        return match forge {
+            ForgeDisposition::SkippedDryRun => {
+                t!("cli.publish.detail_registry_exists_forge_dry_run")
+            }
+            ForgeDisposition::Created => {
+                t!("cli.publish.detail_registry_exists_forge_created")
+            }
+            ForgeDisposition::AlreadyExists => {
+                t!("cli.publish.detail_registry_and_forge_exist")
+            }
+            ForgeDisposition::NotRequested => skip_detail(reason),
+        };
+    }
+    skip_detail(reason)
+}
+
 fn failure_detail(stage: PublishFailureStage) -> std::borrow::Cow<'static, str> {
     match stage {
         PublishFailureStage::Preflight => t!("cli.publish.detail_preflight_failed"),
@@ -253,5 +273,75 @@ fn forge_detail(disposition: ForgeDisposition) -> std::borrow::Cow<'static, str>
         ForgeDisposition::SkippedDryRun => t!("cli.publish.detail_forge_dry_run"),
         ForgeDisposition::Created => t!("cli.publish.detail_forge_created"),
         ForgeDisposition::AlreadyExists => t!("cli.publish.detail_forge_exists"),
+    }
+}
+
+fn recovery_action(report: &PublishReport) -> std::borrow::Cow<'static, str> {
+    if report.packages.iter().any(|package| {
+        package.status == PublishStatus::Failed(PublishFailureStage::AssetUpload)
+            && package.forge == ForgeDisposition::Created
+    }) {
+        t!("cli.publish.recovery_asset_failure")
+    } else {
+        t!("cli.publish.recovery_action")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_version_skip_detail_includes_the_forge_disposition() {
+        assert_eq!(
+            skipped_detail(
+                PublishSkipReason::RegistryVersionExists,
+                ForgeDisposition::Created,
+            ),
+            t!("cli.publish.detail_registry_exists_forge_created")
+        );
+        assert_eq!(
+            skipped_detail(
+                PublishSkipReason::RegistryVersionExists,
+                ForgeDisposition::AlreadyExists,
+            ),
+            t!("cli.publish.detail_registry_and_forge_exist")
+        );
+        assert_eq!(
+            skipped_detail(
+                PublishSkipReason::RegistryVersionExists,
+                ForgeDisposition::SkippedDryRun,
+            ),
+            t!("cli.publish.detail_registry_exists_forge_dry_run")
+        );
+    }
+
+    #[test]
+    fn registry_version_skip_without_forge_keeps_the_existing_detail() {
+        assert_eq!(
+            skipped_detail(
+                PublishSkipReason::RegistryVersionExists,
+                ForgeDisposition::NotRequested,
+            ),
+            t!("cli.publish.detail_already_exists")
+        );
+    }
+
+    #[test]
+    fn asset_failure_after_release_creation_requires_a_new_version() {
+        let report = PublishReport {
+            packages: vec![semifold_engine::publisher::PackagePublishReport {
+                package: semifold_core::PackageId::new("core"),
+                status: PublishStatus::Failed(PublishFailureStage::AssetUpload),
+                commands: Vec::new(),
+                forge: ForgeDisposition::Created,
+                error: Some("upload failed".to_string()),
+            }],
+        };
+
+        assert_eq!(
+            recovery_action(&report),
+            t!("cli.publish.recovery_asset_failure")
+        );
     }
 }

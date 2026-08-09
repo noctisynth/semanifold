@@ -709,10 +709,17 @@ where
     }
 
     for (package, package_report) in plan.packages.iter().zip(&mut report.packages) {
-        if matches!(package_report.status, PublishStatus::Skipped(_)) {
+        if matches!(
+            package_report.status,
+            PublishStatus::Skipped(PublishSkipReason::MissingChangelog)
+        ) {
             continue;
         }
-        if !package.context.package.private {
+        let registry_version_exists = matches!(
+            package_report.status,
+            PublishStatus::Skipped(PublishSkipReason::RegistryVersionExists)
+        );
+        if !package.context.package.private && !registry_version_exists {
             for command in &package.commands {
                 if dry_run && !command.run_in_dry_run {
                     package_report.commands.push(CommandReport {
@@ -741,15 +748,6 @@ where
             if dry_run {
                 package_report.forge = ForgeDisposition::SkippedDryRun;
             } else {
-                let assets = match forge.asset_resolver.resolve(forge.root, &package.assets) {
-                    Ok(assets) => assets,
-                    Err(error) => {
-                        package_report.status =
-                            PublishStatus::Failed(PublishFailureStage::AssetUpload);
-                        package_report.error = Some(error.to_string());
-                        return Err(PublishExecutionError { report });
-                    }
-                };
                 let release_id = match forge.client.create_release(&forge_plan.release).await {
                     Ok(ForgeReleaseOutcome::Created(release_id)) => {
                         package_report.forge = ForgeDisposition::Created;
@@ -767,6 +765,15 @@ where
                     }
                 };
                 if let Some(release_id) = release_id {
+                    let assets = match forge.asset_resolver.resolve(forge.root, &package.assets) {
+                        Ok(assets) => assets,
+                        Err(error) => {
+                            package_report.status =
+                                PublishStatus::Failed(PublishFailureStage::AssetUpload);
+                            package_report.error = Some(error.to_string());
+                            return Err(PublishExecutionError { report });
+                        }
+                    };
                     for asset in &assets {
                         let content = match forge.file_system.read(&asset.path) {
                             Ok(content) => content,
@@ -791,11 +798,13 @@ where
                 }
             }
         }
-        package_report.status = if package.context.package.private && package.forge.is_none() {
-            PublishStatus::Skipped(PublishSkipReason::Private)
-        } else {
-            PublishStatus::Succeeded
-        };
+        if !registry_version_exists {
+            package_report.status = if package.context.package.private && package.forge.is_none() {
+                PublishStatus::Skipped(PublishSkipReason::Private)
+            } else {
+                PublishStatus::Succeeded
+            };
+        }
     }
 
     Ok(report)
@@ -891,6 +900,7 @@ mod tests {
     struct RecordingForge {
         created: Mutex<Vec<String>>,
         uploaded: Mutex<Vec<String>>,
+        outcome: ForgeReleaseOutcome,
     }
 
     impl ForgeClient for RecordingForge {
@@ -903,7 +913,7 @@ mod tests {
                     .lock()
                     .expect("recording forge mutex is not poisoned")
                     .push(release.tag.clone());
-                Ok(ForgeReleaseOutcome::Created(ForgeReleaseId(7)))
+                Ok(self.outcome.clone())
             })
         }
 
@@ -1061,6 +1071,164 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn registry_version_skip_still_creates_forge_release_with_current_assets() {
+        let forge = RecordingForge {
+            created: Mutex::new(Vec::new()),
+            uploaded: Mutex::new(Vec::new()),
+            outcome: ForgeReleaseOutcome::Created(ForgeReleaseId(7)),
+        };
+        let file_system = StaticFileSystem;
+        let asset_resolver = StaticAssetResolver;
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let registry = StaticRegistry {
+            existing: vec!["core".to_string()],
+            checked: Mutex::new(Vec::new()),
+        };
+        let mut package = package("core", false, vec![command("must-not-run", false)]);
+        package.forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "core-v1.0.0".to_string(),
+                title: "core v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
+        package.assets = vec![AssetDeclaration::Glob {
+            pattern: "artifact*.tar.gz".to_string(),
+        }];
+        let mut plan = publish_plan(vec![package]);
+
+        let report = execute_publish_plan(
+            &mut plan,
+            &runner,
+            &registry,
+            Some(ForgeExecution {
+                client: &forge,
+                file_system: &file_system,
+                asset_resolver: &asset_resolver,
+                root: Path::new("."),
+            }),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            report.packages[0].status,
+            PublishStatus::Skipped(PublishSkipReason::RegistryVersionExists)
+        );
+        assert_eq!(report.packages[0].forge, ForgeDisposition::Created);
+        assert!(
+            runner
+                .commands
+                .lock()
+                .expect("recording command mutex is not poisoned")
+                .is_empty()
+        );
+        assert_eq!(
+            *forge
+                .created
+                .lock()
+                .expect("recording forge mutex is not poisoned"),
+            ["core-v1.0.0"]
+        );
+        assert_eq!(
+            *forge
+                .uploaded
+                .lock()
+                .expect("recording forge mutex is not poisoned"),
+            ["artifact.tar.gz"]
+        );
+    }
+
+    #[tokio::test]
+    async fn existing_forge_release_does_not_resolve_or_recover_assets() {
+        struct FailingAssetResolver;
+
+        impl AssetResolver for FailingAssetResolver {
+            fn resolve(
+                &self,
+                _root: &Path,
+                _declarations: &[AssetDeclaration],
+            ) -> Result<Vec<ReleaseAsset>, AssetResolveError> {
+                Err(AssetResolveError {
+                    message: "assets must not be resolved".to_string(),
+                })
+            }
+        }
+
+        let forge = RecordingForge {
+            created: Mutex::new(Vec::new()),
+            uploaded: Mutex::new(Vec::new()),
+            outcome: ForgeReleaseOutcome::AlreadyExists,
+        };
+        let file_system = StaticFileSystem;
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let registry = StaticRegistry {
+            existing: vec!["core".to_string()],
+            checked: Mutex::new(Vec::new()),
+        };
+        let mut package = package("core", false, vec![command("must-not-run", false)]);
+        package.forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".to_string(),
+                repository: "repo".to_string(),
+                tag: "core-v1.0.0".to_string(),
+                title: "core v1.0.0".to_string(),
+                body: "changes".to_string(),
+                prerelease: false,
+            },
+        });
+        package.assets = vec![AssetDeclaration::Glob {
+            pattern: "artifact*.tar.gz".to_string(),
+        }];
+        let mut plan = publish_plan(vec![package]);
+
+        let report = execute_publish_plan(
+            &mut plan,
+            &runner,
+            &registry,
+            Some(ForgeExecution {
+                client: &forge,
+                file_system: &file_system,
+                asset_resolver: &FailingAssetResolver,
+                root: Path::new("."),
+            }),
+            false,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            report.packages[0].status,
+            PublishStatus::Skipped(PublishSkipReason::RegistryVersionExists)
+        );
+        assert_eq!(report.packages[0].forge, ForgeDisposition::AlreadyExists);
+        assert!(
+            runner
+                .commands
+                .lock()
+                .expect("recording command mutex is not poisoned")
+                .is_empty()
+        );
+        assert!(
+            forge
+                .uploaded
+                .lock()
+                .expect("recording forge mutex is not poisoned")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
     async fn dry_run_only_executes_explicitly_allowed_commands() {
         let mut plan = publish_plan(vec![package(
             "core",
@@ -1169,6 +1337,7 @@ mod tests {
         let forge = RecordingForge {
             created: Mutex::new(Vec::new()),
             uploaded: Mutex::new(Vec::new()),
+            outcome: ForgeReleaseOutcome::Created(ForgeReleaseId(7)),
         };
         let file_system = StaticFileSystem;
         let asset_resolver = StaticAssetResolver;
@@ -1244,6 +1413,7 @@ mod tests {
         let forge = RecordingForge {
             created: Mutex::new(Vec::new()),
             uploaded: Mutex::new(Vec::new()),
+            outcome: ForgeReleaseOutcome::Created(ForgeReleaseId(7)),
         };
         let file_system = StaticFileSystem;
         let runner = RecordingRunner {
@@ -1306,6 +1476,7 @@ mod tests {
         let forge = RecordingForge {
             created: Mutex::new(Vec::new()),
             uploaded: Mutex::new(Vec::new()),
+            outcome: ForgeReleaseOutcome::Created(ForgeReleaseId(7)),
         };
         let file_system = StaticFileSystem;
         let asset_resolver = StaticAssetResolver;

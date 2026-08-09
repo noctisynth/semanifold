@@ -524,9 +524,12 @@ release。
 publisher 在执行任何 package 命令前先完成所有非 private、未跳过 package 的 registry
 preflight；private package 不执行 registry preflight 或 package 发布命令，但如果其有效
 `github-release` 策略为 true，仍继续创建 GitHub Release 并上传 asset。preflight 失败时不启动
-任何命令；版本已存在则以
-`PublishSkipReason::RegistryVersionExists` 跳过。随后按 `PublishPlan.packages` 的拓扑顺序逐包
-执行命令、创建 package release 并上传 asset，任一阶段失败即停止后续 package。`PublishPlan`
+任何命令；版本已存在则以 `PublishSkipReason::RegistryVersionExists` 跳过该 package 的 registry
+命令，但不能跳过已经规划的 GitHub Release：Release 尚不存在时仍创建并上传本次 CI 中可用的
+asset，Release 已存在时报告 `ForgeDisposition::AlreadyExists` 且不补传、覆盖或核对 asset。随后按
+`PublishPlan.packages` 的拓扑顺序逐包执行命令、创建 package release 并上传 asset，任一阶段失败即
+停止后续 package。GitHub Release 创建后发生 asset 上传失败时不提供续传恢复；用户应修复构建或
+CI/CD 问题并发布新版本。`PublishPlan`
 只保存已经过语法和路径校验的 `AssetDeclaration`，不得在命令执行前展开 glob 或过滤不存在文件；
 因为 asset 可以由 prepublish/publish 命令生成。package 命令成功后，执行器才通过注入的
 `AssetResolver` 展开声明，生成稳定排序的 `ReleaseAsset`，再由 `FileSystem` 读取并交给
@@ -558,7 +561,9 @@ pub enum PublishStatus {
 
 命令、registry 与 Forge 错误通过 `PublishExecutionError` 携带当时的完整报告返回；CLI 返回非零
 退出码，并提示修复后重试。重试依赖 registry preflight 跳过已成功发布的版本，不尝试回滚外部
-registry。dry-run 仍执行全部 registry preflight；命令报告区分实际执行与因未配置
+registry；其中 registry version skip 与 Forge disposition 是两个独立事实，CLI 必须在同一 package
+行中同时展示，不能以笼统的“跳过”隐藏已经创建或已经存在的 GitHub Release。dry-run 仍执行全部
+registry preflight；命令报告区分实际执行与因未配置
 `dry-run = true` 而跳过，Forge disposition 明确为 dry-run skip。
 
 在完整 `PublishPlan` 落地前，阶段 4 使用 application 层的统一发布命令执行桥接：按 package 的

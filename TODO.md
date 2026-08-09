@@ -333,6 +333,7 @@
 - [x] 返回结构化 `PublishReport`
 - [x] 报告 succeeded、skipped、failed 和 not-started package
 - [x] 明确部分发布失败后的退出码和恢复指引
+- [x] registry 版本已存在时仅跳过 registry 命令，继续首次 GitHub Release；已有 Release 不恢复 asset，并组合展示两类事实
 
 ### 阶段完成条件
 

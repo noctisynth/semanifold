@@ -2031,9 +2031,9 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "portable-atomic"
-version = "1.14.0"
+version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
+checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
 
 [[package]]
 name = "potential_utf"
@@ -2663,7 +2663,7 @@ dependencies = [
 
 [[package]]
 name = "semifold"
-version = "0.3.0-rc.5"
+version = "0.3.0-rc.6"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2714,7 +2714,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-core"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "camino",
  "semver 1.0.28",
@@ -2726,7 +2726,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-engine"
-version = "0.2.0-rc.3"
+version = "0.2.0-rc.4"
 dependencies = [
  "bytes",
  "camino",
@@ -2749,7 +2749,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.4.0-rc.2"
+version = "0.4.0-rc.3"
 dependencies = [
  "boa_engine",
  "boa_gc",

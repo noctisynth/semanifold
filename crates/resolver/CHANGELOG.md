@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.0-rc.3
+
+### Bug Fixes
+
+- [`0c59f66`](https://github.com/noctisynth/semifold/commit/0c59f66364e6617e9e711c21f217dbff256ffcdf): Introduce the versioned TypeScript SDK for ecosystem plugins with exact schema v1 wire types, construction helpers, and declarations limited to the capabilities provided by the Boa runtime.
+
+    Build and validate the public package without Node.js or DOM ambient types, share JSON contract fixtures with the Rust protocol tests, and prepare OIDC-only automated npm publishing after the initial version is published locally.
+
+- [`5b6694b`](https://github.com/noctisynth/semifold/commit/5b6694bbd17d86f9f3b44977ea402849d26228a3): Format generated plugin SDK bindings with Biome before writing or drift checks, and enforce SDK formatting in CI.
+- [`6b451f6`](https://github.com/noctisynth/semifold/commit/6b451f614df71cb1618c81dc02ff3e37953e4c6f): Generate plugin SDK wire types from the Rust serde protocol, preserve deeply readonly public types, and fail CI when committed bindings drift.
+
+    Serialize workspace-manifest edit source fields with the documented kebab-case names.
+
+
+### New Features
+
+- [`5496c96`](https://github.com/noctisynth/semifold/commit/5496c96f4a5b26626ac7267b64b81c96fafc0b6b): Adapt authenticated JavaScript plugins directly to the existing ecosystem boundary, with deterministic snapshot conversion and host-side validation of project roots, package identities, paths, edit sources, duplicate targets, and streamed file hashes.
+- [`3a4e1c7`](https://github.com/noctisynth/semifold/commit/3a4e1c7ea2d89e1b6de33c50759330ffccbff2d6): Expose frozen asynchronous file capabilities to Boa plugins, with declared-glob authorization, project-root and symlink isolation, deterministic listings, UTF-8 enforcement, and per-operation path and byte budgets.
+- [`ca56371`](https://github.com/noctisynth/semifold/commit/ca56371c162e7845e8f8652d9e2b488021a85de8): Configure repository-local dynamic ecosystem plugins by stable ID with optional SHA-256 pins and exact HTTPS origins, and route discovery, workspace loading, config sync, and version edit planning through their authenticated adapters.
+- [`493c256`](https://github.com/noctisynth/semifold/commit/493c256206ed20708580ced5ebd8a379dae055ec): Embed Boa as the JavaScript plugin runtime with single-file ESM execution, protocol validation, fixed VM budgets, and a deny-by-default injectable fetch backend.
+- [`dd10f1a`](https://github.com/noctisynth/semifold/commit/dd10f1a00b2a99219861083ba3fc10d07322fe72): Introduce validated, stable ecosystem identities and a schema-versioned plugin protocol for metadata, discovery, inspection, edit planning, and structured diagnostics.
+- [`ed27de8`](https://github.com/noctisynth/semifold/commit/ed27de8c19b2da349ed9a3d104ca4a9fedb27923): Load repository-local JavaScript plugins through a deterministic ecosystem registry that verifies normalized paths, SHA-256 content locks, source limits, metadata identities, and project-scoped file capabilities before execution.
+- [`90f27bb`](https://github.com/noctisynth/semifold/commit/90f27bb8bd85a7d0a1dbb6830cfec2ed46ec1152): Replace the MCP changeset surface with lazily loaded, structured get/create/update/delete tools, optimistic SHA-256 revisions, dry-run planning, localized errors, and panic isolation that keeps the stdio server available after failed calls.
+- [`8caff0a`](https://github.com/noctisynth/semifold/commit/8caff0ad5ace8ca72600ed1acabd08a6a1ec2b13): Migrate domain packages, plans, contexts, and adapters to open ecosystem identities while preserving built-in serialization and ordering compatibility ahead of dynamic plugin registration.
+- [`3e5a8c1`](https://github.com/noctisynth/semifold/commit/3e5a8c127c6a3ccb66e13f6ce8aad474d276aa03): Add a default-deny, exact-HTTPS-origin fetch capability for plugins with per-hop redirect validation, public-address-only DNS resolution, an injectable asynchronous transport, and per-operation request, concurrency, and body budgets.
+
 ## v0.4.0-rc.2
 
 ### Bug Fixes

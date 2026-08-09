@@ -5,6 +5,7 @@ import {
   definePlugin,
   definePluginMetadata,
   type PluginDiscoverRequestV1,
+  type PluginEditSourceV1,
   type PluginFetchResponseV1,
   type PluginPackageInspectionV1,
   type PluginUrlV1,
@@ -15,6 +16,20 @@ export const metadata = definePluginMetadata({
   pluginVersion: '1.0.0',
   readPatterns: ['packages/**/engine.json'],
 });
+
+const workspaceManifestEdit: PluginEditSourceV1 = {
+  kind: 'workspace-manifest',
+  'shared-versions': [],
+  dependencies: [],
+};
+
+void workspaceManifestEdit;
+
+const metadataSchemaVersion: 1 = metadata['schema-version'];
+void metadataSchemaVersion;
+
+// @ts-expect-error Generated wire arrays remain deeply readonly at the public boundary.
+metadata.operations.push('discover');
 
 const inspection: PluginPackageInspectionV1 = {
   id: 'engine',
@@ -116,6 +131,12 @@ function assertUnavailableAmbientTypes(
 void assertUnavailableAmbientTypes;
 
 function assertOperationCorrelation(request: PluginDiscoverRequestV1): void {
+  const requestSchemaVersion: 1 = request['schema-version'];
+  void requestSchemaVersion;
+
+  // @ts-expect-error Generated nested request fields remain readonly.
+  request.input['project-root'] = '..';
+
   // @ts-expect-error A discover request cannot be paired with plan-edits output.
   createPluginSuccess(request, { edits: [] });
 }

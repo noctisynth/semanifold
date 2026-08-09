@@ -1,5 +1,15 @@
 # `@semifold/plugin-sdk`
 
+The schema-versioned wire types are generated from Semifold's Rust plugin protocol. After changing
+`crates/resolver/src/plugin/protocol.rs`, regenerate and verify them from the repository root:
+
+```sh
+pnpm --filter @semifold/plugin-sdk generate:protocol
+pnpm --filter @semifold/plugin-sdk check:protocol
+```
+
+The generated source is committed so packaging the SDK never requires Cargo.
+
 TypeScript protocol types and construction helpers for Semifold ecosystem plugins.
 The SDK mirrors Semifold's schema v1 wire format and only declares capabilities that
 the embedded Boa runtime provides. It does not add browser or Node.js ambient APIs.

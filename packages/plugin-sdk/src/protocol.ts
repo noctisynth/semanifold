@@ -1,198 +1,104 @@
-export const PLUGIN_PROTOCOL_SCHEMA_VERSION = 1 as const;
+import type {
+  PluginDependencyKindV1 as GeneratedPluginDependencyKindV1,
+  PluginDependencySourceV1 as GeneratedPluginDependencySourceV1,
+  PluginDependencyV1 as GeneratedPluginDependencyV1,
+  PluginDiagnosticSeverityV1 as GeneratedPluginDiagnosticSeverityV1,
+  PluginDiagnosticV1 as GeneratedPluginDiagnosticV1,
+  PluginDiscoverInputV1 as GeneratedPluginDiscoverInputV1,
+  PluginEditSourceV1 as GeneratedPluginEditSourceV1,
+  PluginFileEditExpectationV1 as GeneratedPluginFileEditExpectationV1,
+  PluginFileEditV1 as GeneratedPluginFileEditV1,
+  PluginInspectInputV1 as GeneratedPluginInspectInputV1,
+  PluginManifestDependencyV1 as GeneratedPluginManifestDependencyV1,
+  PluginMetadataV1 as GeneratedPluginMetadataV1,
+  PluginOperationV1 as GeneratedPluginOperationV1,
+  PluginOutputV1 as GeneratedPluginOutputV1,
+  PluginPackageInspectionV1 as GeneratedPluginPackageInspectionV1,
+  PluginPackageLocationV1 as GeneratedPluginPackageLocationV1,
+  PluginPackageSnapshotV1 as GeneratedPluginPackageSnapshotV1,
+  PluginPlanEditsInputV1 as GeneratedPluginPlanEditsInputV1,
+  PluginRequestV1 as GeneratedPluginRequestV1,
+  PluginResponseV1 as GeneratedPluginResponseV1,
+  PluginSharedVersionEditV1 as GeneratedPluginSharedVersionEditV1,
+  PluginVersionSourceV1 as GeneratedPluginVersionSourceV1,
+} from './generated/protocol.js';
+
+export {
+  PLUGIN_OPERATIONS,
+  PLUGIN_PROTOCOL_SCHEMA_VERSION,
+} from './generated/protocol.js';
+
+type DeepReadonly<Value> = Value extends readonly unknown[]
+  ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+  : Value extends object
+    ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+    : Value;
 
 export type EcosystemIdV1 = string;
 export type PackageIdV1 = string;
 export type SemVerV1 = string;
 
-export type PluginOperationV1 = 'discover' | 'inspect' | 'plan-edits';
+export type PluginOperationV1 = GeneratedPluginOperationV1;
+export type PluginMetadataV1 = DeepReadonly<GeneratedPluginMetadataV1>;
+export type PluginDiscoverInputV1 = DeepReadonly<GeneratedPluginDiscoverInputV1>;
+export type PluginInspectInputV1 = DeepReadonly<GeneratedPluginInspectInputV1>;
+export type PluginPlanEditsInputV1 = DeepReadonly<GeneratedPluginPlanEditsInputV1>;
+export type PluginPackageLocationV1 = DeepReadonly<GeneratedPluginPackageLocationV1>;
+export type PluginVersionSourceV1 = DeepReadonly<GeneratedPluginVersionSourceV1>;
+export type PluginDependencyKindV1 = GeneratedPluginDependencyKindV1;
+export type PluginDependencySourceV1 = GeneratedPluginDependencySourceV1;
+export type PluginManifestDependencyV1 = DeepReadonly<GeneratedPluginManifestDependencyV1>;
+export type PluginDependencyV1 = DeepReadonly<GeneratedPluginDependencyV1>;
+export type PluginPackageInspectionV1 = DeepReadonly<GeneratedPluginPackageInspectionV1>;
+export type PluginPackageSnapshotV1 = DeepReadonly<GeneratedPluginPackageSnapshotV1>;
+export type PluginFileEditExpectationV1 = DeepReadonly<GeneratedPluginFileEditExpectationV1>;
+export type PluginSharedVersionEditV1 = DeepReadonly<GeneratedPluginSharedVersionEditV1>;
+export type PluginEditSourceV1 = DeepReadonly<GeneratedPluginEditSourceV1>;
+export type PluginFileEditV1 = DeepReadonly<GeneratedPluginFileEditV1>;
+export type PluginDiagnosticSeverityV1 = GeneratedPluginDiagnosticSeverityV1;
 
-export const PLUGIN_OPERATIONS: readonly PluginOperationV1[] = Object.freeze([
-  'discover',
-  'inspect',
-  'plan-edits',
-]);
+type GeneratedDiagnosticV1 = DeepReadonly<GeneratedPluginDiagnosticV1>;
 
-export interface PluginMetadataV1 {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly ecosystem: EcosystemIdV1;
-  readonly 'plugin-version': SemVerV1;
-  readonly operations: readonly PluginOperationV1[];
-  readonly 'read-patterns'?: readonly string[];
-}
+export type PluginDiagnosticDetailsV1 = Pick<
+  GeneratedDiagnosticV1,
+  'code' | 'message' | 'package' | 'path'
+>;
 
-export interface PluginDiscoverInputV1 {
-  readonly 'project-root': string;
-}
+export type PluginDiagnosticInputV1<
+  Severity extends PluginDiagnosticSeverityV1 = PluginDiagnosticSeverityV1,
+> = PluginDiagnosticDetailsV1 & {
+  readonly severity: Severity;
+};
 
-export interface PluginInspectInputV1 {
-  readonly 'project-root': string;
-  readonly package: PluginPackageLocationV1;
-}
+export type PluginDiagnosticV1<
+  Severity extends PluginDiagnosticSeverityV1 = PluginDiagnosticSeverityV1,
+> = Omit<GeneratedDiagnosticV1, 'severity'> & {
+  readonly severity: Severity;
+};
 
-export interface PluginPlanEditsInputV1 {
-  readonly 'project-root': string;
-  readonly 'workspace-packages': readonly PluginPackageSnapshotV1[];
-  readonly 'released-packages': readonly PackageIdV1[];
-  readonly versions: Readonly<Record<PackageIdV1, SemVerV1>>;
-}
-
-export interface PluginDiscoverRequestV1 {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly operation: 'discover';
-  readonly input: PluginDiscoverInputV1;
-}
-
-export interface PluginInspectRequestV1 {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly operation: 'inspect';
-  readonly input: PluginInspectInputV1;
-}
-
-export interface PluginPlanEditsRequestV1 {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly operation: 'plan-edits';
-  readonly input: PluginPlanEditsInputV1;
-}
-
-export type PluginRequestV1 =
-  | PluginDiscoverRequestV1
-  | PluginInspectRequestV1
-  | PluginPlanEditsRequestV1;
+export type PluginRequestV1 = DeepReadonly<GeneratedPluginRequestV1>;
 
 export type PluginRequestForOperationV1<Operation extends PluginOperationV1> =
   Extract<PluginRequestV1, { readonly operation: Operation }>;
 
-export interface PluginPackageLocationV1 {
-  readonly id: PackageIdV1;
-  readonly path: string;
-}
+export type PluginDiscoverRequestV1 =
+  PluginRequestForOperationV1<'discover'>;
+export type PluginInspectRequestV1 = PluginRequestForOperationV1<'inspect'>;
+export type PluginPlanEditsRequestV1 =
+  PluginRequestForOperationV1<'plan-edits'>;
 
-export type PluginVersionSourceV1 =
-  | { readonly kind: 'package-manifest' }
-  | {
-      readonly kind: 'shared';
-      readonly manifest: string;
-      readonly field: string;
-    };
+type PluginOutputUnionV1 = DeepReadonly<GeneratedPluginOutputV1>;
 
-export type PluginDependencyKindV1 =
-  | 'unspecified'
-  | 'runtime'
-  | 'development'
-  | 'build'
-  | 'optional'
-  | 'peer';
+type PluginOutputEnvelopeByOperationV1 = {
+  readonly [Operation in PluginOperationV1]: Extract<
+    PluginOutputUnionV1,
+    { readonly operation: Operation }
+  >;
+};
 
-export type PluginDependencySourceV1 = 'manifest' | 'config';
-
-export interface PluginManifestDependencyV1 {
-  readonly 'manifest-name': string;
-  readonly kind: PluginDependencyKindV1;
-  readonly requirement?: string;
-}
-
-export interface PluginDependencyV1 {
-  readonly package: PackageIdV1;
-  readonly kind: PluginDependencyKindV1;
-  readonly requirement?: string;
-  readonly source: PluginDependencySourceV1;
-}
-
-export interface PluginPackageInspectionV1 {
-  readonly id: PackageIdV1;
-  readonly 'manifest-name': string;
-  readonly version: SemVerV1;
-  readonly 'version-source': PluginVersionSourceV1;
-  readonly ecosystem: EcosystemIdV1;
-  readonly path: string;
-  readonly publishable: boolean;
-  readonly dependencies: readonly PluginManifestDependencyV1[];
-}
-
-export interface PluginPackageSnapshotV1 {
-  readonly id: PackageIdV1;
-  readonly 'manifest-name': string;
-  readonly version: SemVerV1;
-  readonly 'version-source': PluginVersionSourceV1;
-  readonly ecosystem: EcosystemIdV1;
-  readonly path: string;
-  readonly publishable: boolean;
-  readonly dependencies: readonly PluginDependencyV1[];
-}
-
-export type PluginFileEditExpectationV1 =
-  | { readonly kind: 'existing'; readonly sha256: string }
-  | { readonly kind: 'missing' };
-
-export interface PluginSharedVersionEditV1 {
-  readonly manifest: string;
-  readonly field: string;
-  readonly packages: readonly PackageIdV1[];
-}
-
-export type PluginEditSourceV1 =
-  | { readonly kind: 'package-version'; readonly package: PackageIdV1 }
-  | {
-      readonly kind: 'dependency-version';
-      readonly package: PackageIdV1;
-      readonly dependency: PackageIdV1;
-    }
-  | {
-      readonly kind: 'workspace-dependencies';
-      readonly dependencies: readonly PackageIdV1[];
-    }
-  | {
-      readonly kind: 'workspace-manifest';
-      readonly 'shared-versions': readonly PluginSharedVersionEditV1[];
-      readonly dependencies: readonly PackageIdV1[];
-    };
-
-export interface PluginFileEditV1 {
-  readonly path: string;
-  readonly expected: PluginFileEditExpectationV1;
-  readonly 'new-content': string;
-  readonly source: PluginEditSourceV1;
-}
-
-export type PluginDiagnosticSeverityV1 = 'info' | 'warning' | 'error';
-
-export interface PluginDiagnosticDetailsV1 {
-  readonly code: string;
-  readonly message: string;
-  readonly package?: PackageIdV1;
-  readonly path?: string;
-}
-
-export interface PluginDiagnosticInputV1<
-  Severity extends PluginDiagnosticSeverityV1 = PluginDiagnosticSeverityV1,
-> extends PluginDiagnosticDetailsV1 {
-  readonly severity: Severity;
-}
-
-export interface PluginDiagnosticV1<
-  Severity extends PluginDiagnosticSeverityV1 = PluginDiagnosticSeverityV1,
-> extends PluginDiagnosticInputV1<Severity> {
-  readonly plugin: EcosystemIdV1;
-  readonly operation: PluginOperationV1;
-}
-
-export interface PluginDiscoverOutputV1 {
-  readonly packages: readonly PluginPackageInspectionV1[];
-}
-
-export interface PluginInspectOutputV1 {
-  readonly package: PluginPackageInspectionV1;
-}
-
-export interface PluginPlanEditsOutputV1 {
-  readonly edits: readonly PluginFileEditV1[];
-}
-
-export interface PluginOutputByOperationV1 {
-  readonly discover: PluginDiscoverOutputV1;
-  readonly inspect: PluginInspectOutputV1;
-  readonly 'plan-edits': PluginPlanEditsOutputV1;
-}
+export type PluginOutputByOperationV1 = {
+  readonly [Operation in PluginOperationV1]: PluginOutputEnvelopeByOperationV1[Operation]['output'];
+};
 
 export interface PluginOutputEnvelopeV1<
   Operation extends PluginOperationV1 = PluginOperationV1,
@@ -201,25 +107,25 @@ export interface PluginOutputEnvelopeV1<
   readonly output: PluginOutputByOperationV1[Operation];
 }
 
-export interface PluginSuccessResponseV1<
+export type PluginDiscoverOutputV1 = PluginOutputByOperationV1['discover'];
+export type PluginInspectOutputV1 = PluginOutputByOperationV1['inspect'];
+export type PluginPlanEditsOutputV1 =
+  PluginOutputByOperationV1['plan-edits'];
+
+export type PluginResponseV1 = DeepReadonly<GeneratedPluginResponseV1>;
+
+type PluginSuccessResponseUnionV1 = Extract<
+  PluginResponseV1,
+  { readonly status: 'success' }
+>;
+
+export type PluginSuccessResponseV1<
   Operation extends PluginOperationV1 = PluginOperationV1,
-> {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly diagnostics: readonly PluginDiagnosticV1[];
-  readonly status: 'success';
+> = Omit<PluginSuccessResponseUnionV1, 'output'> & {
   readonly output: PluginOutputEnvelopeV1<Operation>;
-}
+};
 
-export interface PluginFailureResponseV1 {
-  readonly 'schema-version': typeof PLUGIN_PROTOCOL_SCHEMA_VERSION;
-  readonly diagnostics: readonly PluginDiagnosticV1[];
-  readonly status: 'failure';
-}
-
-type PluginSuccessResponseUnionV1 = {
-  readonly [Operation in PluginOperationV1]: PluginSuccessResponseV1<Operation>;
-}[PluginOperationV1];
-
-export type PluginResponseV1 =
-  | PluginSuccessResponseUnionV1
-  | PluginFailureResponseV1;
+export type PluginFailureResponseV1 = Extract<
+  PluginResponseV1,
+  { readonly status: 'failure' }
+>;

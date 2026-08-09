@@ -1221,6 +1221,19 @@ helper 根据 request 写入 operation，failure helper 必须自行构造至少
 路径、hash、诊断归属和 response/request operation 一致性仍由 Rust host 做最终验证，SDK 不复制一套可能
 漂移的安全校验器。
 
+schema v1 的 JSON wire types 必须从 `semifold-resolver` 中使用 serde 的同一组 Rust 协议模型通过 `ts-rs`
+确定性生成，不能继续在 SDK 中手工复制字段、tag 或 optional 规则。Rust 协议是结构的唯一事实来源；生成器
+必须从 Rust 常量输出字面量 `schema-version` 与 operation 常量，并将 `EcosystemId`、`PackageId`、SemVer 的
+透明 JSON 表示投影为 TypeScript `string`。生成产物提交到 SDK 源码树，但不得在 npm `prepack` 中调用 Cargo；
+独立的 `--check` 模式和 CI drift 检查必须在 Rust 协议变化而生成产物未同步时失败。跨语言 JSON fixture 继续
+保留，用于验证 serde 运行时形状，而不是由静态类型生成替代。
+
+自动生成只覆盖 wire schema，不覆盖 SDK 的运行时 helper、Boa capability ambient 声明或面向插件作者的
+请求/输出关联类型。生成模型作为内部 raw wire layer；SDK 公共类型从该层派生，并递归施加只读属性，使嵌套
+对象、数组和 map 保持现有不可变输入契约。`schema-version` 在 `V1` 类型中必须保持字面量 `1`，不能退化为
+允许任意 `number`。operation-specific request、success output 和 diagnostic helper 类型应通过 `Extract`、
+`Pick` 等 TypeScript 类型运算从生成 union 派生，避免再次手写同一协议结构。
+
 SDK 只为实际注册的 Boa 能力声明 ambient globals。文件能力通过入口参数中的 `PluginHostV1` 暴露，包含
 `listFiles(pattern)` 与 `readText(path)`；网络侧只声明当前 Boa runtime 真正支持的 `fetch` request init、
 response、headers 子集，以及不包含 `searchParams` 等未实现成员的 `URL` 子集。它不加载完整 `lib.dom`，

@@ -18,6 +18,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "check:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs -- --check",
+    "generate:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs",
     "prepack": "tsc -p tsconfig.json",
     "test": "pnpm run build && pnpm run test:types && pnpm run test:runtime",
     "test:runtime": "node --test test/*.test.mjs",

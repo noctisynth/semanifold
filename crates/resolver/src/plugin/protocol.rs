@@ -6,14 +6,33 @@ use serde::{Deserialize, Serialize};
 
 pub const PLUGIN_PROTOCOL_SCHEMA_VERSION: u32 = 1;
 
-const REQUIRED_OPERATIONS: [PluginOperation; 3] = [
+#[cfg(feature = "ts-rs")]
+struct PluginSchemaVersion<const VERSION: u32>;
+
+#[cfg(feature = "ts-rs")]
+impl<const VERSION: u32> ts_rs::TS for PluginSchemaVersion<VERSION> {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn name(_config: &ts_rs::Config) -> String {
+        VERSION.to_string()
+    }
+
+    fn inline(config: &ts_rs::Config) -> String {
+        Self::name(config)
+    }
+}
+
+pub const PLUGIN_OPERATIONS: [PluginOperation; 3] = [
     PluginOperation::Discover,
     PluginOperation::Inspect,
     PluginOperation::PlanEdits,
 ];
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", ts(rename = "PluginOperationV1"))]
 pub enum PluginOperation {
     Discover,
     Inspect,
@@ -21,9 +40,15 @@ pub enum PluginOperation {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginMetadataV1 {
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(as = "PluginSchemaVersion<PLUGIN_PROTOCOL_SCHEMA_VERSION>")
+    )]
     pub schema_version: u32,
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub ecosystem: EcosystemId,
     pub plugin_version: Version,
     pub operations: BTreeSet<PluginOperation>,
@@ -42,7 +67,7 @@ impl PluginMetadataV1 {
             schema_version: PLUGIN_PROTOCOL_SCHEMA_VERSION,
             ecosystem,
             plugin_version,
-            operations: REQUIRED_OPERATIONS.into_iter().collect(),
+            operations: PLUGIN_OPERATIONS.into_iter().collect(),
             read_patterns,
         }
     }
@@ -54,7 +79,7 @@ impl PluginMetadataV1 {
                 ecosystem: self.ecosystem.clone(),
             });
         }
-        for operation in REQUIRED_OPERATIONS {
+        for operation in PLUGIN_OPERATIONS {
             if !self.operations.contains(&operation) {
                 return Err(PluginProtocolError::MissingOperation { operation });
             }
@@ -64,8 +89,13 @@ impl PluginMetadataV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginRequestV1 {
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(as = "PluginSchemaVersion<PLUGIN_PROTOCOL_SCHEMA_VERSION>")
+    )]
     pub schema_version: u32,
     #[serde(flatten)]
     pub call: PluginCallV1,
@@ -91,6 +121,7 @@ impl PluginRequestV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(tag = "operation", content = "input", rename_all = "kebab-case")]
 pub enum PluginCallV1 {
     Discover(PluginDiscoverInputV1),
@@ -110,12 +141,14 @@ impl PluginCallV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginDiscoverInputV1 {
     pub project_root: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginInspectInputV1 {
     pub project_root: String,
@@ -123,28 +156,36 @@ pub struct PluginInspectInputV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginPlanEditsInputV1 {
     pub project_root: String,
     pub workspace_packages: Vec<PluginPackageSnapshotV1>,
+    #[cfg_attr(feature = "ts-rs", ts(as = "Vec<String>"))]
     pub released_packages: Vec<PackageId>,
+    #[cfg_attr(feature = "ts-rs", ts(as = "BTreeMap<String, String>"))]
     pub versions: BTreeMap<PackageId, Version>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginPackageLocationV1 {
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub id: PackageId,
     pub path: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginPackageInspectionV1 {
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub id: PackageId,
     pub manifest_name: String,
     pub version: Version,
     pub version_source: PluginVersionSourceV1,
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub ecosystem: EcosystemId,
     pub path: String,
     pub publishable: bool,
@@ -152,12 +193,15 @@ pub struct PluginPackageInspectionV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginPackageSnapshotV1 {
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub id: PackageId,
     pub manifest_name: String,
     pub version: Version,
     pub version_source: PluginVersionSourceV1,
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub ecosystem: EcosystemId,
     pub path: String,
     pub publishable: bool,
@@ -165,13 +209,19 @@ pub struct PluginPackageSnapshotV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum PluginVersionSourceV1 {
     PackageManifest,
     Shared { manifest: String, field: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginManifestDependencyV1 {
     pub manifest_name: String,
@@ -181,8 +231,10 @@ pub struct PluginManifestDependencyV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginDependencyV1 {
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub package: PackageId,
     pub kind: PluginDependencyKindV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -191,6 +243,7 @@ pub struct PluginDependencyV1 {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub enum PluginDependencyKindV1 {
     Unspecified,
@@ -202,6 +255,7 @@ pub enum PluginDependencyKindV1 {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub enum PluginDependencySourceV1 {
     Manifest,
@@ -209,8 +263,13 @@ pub enum PluginDependencySourceV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginResponseV1 {
+    #[cfg_attr(
+        feature = "ts-rs",
+        ts(as = "PluginSchemaVersion<PLUGIN_PROTOCOL_SCHEMA_VERSION>")
+    )]
     pub schema_version: u32,
     pub diagnostics: Vec<PluginDiagnosticV1>,
     #[serde(flatten)]
@@ -266,14 +325,25 @@ impl PluginResponseV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "status", rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
+#[serde(
+    tag = "status",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum PluginOutcomeV1 {
     Success { output: Box<PluginOutputV1> },
     Failure,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "operation", content = "output", rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
+#[serde(
+    tag = "operation",
+    content = "output",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum PluginOutputV1 {
     Discover {
         packages: Vec<PluginPackageInspectionV1>,
@@ -298,6 +368,7 @@ impl PluginOutputV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginFileEditV1 {
     pub path: String,
@@ -307,54 +378,75 @@ pub struct PluginFileEditV1 {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum PluginFileEditExpectationV1 {
     Existing { sha256: String },
     Missing,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "kebab-case"
+)]
 pub enum PluginEditSourceV1 {
     PackageVersion {
+        #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
         package: PackageId,
     },
     DependencyVersion {
+        #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
         package: PackageId,
+        #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
         dependency: PackageId,
     },
     WorkspaceDependencies {
+        #[cfg_attr(feature = "ts-rs", ts(as = "Vec<String>"))]
         dependencies: Vec<PackageId>,
     },
     WorkspaceManifest {
         shared_versions: Vec<PluginSharedVersionEditV1>,
+        #[cfg_attr(feature = "ts-rs", ts(as = "Vec<String>"))]
         dependencies: Vec<PackageId>,
     },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginSharedVersionEditV1 {
     pub manifest: String,
     pub field: String,
+    #[cfg_attr(feature = "ts-rs", ts(as = "Vec<String>"))]
     pub packages: Vec<PackageId>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub struct PluginDiagnosticV1 {
+    #[cfg_attr(feature = "ts-rs", ts(as = "String"))]
     pub plugin: EcosystemId,
     pub operation: PluginOperation,
     pub severity: PluginDiagnosticSeverityV1,
     pub code: String,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts-rs", ts(as = "Option<String>"))]
     pub package: Option<PackageId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(ts_rs::TS))]
 #[serde(rename_all = "kebab-case")]
 pub enum PluginDiagnosticSeverityV1 {
     Info,
@@ -491,6 +583,31 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<PluginRequestV1>(&serialized).unwrap(),
             request
+        );
+    }
+
+    #[test]
+    fn workspace_manifest_edit_source_uses_kebab_case_fields() {
+        let source = PluginEditSourceV1::WorkspaceManifest {
+            shared_versions: vec![PluginSharedVersionEditV1 {
+                manifest: "workspace.toml".to_string(),
+                field: "workspace.version".to_string(),
+                packages: vec![PackageId::new("app")],
+            }],
+            dependencies: vec![PackageId::new("shared")],
+        };
+
+        assert_eq!(
+            serde_json::to_value(source).unwrap(),
+            json!({
+                "kind": "workspace-manifest",
+                "shared-versions": [{
+                    "manifest": "workspace.toml",
+                    "field": "workspace.version",
+                    "packages": ["app"]
+                }],
+                "dependencies": ["shared"]
+            })
         );
     }
 

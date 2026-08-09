@@ -18,6 +18,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - name: Check plugin SDK protocol bindings
+        run: cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs -- --check
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node.js

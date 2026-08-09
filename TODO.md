@@ -494,6 +494,10 @@
 - [x] 导出 schema v1 的 kebab-case wire types、metadata/entrypoint/diagnostic/response 构造辅助函数
 - [x] 精确声明 `PluginHostV1` 与 Boa 实际支持的 `fetch`、`URL` 子集，不引入 DOM 或 Node.js ambient API
 - [x] 以无 DOM/Node ambient 的类型 fixture 和运行时 JSON 测试锁定 SDK/Rust 协议边界
+- [x] 从 Rust 插件协议自动生成 TypeScript wire types
+  - [x] 使用 `ts-rs` 投影 serde 字段、tag、optional 规则以及 schema/operation 字面量
+  - [x] 从生成 union 派生现有 operation-specific 类型，并在公共出口递归施加只读约束
+  - [x] 提供确定性生成与 CI drift 检查，同时保留跨语言 JSON fixture
 - [ ] 实现配套 Vite 插件的单文件 ESM bundle 与不支持能力检查
 
 ### 阶段完成条件

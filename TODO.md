@@ -448,7 +448,7 @@
 ### 其余入口与测试
 
 - [x] 统一 config、init、commit 和 CI 的标题、warning 与最终成功反馈
-- [ ] 建立“交互仅为参数缺省回退”的 CLI 约定，并让 init/commit 可通过完整参数在关闭 stdin 时运行
+- [x] 建立“交互仅为参数缺省回退”的 CLI 约定，并让 init/commit 可通过完整参数在关闭 stdin 时运行
 - [x] 所有新增或修改的用户文案同步 en/zh locale，key 集合保持一致
 - [x] 建立 TTY/非 TTY、成功、skip、dry-run、部分失败、宽字符和敏感信息测试
 

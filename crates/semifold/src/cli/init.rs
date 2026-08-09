@@ -72,6 +72,7 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
     let target = if let Some(target) = &init.target {
         target_dir.join(target)
     } else {
+        require_interactive(&t!("cli.init.target"), "--target")?;
         let target = Select::new(&t!("cli.init.target"), AVAILABLE_TARGETS.to_vec()).prompt()?;
         target_dir.join(target)
     };

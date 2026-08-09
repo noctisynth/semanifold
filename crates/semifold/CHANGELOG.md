@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.0-rc.5
+
+### Bug Fixes
+
+- [`f123236`](https://github.com/noctisynth/semifold/commit/f12323663c6cd9bbfb995c5fad487f662aba0993): Render the release plan commit SHA as bare text in GitHub status comments so GitHub automatically displays it as a shortened, clickable commit link.
+- [`1e57078`](https://github.com/noctisynth/semifold/commit/1e57078c93fc87d7efa0eccc532bb56fa457d9b0): Make `smif ci` reuse the version and publish execution paths so GitHub Actions receives the same versioned outputs, and expose them through stable step and job output mappings in generated workflows.
+- [`c07709d`](https://github.com/noctisynth/semifold/commit/c07709d025f411ec289620a7fdb5e9f4b3b81585): Rename the `init` workflow selection flags to `--github-actions` and `--no-github-actions` so their purpose is explicit in scripts and limited-interaction environments.
+
 ## v0.3.0-rc.4
 
 ### Bug Fixes

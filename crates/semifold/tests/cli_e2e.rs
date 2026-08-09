@@ -98,7 +98,7 @@ fn init_accepts_complete_arguments_with_stdin_closed() {
             "main",
             "--release-branch",
             "release",
-            "--no-write-ci",
+            "--no-github-actions",
         ],
     );
 
@@ -129,6 +129,52 @@ fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
 }
 
 #[test]
+fn init_reports_the_github_actions_flags_when_that_selection_is_missing() {
+    let root = temporary_repository("init-missing-github-actions");
+
+    let init = run_smif(
+        &root,
+        &[
+            "init",
+            "--resolvers",
+            "rust",
+            "--default-tags",
+            "--base-branch",
+            "main",
+            "--release-branch",
+            "release",
+        ],
+    );
+
+    assert!(!init.status.success(), "{init:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(
+        output.contains("--github-actions or --no-github-actions"),
+        "{output}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn init_help_uses_github_actions_flags() {
+    let root = temporary_repository("init-github-actions-help");
+
+    let help = run_smif(&root, &["init", "--help"]);
+
+    assert!(help.status.success(), "{help:?}");
+    let output = String::from_utf8_lossy(&help.stdout);
+    assert!(output.contains("--github-actions"), "{output}");
+    assert!(output.contains("--no-github-actions"), "{output}");
+    assert!(!output.contains("--write-ci"), "{output}");
+    assert!(!output.contains("--no-write-ci"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn init_workflow_exposes_semifold_step_outputs_to_later_jobs() {
     let root = temporary_repository("init-workflow-outputs");
 
@@ -143,7 +189,7 @@ fn init_workflow_exposes_semifold_step_outputs_to_later_jobs() {
             "main",
             "--release-branch",
             "release",
-            "--write-ci",
+            "--github-actions",
         ],
     );
 

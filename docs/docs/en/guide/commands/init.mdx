@@ -21,6 +21,8 @@ The `init` command initializes Semifold in the current repository. It creates th
 | `--force` | `-f` | Force reinitialize (overwrite existing config) |
 | `--base-branch <NAME>` | - | Base branch name (default: `main`) |
 | `--release-branch <NAME>` | - | Release branch name (default: `release`) |
+| `--github-actions` | - | Generate GitHub Actions workflows |
+| `--no-github-actions` | - | Do not generate GitHub Actions workflows |
 
 ## Options Details
 
@@ -109,6 +111,12 @@ smif init --resolvers rust --resolvers nodejs
 
 ```bash
 smif init --base-branch develop --release-branch releases
+```
+
+### Without GitHub Actions Workflows
+
+```bash
+smif init --no-github-actions
 ```
 
 ### Force Reinitialize

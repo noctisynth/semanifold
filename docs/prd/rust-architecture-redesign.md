@@ -805,7 +805,8 @@ CLI 不提供全局或命令级 `--non-interactive` 模式。交互提示只是�
 首个覆盖范围是所有仍依赖 `inquire` 的命令：
 
 - `init` 使用既有 `--target`、重复 `--resolvers`、`--base-branch` 与 `--release-branch`，并增加
-  `--no-resolvers`、`--default-tags` / `--no-default-tags`、`--write-ci` / `--no-write-ci` 和
+  `--no-resolvers`、`--default-tags` / `--no-default-tags`、`--github-actions` /
+  `--no-github-actions` 和
   `--allow-non-root`。在仓库子目录运行时，只有缺少 `--allow-non-root` 才允许交互确认；
 - `commit` 使用 `--name`、可重复的 `--summary`（短参数 `-m`）、重复
   `--package PACKAGE[=LEVEL]`、作为缺省 bump 的 `--level`，以及 `--tag` / `--no-tag`。每个 `-m`

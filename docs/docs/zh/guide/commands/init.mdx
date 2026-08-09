@@ -21,6 +21,8 @@ smif init [选项]
 | `--force` | `-f` | 强制重新初始化（覆盖现有配置） |
 | `--base-branch <名称>` | - | 基础分支名称（默认：`main`） |
 | `--release-branch <名称>` | - | 发布分支名称（默认：`release`） |
+| `--github-actions` | - | 生成 GitHub Actions 工作流 |
+| `--no-github-actions` | - | 不生成 GitHub Actions 工作流 |
 
 ## 选项详情
 
@@ -105,6 +107,12 @@ smif init --resolvers rust --resolvers nodejs
 
 ```bash
 smif init --base-branch develop --release-branch releases
+```
+
+### 不生成 GitHub Actions 工作流
+
+```bash
+smif init --no-github-actions
 ```
 
 ### 强制重新初始化

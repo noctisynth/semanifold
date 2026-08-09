@@ -35,10 +35,10 @@ pub(crate) struct Init {
     pub default_tags: bool,
     #[arg(long, conflicts_with = "default_tags", help = t!("cli.init.flags.no_default_tags"))]
     pub no_default_tags: bool,
-    #[arg(long, conflicts_with = "no_write_ci", help = t!("cli.init.flags.write_ci"))]
-    pub write_ci: bool,
-    #[arg(long, conflicts_with = "write_ci", help = t!("cli.init.flags.no_write_ci"))]
-    pub no_write_ci: bool,
+    #[arg(long, conflicts_with = "no_github_actions", help = t!("cli.init.flags.github_actions"))]
+    pub github_actions: bool,
+    #[arg(long, conflicts_with = "github_actions", help = t!("cli.init.flags.no_github_actions"))]
+    pub no_github_actions: bool,
     #[arg(long, help = t!("cli.init.flags.allow_non_root"))]
     pub allow_non_root: bool,
 }
@@ -131,18 +131,21 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
             .prompt()?
     };
 
-    let write_ci = if init.write_ci {
+    let github_actions = if init.github_actions {
         true
-    } else if init.no_write_ci {
+    } else if init.no_github_actions {
         false
     } else {
-        require_interactive(&t!("cli.init.write_ci"), "--write-ci or --no-write-ci")?;
-        Confirm::new(&t!("cli.init.write_ci"))
+        require_interactive(
+            &t!("cli.init.github_actions"),
+            "--github-actions or --no-github-actions",
+        )?;
+        Confirm::new(&t!("cli.init.github_actions"))
             .with_default(true)
             .prompt()?
     };
 
-    let workflows = if write_ci {
+    let workflows = if github_actions {
         let ci_asset = CIAsset::get("semifold-ci.yaml.jinja")
             .ok_or_else(|| anyhow::anyhow!(t!("cli.init.asset_missing", name = "semifold-ci")))?;
         let status_ci_asset = CIAsset::get("semifold-status.yaml.jinja").ok_or_else(|| {

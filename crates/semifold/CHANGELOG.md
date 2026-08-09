@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0-rc.4
+
+### Bug Fixes
+
+- [`4e90704`](https://github.com/noctisynth/semifold/commit/4e90704f98c86358d201b473e64d7ebddaa610c7): Use `-m` as the short form of `smif commit --summary`, matching familiar commit message conventions.
+
+### New Features
+
+- [`d080a47`](https://github.com/noctisynth/semifold/commit/d080a4794c27a56bec09325762cf85cfb3d36608): Make every init and changeset creation prompt optional through equivalent CLI arguments so the same commands run predictably in CI/CD and constrained agent environments with stdin closed. Missing arguments now fail fast with actionable guidance when prompting is unavailable.
+- [`f52501d`](https://github.com/noctisynth/semifold/commit/f52501d22f5ed4bd1408111072a54472880ea63b): Allow `smif commit -m` to be repeated, treating each value as an ordered summary paragraph that the default changelog template renders as a continuation paragraph within the same changeset list item.
+
 ## v0.3.0-rc.3
 
 ### Bug Fixes

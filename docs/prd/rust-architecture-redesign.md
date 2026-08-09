@@ -1754,6 +1754,12 @@ TOML 生成迁移计划，并对迁移后的内容执行严格 `Config` 反序�
 `ProjectLocation::load()` 解析旧配置或执行 workspace discovery。除 `init`、`mcp` 及该迁移入口
 外，其余项目命令仍先严格加载完整 `Project`。迁移应用继续使用原子写回。
 
+普通 CLI 命令在严格加载 TOML 配置时收到 `ResolveError::InvalidConfig`，必须在保留原始加载错误的
+同时追加本地化恢复建议，引导用户先尝试运行 `smif config migrate`。该建议只表示配置可能使用旧契约，
+不能宣称迁移一定能够修复任意 TOML 语法或手工配置错误。配置文件缺失、读取 I/O 失败、项目路径错误
+以及不受支持的 JSON 配置不得显示该建议，因为 `config migrate` 无法解决这些问题。迁移命令自身继续
+直接报告迁移规划或验证错误，不递归附加相同建议。
+
 该命令是格式迁移工具，不替代 `config sync`，也不自动将 stable package 显式改写为 `channel = "stable"`。
 
 ### 13.2.2 发布通道管理
@@ -2429,6 +2435,7 @@ fixtures/rust/
 - 修改后的文档再次同步是幂等的。
 - `config migrate` 将 legacy `version-mode` 转换为 `channel`，保留无关字段与注释；
 - `config migrate --check` 在存在迁移项时不写文件并返回非零；
+- 普通命令因 TOML 配置无法按当前契约加载时提示运行 `smif config migrate`，JSON、不存在和 I/O 错误不提示；
 - 同时存在 `channel` 与 `version-mode` 时迁移拒绝写入。
 - `config channel set` 与 `clear` 仅修改指定 package 的 `channel` 字段，并保留 table 的其他内容；
 - `config channel --check` 在目标 channel 不匹配时不写入并返回非零；

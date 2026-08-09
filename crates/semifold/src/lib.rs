@@ -3,7 +3,7 @@
 use clap::Parser;
 use log::LevelFilter;
 use rust_i18n::t;
-use semifold_engine::ProjectLocation;
+use semifold_engine::{ProjectLoadError, ProjectLocation};
 
 pub mod cli;
 pub mod logger;
@@ -36,7 +36,7 @@ pub fn run() -> anyhow::Result<()> {
     let changeset_dir = std::env::var_os("CHANGESET_PATH").map(std::path::PathBuf::from);
     let location =
         ProjectLocation::discover_with_changeset_dir(&current_dir, changeset_dir.as_deref())
-            .map_err(|error| anyhow::anyhow!(t!("cli.project_load_failed", error = error)))?;
+            .map_err(|error| anyhow::anyhow!(project_load_error_message(&error)))?;
     if let Some(Commands::Init(init)) = &cli.command {
         cli::init::run(init, &location)?;
         return Ok(());
@@ -49,7 +49,7 @@ pub fn run() -> anyhow::Result<()> {
     }
     let project = location
         .load()
-        .map_err(|error| anyhow::anyhow!(t!("cli.project_load_failed", error = error)))?;
+        .map_err(|error| anyhow::anyhow!(project_load_error_message(&error)))?;
     log::debug!(
         "Loaded project with {} configured package(s)",
         project.config.packages.len()
@@ -70,6 +70,24 @@ pub fn run() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn project_load_error_message(error: &ProjectLoadError) -> String {
+    append_config_migration_hint(
+        t!("cli.project_load_failed", error = error).into_owned(),
+        error,
+    )
+}
+
+pub(crate) fn append_config_migration_hint(
+    mut message: String,
+    error: &ProjectLoadError,
+) -> String {
+    if error.config_migration_may_help() {
+        message.push('\n');
+        message.push_str(&t!("cli.config_migration_hint"));
+    }
+    message
 }
 
 fn command_name(command: &Commands) -> &'static str {

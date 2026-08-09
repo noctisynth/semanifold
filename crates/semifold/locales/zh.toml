@@ -1,5 +1,6 @@
 [cli]
 project_load_failed = "加载 Semifold 项目失败：%{error}"
+config_migration_hint = "配置可能使用旧版格式。请尝试运行 `smif config migrate`，然后重试。"
 not_initialized = "Semifold 未初始化。请先运行 `semifold init`。"
 dirty_repo = "Git 仓库不干净。请先提交或暂存您的更改，或使用 `--allow-dirty` 选项。"
 

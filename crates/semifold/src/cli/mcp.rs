@@ -485,7 +485,7 @@ fn parse_revision(revision: &str) -> Result<FileHash, McpToolError> {
 }
 
 fn project_error(error: ProjectLoadError) -> McpToolError {
-    let code = match error {
+    let code = match &error {
         ProjectLoadError::RepositoryNotFound | ProjectLoadError::RepositoryOpenFailed { .. } => {
             "PROJECT_NOT_FOUND"
         }
@@ -496,10 +496,11 @@ fn project_error(error: ProjectLoadError) -> McpToolError {
             "PROJECT_INVALID"
         }
     };
-    McpToolError::new(
-        code,
-        t!("cli.mcp.errors.project_load_failed", error = error),
-    )
+    let message = crate::append_config_migration_hint(
+        t!("cli.mcp.errors.project_load_failed", error = error).into_owned(),
+        &error,
+    );
+    McpToolError::new(code, message)
 }
 
 fn app_error(error: AppError) -> McpToolError {
@@ -733,6 +734,30 @@ mod tests {
             Value::Array(Vec::new())
         );
 
+        fs::remove_dir_all(root).expect("MCP fixture must be removed");
+    }
+
+    #[test]
+    fn invalid_toml_project_error_includes_the_migration_hint() {
+        let root = repository("legacy-config");
+        initialize_project(&root);
+        let config_path = root.join(".changes/config.toml");
+        let legacy = fs::read_to_string(&config_path)
+            .expect("MCP fixture configuration must be readable")
+            .replace("type = \"http\"\n", "");
+        fs::write(&config_path, legacy).expect("legacy MCP fixture must be written");
+        let server = server(&root, ExecutionMode::Apply);
+
+        let result = server.get_changeset(parameters(GetChangesetParams { id: None }));
+
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(structured(&result)["code"], "PROJECT_INVALID");
+        assert!(
+            structured(&result)["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("smif config migrate")),
+            "{result:?}"
+        );
         fs::remove_dir_all(root).expect("MCP fixture must be removed");
     }
 

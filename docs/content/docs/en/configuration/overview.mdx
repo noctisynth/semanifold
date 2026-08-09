@@ -91,6 +91,8 @@ If a migration is available, review and apply it with:
 smif config migrate
 ```
 
+When a regular command cannot read TOML configuration under the current contract, its error also suggests trying this migration command first. The suggestion is recovery guidance for older configuration, not a promise to repair arbitrary TOML syntax. If migration still reports a parse error, fix the reported problem manually. JSON configuration and file-read failures do not receive this suggestion because migration does not handle them.
+
 For example, the legacy `version-mode` package field is accepted for migration but current configuration should use `channel` and, when entering a named channel, `channel-bump`.
 
 ## Add policy gradually

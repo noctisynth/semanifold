@@ -152,6 +152,19 @@ pub enum ProjectLoadError {
     },
 }
 
+impl ProjectLoadError {
+    #[must_use]
+    pub fn config_migration_may_help(&self) -> bool {
+        matches!(
+            self,
+            Self::ConfigInvalid {
+                source: ResolveError::InvalidConfig { .. },
+                ..
+            }
+        )
+    }
+}
+
 fn utf8_path(path: &Path) -> Result<Utf8PathBuf, ProjectLoadError> {
     Utf8PathBuf::from_path_buf(path.to_path_buf())
         .map_err(|path| ProjectLoadError::NonUtf8Path { path })
@@ -249,6 +262,36 @@ mod tests {
             })
         ));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn recommends_migration_only_for_invalid_toml_contracts() {
+        let path = Utf8PathBuf::from(".changes/config.toml");
+        let invalid_toml = ProjectLoadError::ConfigInvalid {
+            path: path.clone(),
+            source: ResolveError::InvalidConfig {
+                path: path.as_std_path().to_path_buf(),
+                reason: "legacy shape".to_string(),
+            },
+        };
+        let unsupported_json = ProjectLoadError::ConfigInvalid {
+            path: Utf8PathBuf::from(".changes/config.json"),
+            source: ResolveError::UnsupportedConfigFormat {
+                path: PathBuf::from(".changes/config.json"),
+            },
+        };
+        let unreadable = ProjectLoadError::ConfigInvalid {
+            path,
+            source: ResolveError::IoError(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "fixture is unreadable",
+            )),
+        };
+
+        assert!(invalid_toml.config_migration_may_help());
+        assert!(!unsupported_json.config_migration_may_help());
+        assert!(!unreadable.config_migration_may_help());
+        assert!(!ProjectLoadError::ConfigNotFound.config_migration_may_help());
     }
 
     #[cfg(unix)]

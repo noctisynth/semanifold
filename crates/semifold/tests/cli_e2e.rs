@@ -859,6 +859,16 @@ url = ""
     let config_path = root.join(".changes/config.toml");
     let original = fs::read_to_string(&config_path).unwrap();
 
+    let status = run_smif(&root, &["status"]);
+
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(output.contains("smif config migrate"), "{output}");
+
     let check = run_smif(&root, &["config", "migrate", "--check"]);
 
     assert!(!check.status.success(), "{check:?}");
@@ -871,6 +881,24 @@ url = ""
     assert!(migrated.contains("type = \"http\""), "{migrated}");
     let status = run_smif(&root, &["status"]);
     assert!(status.status.success(), "{status:?}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn unsupported_json_config_does_not_recommend_toml_migration() {
+    let root = temporary_repository("unsupported-json-config");
+    fs::create_dir_all(root.join(".changes")).unwrap();
+    fs::write(root.join(".changes/config.json"), "{}").unwrap();
+
+    let status = run_smif(&root, &["status"]);
+
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(!output.contains("smif config migrate"), "{output}");
     fs::remove_dir_all(root).unwrap();
 }
 

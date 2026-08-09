@@ -4,7 +4,7 @@ use std::{
 };
 
 use semifold_core::{
-    Dependency, DependencyKind, DependencySource, Ecosystem, PackageId, PackageSnapshot,
+    Dependency, DependencyKind, DependencySource, EcosystemId, PackageId, PackageSnapshot,
     WorkspaceGraph, WorkspaceGraphError,
 };
 use semifold_resolver::{
@@ -57,7 +57,7 @@ fn workspace_graph_from_inspections(
     let mut package_ids = BTreeMap::new();
     for package in &resolved {
         let key = (
-            package.package.ecosystem,
+            package.package.ecosystem.clone(),
             package.package.manifest_name.clone(),
         );
         if package_ids
@@ -66,7 +66,7 @@ fn workspace_graph_from_inspections(
         {
             return Err(WorkspaceLoadError::DuplicateManifestName {
                 name: package.package.manifest_name.clone(),
-                ecosystem: package.package.ecosystem,
+                ecosystem: package.package.ecosystem.clone(),
             });
         }
     }
@@ -81,7 +81,7 @@ fn workspace_graph_from_inspections(
                 .into_iter()
                 .filter_map(|dependency| {
                     package_ids
-                        .get(&(resolved.package.ecosystem, dependency.manifest_name))
+                        .get(&(resolved.package.ecosystem.clone(), dependency.manifest_name))
                         .cloned()
                         .map(|package| Dependency {
                             package,
@@ -119,8 +119,14 @@ fn workspace_graph_from_inspections(
 pub enum WorkspaceLoadError {
     #[error("workspace path is not valid UTF-8: {path:?}")]
     NonUtf8Path { path: PathBuf },
-    #[error("duplicate manifest package name {name} in {ecosystem:?}")]
-    DuplicateManifestName { name: String, ecosystem: Ecosystem },
+    #[error(
+        "duplicate manifest package name {name} in {ecosystem_name}",
+        ecosystem_name = .ecosystem.display_name()
+    )]
+    DuplicateManifestName {
+        name: String,
+        ecosystem: EcosystemId,
+    },
     #[error(transparent)]
     PackagePath(#[from] PackagePathError),
     #[error(transparent)]

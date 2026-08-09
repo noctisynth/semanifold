@@ -4,7 +4,7 @@ use std::{
 };
 
 use semifold_core::{
-    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    DependencyKind, EcosystemId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, SharedVersionEdit, VersionMap, VersionSource, VersionSourceId,
 };
 use serde::Deserialize;
@@ -95,7 +95,7 @@ impl RustResolver {
             manifest_name: package.name,
             version: package.version,
             version_source: package.version_source,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path,
             publishable: !package.private,
             dependencies,
@@ -421,8 +421,8 @@ impl RustResolver {
 }
 
 impl EcosystemAdapter for RustResolver {
-    fn ecosystem(&self) -> Ecosystem {
-        Ecosystem::Rust
+    fn ecosystem(&self) -> EcosystemId {
+        EcosystemId::RUST
     }
 
     fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
@@ -478,7 +478,7 @@ impl EcosystemAdapter for RustResolver {
         if input
             .workspace_packages
             .iter()
-            .any(|package| package.ecosystem != Ecosystem::Rust)
+            .any(|package| package.ecosystem != EcosystemId::RUST)
         {
             return Err(AdapterError::InvalidInput {
                 reason: "Rust edit planning received a non-Rust workspace package".to_string(),
@@ -685,7 +685,7 @@ mod tests {
         resolver::ResolverType,
     };
     use semifold_core::{
-        Ecosystem, EditSource, PackageId, PackageSnapshot, VersionMap, VersionSource,
+        EcosystemId, EditSource, PackageId, PackageSnapshot, VersionMap, VersionSource,
         VersionSourceId,
     };
 
@@ -929,7 +929,7 @@ mod tests {
             manifest_name: "app".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/app".into(),
             publishable: true,
             dependencies: vec![],
@@ -941,7 +941,7 @@ mod tests {
                 manifest_name: "core".to_string(),
                 version: semver::Version::new(1, 0, 0),
                 version_source: VersionSource::PackageManifest,
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: "crates/core".into(),
                 publishable: true,
                 dependencies: vec![],
@@ -951,7 +951,7 @@ mod tests {
                 manifest_name: "renamed".to_string(),
                 version: semver::Version::new(2, 0, 0),
                 version_source: VersionSource::PackageManifest,
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: "crates/renamed".into(),
                 publishable: true,
                 dependencies: vec![],
@@ -961,7 +961,7 @@ mod tests {
                 manifest_name: "dev".to_string(),
                 version: semver::Version::new(3, 0, 0),
                 version_source: VersionSource::PackageManifest,
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: "crates/dev".into(),
                 publishable: true,
                 dependencies: vec![],
@@ -971,7 +971,7 @@ mod tests {
                 manifest_name: "build".to_string(),
                 version: semver::Version::new(4, 0, 0),
                 version_source: VersionSource::PackageManifest,
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: "crates/build".into(),
                 publishable: true,
                 dependencies: vec![],
@@ -1041,7 +1041,7 @@ mod tests {
             manifest_name: "app".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/app".into(),
             publishable: true,
             dependencies: vec![],
@@ -1051,7 +1051,7 @@ mod tests {
             manifest_name: "core".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/core".into(),
             publishable: true,
             dependencies: vec![],
@@ -1061,7 +1061,7 @@ mod tests {
             manifest_name: "helper".to_string(),
             version: semver::Version::new(2, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/helper".into(),
             publishable: true,
             dependencies: vec![],
@@ -1141,7 +1141,7 @@ mod tests {
             manifest_name: id.to_string(),
             version: semver::Version::new(1, 2, 3),
             version_source: source.clone(),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: format!("crates/{id}").into(),
             publishable,
             dependencies: Vec::new(),

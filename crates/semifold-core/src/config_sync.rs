@@ -3,13 +3,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use camino::Utf8PathBuf;
 use serde::Serialize;
 
-use crate::{ChangesetId, Ecosystem, PackageId};
+use crate::{ChangesetId, EcosystemId, PackageId};
 
 /// One package table read from the current Semifold configuration.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct ConfiguredPackage {
     pub id: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub path: Utf8PathBuf,
 }
 
@@ -17,7 +17,7 @@ pub struct ConfiguredPackage {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct DiscoveredPackage {
     pub id: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub path: Utf8PathBuf,
 }
 
@@ -25,14 +25,14 @@ pub struct DiscoveredPackage {
 pub struct PackageRename {
     pub from: PackageId,
     pub to: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub path: Utf8PathBuf,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PackageMove {
     pub package: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub from: Utf8PathBuf,
     pub to: Utf8PathBuf,
 }
@@ -125,10 +125,10 @@ impl ConfigSyncPlanner {
             if discovered_indexes.len() < 2 {
                 continue;
             }
-            let mut ecosystems = BTreeMap::<Ecosystem, usize>::new();
+            let mut ecosystems = BTreeMap::<EcosystemId, usize>::new();
             for discovered_index in discovered_indexes {
                 if let Some(package) = discovered.get(*discovered_index) {
-                    *ecosystems.entry(package.ecosystem).or_default() += 1;
+                    *ecosystems.entry(package.ecosystem.clone()).or_default() += 1;
                 }
             }
             if ecosystems.values().all(|count| *count == 1) {
@@ -155,14 +155,14 @@ impl ConfigSyncPlanner {
             );
         }
 
-        let mut configured_by_location = BTreeMap::<(Ecosystem, Utf8PathBuf), Vec<_>>::new();
-        let mut discovered_by_location = BTreeMap::<(Ecosystem, Utf8PathBuf), Vec<_>>::new();
+        let mut configured_by_location = BTreeMap::<(EcosystemId, Utf8PathBuf), Vec<_>>::new();
+        let mut discovered_by_location = BTreeMap::<(EcosystemId, Utf8PathBuf), Vec<_>>::new();
         for (index, package) in configured.iter().enumerate() {
             if matches.configured.contains(&index) {
                 continue;
             }
             configured_by_location
-                .entry((package.ecosystem, package.path.clone()))
+                .entry((package.ecosystem.clone(), package.path.clone()))
                 .or_default()
                 .push(index);
         }
@@ -171,7 +171,7 @@ impl ConfigSyncPlanner {
                 continue;
             }
             discovered_by_location
-                .entry((package.ecosystem, package.path.clone()))
+                .entry((package.ecosystem.clone(), package.path.clone()))
                 .or_default()
                 .push(index);
         }
@@ -190,7 +190,7 @@ impl ConfigSyncPlanner {
                     renamed.push(PackageRename {
                         from: current.id.clone(),
                         to: found.id.clone(),
-                        ecosystem: found.ecosystem,
+                        ecosystem: found.ecosystem.clone(),
                         path: found.path.clone(),
                     });
                 }
@@ -268,7 +268,7 @@ impl ConfigSyncPlanner {
                 if current.ecosystem == found.ecosystem {
                     moved.push(PackageMove {
                         package: found.id.clone(),
-                        ecosystem: found.ecosystem,
+                        ecosystem: found.ecosystem.clone(),
                         from: current.path.clone(),
                         to: found.path.clone(),
                     });
@@ -417,7 +417,7 @@ impl MatchTracker {
 mod tests {
     use super::*;
 
-    fn configured(id: &str, ecosystem: Ecosystem, path: &str) -> ConfiguredPackage {
+    fn configured(id: &str, ecosystem: EcosystemId, path: &str) -> ConfiguredPackage {
         ConfiguredPackage {
             id: PackageId::new(id),
             ecosystem,
@@ -425,7 +425,7 @@ mod tests {
         }
     }
 
-    fn discovered(id: &str, ecosystem: Ecosystem, path: &str) -> DiscoveredPackage {
+    fn discovered(id: &str, ecosystem: EcosystemId, path: &str) -> DiscoveredPackage {
         DiscoveredPackage {
             id: PackageId::new(id),
             ecosystem,
@@ -446,33 +446,33 @@ mod tests {
     fn classifies_added_missing_renamed_and_moved_packages() {
         let plan = plan(
             &[
-                configured("missing", Ecosystem::Rust, "crates/missing"),
-                configured("moved", Ecosystem::Node, "packages/old"),
-                configured("old-name", Ecosystem::Python, "python/pkg"),
-                configured("same", Ecosystem::Cpp, "cpp/same"),
+                configured("missing", EcosystemId::RUST, "crates/missing"),
+                configured("moved", EcosystemId::NODE, "packages/old"),
+                configured("old-name", EcosystemId::PYTHON, "python/pkg"),
+                configured("same", EcosystemId::CPP, "cpp/same"),
             ],
             &[
-                discovered("added", Ecosystem::Rust, "crates/added"),
-                discovered("moved", Ecosystem::Node, "packages/new"),
-                discovered("new-name", Ecosystem::Python, "python/pkg"),
-                discovered("same", Ecosystem::Cpp, "cpp/same"),
+                discovered("added", EcosystemId::RUST, "crates/added"),
+                discovered("moved", EcosystemId::NODE, "packages/new"),
+                discovered("new-name", EcosystemId::PYTHON, "python/pkg"),
+                discovered("same", EcosystemId::CPP, "cpp/same"),
             ],
         );
 
         assert_eq!(
             plan.added,
-            [discovered("added", Ecosystem::Rust, "crates/added")]
+            [discovered("added", EcosystemId::RUST, "crates/added")]
         );
         assert_eq!(
             plan.missing,
-            [configured("missing", Ecosystem::Rust, "crates/missing")]
+            [configured("missing", EcosystemId::RUST, "crates/missing")]
         );
         assert_eq!(
             plan.renamed,
             [PackageRename {
                 from: PackageId::new("old-name"),
                 to: PackageId::new("new-name"),
-                ecosystem: Ecosystem::Python,
+                ecosystem: EcosystemId::PYTHON,
                 path: Utf8PathBuf::from("python/pkg"),
             }]
         );
@@ -480,7 +480,7 @@ mod tests {
             plan.moved,
             [PackageMove {
                 package: PackageId::new("moved"),
-                ecosystem: Ecosystem::Node,
+                ecosystem: EcosystemId::NODE,
                 from: Utf8PathBuf::from("packages/old"),
                 to: Utf8PathBuf::from("packages/new"),
             }]
@@ -491,8 +491,8 @@ mod tests {
 
     #[test]
     fn reports_resolver_changes_without_adding_or_removing_the_package() {
-        let current = configured("app", Ecosystem::Rust, "app");
-        let found = discovered("app", Ecosystem::Node, "app");
+        let current = configured("app", EcosystemId::RUST, "app");
+        let found = discovered("app", EcosystemId::NODE, "app");
 
         let plan = plan(std::slice::from_ref(&current), std::slice::from_ref(&found));
 
@@ -511,20 +511,20 @@ mod tests {
     fn reports_ambiguous_path_matches_only_as_conflicts() {
         let plan = plan(
             &[
-                configured("first", Ecosystem::Rust, "crates/shared"),
-                configured("second", Ecosystem::Rust, "crates/shared"),
+                configured("first", EcosystemId::RUST, "crates/shared"),
+                configured("second", EcosystemId::RUST, "crates/shared"),
             ],
-            &[discovered("found", Ecosystem::Rust, "crates/shared")],
+            &[discovered("found", EcosystemId::RUST, "crates/shared")],
         );
 
         assert_eq!(
             plan.conflicts,
             [ConfigConflict::AmbiguousMatch {
                 configured: vec![
-                    configured("first", Ecosystem::Rust, "crates/shared"),
-                    configured("second", Ecosystem::Rust, "crates/shared"),
+                    configured("first", EcosystemId::RUST, "crates/shared"),
+                    configured("second", EcosystemId::RUST, "crates/shared"),
                 ],
-                discovered: vec![discovered("found", Ecosystem::Rust, "crates/shared")],
+                discovered: vec![discovered("found", EcosystemId::RUST, "crates/shared")],
             }]
         );
         assert!(plan.added.is_empty());
@@ -533,8 +533,8 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_discovered_package_ids() {
-        let first = discovered("shared", Ecosystem::Rust, "crates/shared");
-        let second = discovered("shared", Ecosystem::Node, "packages/shared");
+        let first = discovered("shared", EcosystemId::RUST, "crates/shared");
+        let second = discovered("shared", EcosystemId::NODE, "packages/shared");
 
         let plan = plan(&[], &[second.clone(), first.clone()]);
 
@@ -552,12 +552,12 @@ mod tests {
     fn preserves_configured_ids_for_cross_ecosystem_manifest_name_collisions() {
         let plan = plan(
             &[
-                configured("rust-shared", Ecosystem::Rust, "crates/shared"),
-                configured("node-shared", Ecosystem::Node, "packages/shared"),
+                configured("rust-shared", EcosystemId::RUST, "crates/shared"),
+                configured("node-shared", EcosystemId::NODE, "packages/shared"),
             ],
             &[
-                discovered("shared", Ecosystem::Node, "packages/shared"),
-                discovered("shared", Ecosystem::Rust, "crates/shared"),
+                discovered("shared", EcosystemId::NODE, "packages/shared"),
+                discovered("shared", EcosystemId::RUST, "crates/shared"),
             ],
         );
 
@@ -568,12 +568,12 @@ mod tests {
 
     #[test]
     fn rejects_an_unconfigured_collision_with_an_already_bound_package_id() {
-        let rust = configured("shared", Ecosystem::Rust, "crates/shared");
-        let node = discovered("shared", Ecosystem::Node, "packages/shared");
+        let rust = configured("shared", EcosystemId::RUST, "crates/shared");
+        let node = discovered("shared", EcosystemId::NODE, "packages/shared");
         let plan = plan(
             std::slice::from_ref(&rust),
             &[
-                discovered("shared", Ecosystem::Rust, "crates/shared"),
+                discovered("shared", EcosystemId::RUST, "crates/shared"),
                 node.clone(),
             ],
         );
@@ -591,10 +591,10 @@ mod tests {
 
     #[test]
     fn rejects_same_ecosystem_manifest_name_collisions_even_when_ids_are_configured() {
-        let first_configured = configured("first", Ecosystem::Rust, "crates/first");
-        let second_configured = configured("second", Ecosystem::Rust, "crates/second");
-        let first_discovered = discovered("shared", Ecosystem::Rust, "crates/first");
-        let second_discovered = discovered("shared", Ecosystem::Rust, "crates/second");
+        let first_configured = configured("first", EcosystemId::RUST, "crates/first");
+        let second_configured = configured("second", EcosystemId::RUST, "crates/second");
+        let first_discovered = discovered("shared", EcosystemId::RUST, "crates/first");
+        let second_discovered = discovered("shared", EcosystemId::RUST, "crates/second");
 
         let plan = plan(
             &[first_configured.clone(), second_configured.clone()],
@@ -615,12 +615,12 @@ mod tests {
     #[test]
     fn produces_the_same_plan_for_any_input_order() {
         let mut configured = vec![
-            configured("missing", Ecosystem::Rust, "crates/missing"),
-            configured("moved", Ecosystem::Rust, "crates/old"),
+            configured("missing", EcosystemId::RUST, "crates/missing"),
+            configured("moved", EcosystemId::RUST, "crates/old"),
         ];
         let mut discovered = vec![
-            discovered("added", Ecosystem::Rust, "crates/added"),
-            discovered("moved", Ecosystem::Rust, "crates/new"),
+            discovered("added", EcosystemId::RUST, "crates/added"),
+            discovered("moved", EcosystemId::RUST, "crates/new"),
         ];
         let first = plan(&configured, &discovered);
         configured.reverse();
@@ -631,8 +631,8 @@ mod tests {
 
     #[test]
     fn reports_no_drift_for_identical_snapshots() {
-        let current = configured("app", Ecosystem::Rust, "crates/app");
-        let found = discovered("app", Ecosystem::Rust, "crates/app");
+        let current = configured("app", EcosystemId::RUST, "crates/app");
+        let found = discovered("app", EcosystemId::RUST, "crates/app");
 
         assert!(!plan(&[current], &[found]).has_drift());
     }
@@ -646,8 +646,8 @@ mod tests {
 
         let plan = ConfigSyncPlanner::plan(
             Utf8PathBuf::from(".changes/config.toml"),
-            &[configured("old-name", Ecosystem::Rust, "crates/app")],
-            &[discovered("new-name", Ecosystem::Rust, "crates/app")],
+            &[configured("old-name", EcosystemId::RUST, "crates/app")],
+            &[discovered("new-name", EcosystemId::RUST, "crates/app")],
             &changesets,
         );
 

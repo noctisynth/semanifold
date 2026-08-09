@@ -163,7 +163,7 @@ impl ReleasePlanner {
             }
             packages.push(PackageRelease {
                 id: snapshot.id.clone(),
-                ecosystem: snapshot.ecosystem,
+                ecosystem: snapshot.ecosystem.clone(),
                 current_version: snapshot.version.clone(),
                 next_version,
                 bump,
@@ -460,7 +460,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        Dependency, DependencyKind, DependencySource, Ecosystem, PackageSnapshot, VersionSource,
+        Dependency, DependencyKind, DependencySource, EcosystemId, PackageSnapshot, VersionSource,
     };
 
     fn package(id: &str, version: &str, dependencies: &[&str]) -> PackageSnapshot {
@@ -469,7 +469,7 @@ mod tests {
             manifest_name: id.to_string(),
             version: Version::parse(version).unwrap(),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: Utf8PathBuf::from(format!("crates/{id}")),
             publishable: true,
             dependencies: dependencies

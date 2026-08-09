@@ -5,7 +5,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    BumpLevel, ChangesetId, Ecosystem, PackageId, PackageSnapshot, ReleasePlan, ReleaseReason,
+    BumpLevel, ChangesetId, EcosystemId, PackageId, PackageSnapshot, ReleasePlan, ReleaseReason,
 };
 
 /// Immutable, serializable facts shared by one workspace release.
@@ -58,7 +58,7 @@ impl From<&ReleasePlan> for ReleasePlanContext {
                     package.id.clone(),
                     PackageReleaseContext {
                         id: package.id.clone(),
-                        ecosystem: package.ecosystem,
+                        ecosystem: package.ecosystem.clone(),
                         current_version: package.current_version.clone(),
                         next_version: package.next_version.clone(),
                         bump: package.bump,
@@ -87,7 +87,7 @@ impl From<&ReleasePlan> for ReleasePlanContext {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PackageReleaseContext {
     pub id: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub current_version: Version,
     pub next_version: Version,
     pub bump: BumpLevel,
@@ -188,7 +188,7 @@ pub struct ReleasePackageContext<'release> {
 pub struct ReleasePackageTemplateContext {
     pub id: PackageId,
     pub name: String,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub current_version: Version,
     pub next_version: Version,
     pub version: Version,
@@ -217,8 +217,8 @@ impl<'release> ReleasePackageContext<'release> {
         if snapshot.ecosystem != planned.ecosystem {
             return Err(ReleasePackageContextError::EcosystemMismatch {
                 package: snapshot.id.clone(),
-                snapshot: snapshot.ecosystem,
-                planned: planned.ecosystem,
+                snapshot: snapshot.ecosystem.clone(),
+                planned: planned.ecosystem.clone(),
             });
         }
         let next_version = planned.next_version.clone();
@@ -227,7 +227,7 @@ impl<'release> ReleasePackageContext<'release> {
             package: ReleasePackageTemplateContext {
                 id: snapshot.id.clone(),
                 name: snapshot.manifest_name.clone(),
-                ecosystem: snapshot.ecosystem,
+                ecosystem: snapshot.ecosystem.clone(),
                 current_version: snapshot.version.clone(),
                 version: next_version.clone(),
                 tag: format!("{}-v{next_version}", snapshot.manifest_name),
@@ -252,12 +252,14 @@ pub enum ReleasePackageContextError {
         planned: Version,
     },
     #[error(
-        "package {package} has ecosystem {snapshot:?}, but the release plan expects {planned:?}"
+        "package {package} has ecosystem {snapshot_name}, but the release plan expects {planned_name}",
+        snapshot_name = .snapshot.display_name(),
+        planned_name = .planned.display_name()
     )]
     EcosystemMismatch {
         package: PackageId,
-        snapshot: Ecosystem,
-        planned: Ecosystem,
+        snapshot: EcosystemId,
+        planned: EcosystemId,
     },
 }
 
@@ -333,7 +335,7 @@ mod tests {
     fn package(id: &str, next: Version) -> PackageRelease {
         PackageRelease {
             id: PackageId::new(id),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             current_version: Version::new(1, 0, 0),
             next_version: next,
             bump: BumpLevel::Minor,
@@ -469,7 +471,7 @@ mod tests {
             manifest_name: "manifest-name".to_string(),
             version: Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/package".into(),
             publishable: false,
             dependencies: Vec::new(),
@@ -498,7 +500,7 @@ mod tests {
             manifest_name: "missing".to_string(),
             version: Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: "crates/missing".into(),
             publishable: true,
             dependencies: Vec::new(),

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use saphyr::LoadableYamlNode;
 use semifold_core::{
-    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    DependencyKind, EcosystemId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, VersionMap, VersionSource,
 };
 use serde::Deserialize;
@@ -68,7 +68,7 @@ impl NodejsResolver {
             manifest_name: package.name,
             version: package.version,
             version_source: package.version_source,
-            ecosystem: Ecosystem::Node,
+            ecosystem: EcosystemId::NODE,
             path,
             publishable: !package.private,
             dependencies,
@@ -240,8 +240,8 @@ fn node_requirement(requirement: &str, version: &str) -> String {
 }
 
 impl EcosystemAdapter for NodejsResolver {
-    fn ecosystem(&self) -> Ecosystem {
-        Ecosystem::Node
+    fn ecosystem(&self) -> EcosystemId {
+        EcosystemId::NODE
     }
 
     fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
@@ -297,7 +297,7 @@ impl EcosystemAdapter for NodejsResolver {
         if input
             .workspace_packages
             .iter()
-            .any(|package| package.ecosystem != Ecosystem::Node)
+            .any(|package| package.ecosystem != EcosystemId::NODE)
         {
             return Err(AdapterError::InvalidInput {
                 reason: "Node.js edit planning received a non-Node workspace package".to_string(),
@@ -500,7 +500,7 @@ mod tests {
         config::{PackageConfig, ReleaseChannel},
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
+    use semifold_core::{EcosystemId, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::NodejsResolver;
 
@@ -686,7 +686,7 @@ mod tests {
             manifest_name: "app".to_string(),
             version: semver::Version::new(0, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Node,
+            ecosystem: EcosystemId::NODE,
             path: "packages/app".into(),
             publishable: true,
             dependencies: vec![],
@@ -696,7 +696,7 @@ mod tests {
             manifest_name: "core".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Node,
+            ecosystem: EcosystemId::NODE,
             path: "packages/core".into(),
             publishable: true,
             dependencies: vec![],
@@ -706,7 +706,7 @@ mod tests {
             manifest_name: id.to_string(),
             version,
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Node,
+            ecosystem: EcosystemId::NODE,
             path: format!("packages/{id}").into(),
             publishable: true,
             dependencies: vec![],

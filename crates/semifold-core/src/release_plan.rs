@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use semver::Version;
 use serde::Serialize;
 
-use crate::{BumpLevel, ChangesetId, Ecosystem, FileEdit, PackageId, PlanWarning, ReleaseReason};
+use crate::{BumpLevel, ChangesetId, EcosystemId, FileEdit, PackageId, PlanWarning, ReleaseReason};
 
 pub type VersionMap = BTreeMap<PackageId, Version>;
 
@@ -11,7 +11,7 @@ pub type VersionMap = BTreeMap<PackageId, Version>;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PackageRelease {
     pub id: PackageId,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub current_version: Version,
     pub next_version: Version,
     pub bump: BumpLevel,
@@ -197,7 +197,7 @@ mod tests {
     ) -> PackageRelease {
         PackageRelease {
             id: PackageId::new(id),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             current_version: Version::new(current.0, current.1, current.2),
             next_version: Version::new(next.0, next.1, next.2),
             bump: BumpLevel::Patch,

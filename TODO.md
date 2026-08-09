@@ -470,6 +470,8 @@
 - [x] 决定首版使用 JavaScript、Lua 或同时支持二者，并确定沙箱、capability、资源限制与超时策略
 - [x] 决定插件分发、版本锁定、协议兼容周期，以及首版版本模型是否限定为 SemVer
 - [ ] 将闭集 `Ecosystem` / `ResolverType` 演进为稳定 `EcosystemId`，同时保留内置生态固定 ID
+  - [x] 领域 package、plan/context、config sync 与 adapter 使用开放 `EcosystemId`
+  - [ ] package/resolver 配置与 registry 从内置 `ResolverType` 开放到动态 ID
 - [x] 定义带 schema version 的插件元数据及 discover、inspect、plan-edits 序列化协议
 - [x] 定义插件结构化诊断，携带插件、操作、package 和相关路径
 

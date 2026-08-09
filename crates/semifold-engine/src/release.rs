@@ -5,8 +5,8 @@ use std::{
 
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_core::{
-    BumpLevel, ChangesetId, ChangesetInput, DependencyKind, DependencySource, Ecosystem, PackageId,
-    PackageReleasePolicy, ReleaseChannel, ReleaseContext, ReleasePlan, ReleasePlanError,
+    BumpLevel, ChangesetId, ChangesetInput, DependencyKind, DependencySource, EcosystemId,
+    PackageId, PackageReleasePolicy, ReleaseChannel, ReleaseContext, ReleasePlan, ReleasePlanError,
     ReleasePlanner, ReleasePlannerError, ReleasePolicies, WorkspaceGraph,
 };
 use semifold_resolver::{
@@ -93,13 +93,13 @@ pub fn plan_release(
     let plan = ReleasePlanner::plan(&graph, &changesets, &policies)?;
     let rust_workspace_packages = graph
         .packages()
-        .filter(|package| package.ecosystem == Ecosystem::Rust)
+        .filter(|package| package.ecosystem == EcosystemId::RUST)
         .cloned()
         .collect::<Vec<_>>();
     let rust_released_packages = plan
         .packages()
         .iter()
-        .filter(|release| release.ecosystem == Ecosystem::Rust)
+        .filter(|release| release.ecosystem == EcosystemId::RUST)
         .map(|release| release.id.clone())
         .collect::<Vec<_>>();
     let project_root = camino::Utf8Path::from_path(root).ok_or_else(|| {
@@ -115,13 +115,13 @@ pub fn plan_release(
     })?;
     let node_workspace_packages = graph
         .packages()
-        .filter(|package| package.ecosystem == Ecosystem::Node)
+        .filter(|package| package.ecosystem == EcosystemId::NODE)
         .cloned()
         .collect::<Vec<_>>();
     let node_released_packages = plan
         .packages()
         .iter()
-        .filter(|release| release.ecosystem == Ecosystem::Node)
+        .filter(|release| release.ecosystem == EcosystemId::NODE)
         .map(|release| release.id.clone())
         .collect::<Vec<_>>();
     file_edits.extend(NodejsResolver.plan_edits(EcosystemPlanInput {
@@ -132,13 +132,13 @@ pub fn plan_release(
     })?);
     let python_workspace_packages = graph
         .packages()
-        .filter(|package| package.ecosystem == Ecosystem::Python)
+        .filter(|package| package.ecosystem == EcosystemId::PYTHON)
         .cloned()
         .collect::<Vec<_>>();
     let python_released_packages = plan
         .packages()
         .iter()
-        .filter(|release| release.ecosystem == Ecosystem::Python)
+        .filter(|release| release.ecosystem == EcosystemId::PYTHON)
         .map(|release| release.id.clone())
         .collect::<Vec<_>>();
     file_edits.extend(PythonResolver.plan_edits(EcosystemPlanInput {
@@ -149,13 +149,13 @@ pub fn plan_release(
     })?);
     let cpp_workspace_packages = graph
         .packages()
-        .filter(|package| package.ecosystem == Ecosystem::Cpp)
+        .filter(|package| package.ecosystem == EcosystemId::CPP)
         .cloned()
         .collect::<Vec<_>>();
     let cpp_released_packages = plan
         .packages()
         .iter()
-        .filter(|release| release.ecosystem == Ecosystem::Cpp)
+        .filter(|release| release.ecosystem == EcosystemId::CPP)
         .map(|release| release.id.clone())
         .collect::<Vec<_>>();
     file_edits.extend(CppResolver.plan_edits(EcosystemPlanInput {
@@ -202,7 +202,7 @@ fn release_policies(
             let mut propagating_dependencies = BTreeMap::new();
             for dependency in &package.dependencies {
                 let manifest_runtime = dependency.source == DependencySource::Manifest
-                    && package.ecosystem == Ecosystem::Rust
+                    && package.ecosystem == EcosystemId::RUST
                     && dependency.kind == DependencyKind::Runtime;
                 if dependency.source != DependencySource::Config && !manifest_runtime {
                     continue;
@@ -395,7 +395,7 @@ mod tests {
     fn planned_package(id: &str, version: semver::Version) -> PackageRelease {
         PackageRelease {
             id: PackageId::new(id),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             current_version: semver::Version::new(1, 0, 0),
             next_version: version,
             bump: BumpLevel::Minor,

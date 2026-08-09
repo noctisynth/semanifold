@@ -5,7 +5,7 @@ use std::{
 
 use regex::Regex;
 use semifold_core::{
-    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    DependencyKind, EcosystemId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, VersionMap, VersionSource,
 };
 
@@ -51,7 +51,7 @@ impl CppResolver {
             manifest_name: package.name,
             version: package.version,
             version_source: package.version_source,
-            ecosystem: Ecosystem::Cpp,
+            ecosystem: EcosystemId::CPP,
             path,
             publishable: !package.private,
             dependencies,
@@ -298,8 +298,8 @@ impl CppResolver {
 }
 
 impl EcosystemAdapter for CppResolver {
-    fn ecosystem(&self) -> Ecosystem {
-        Ecosystem::Cpp
+    fn ecosystem(&self) -> EcosystemId {
+        EcosystemId::CPP
     }
 
     fn encode_version(&self, version: &semver::Version) -> Result<String, AdapterError> {
@@ -307,7 +307,7 @@ impl EcosystemAdapter for CppResolver {
             Ok(version.to_string())
         } else {
             Err(AdapterError::InvalidVersion {
-                ecosystem: Ecosystem::Cpp,
+                ecosystem: EcosystemId::CPP,
                 version: version.clone(),
                 reason: "CMake project(VERSION) only accepts stable numeric versions".to_string(),
             })
@@ -363,7 +363,7 @@ impl EcosystemAdapter for CppResolver {
         if input
             .workspace_packages
             .iter()
-            .any(|package| package.ecosystem != Ecosystem::Cpp)
+            .any(|package| package.ecosystem != EcosystemId::CPP)
         {
             return Err(AdapterError::InvalidInput {
                 reason: "C++ edit planning received a non-C++ workspace package".to_string(),
@@ -459,7 +459,7 @@ mod tests {
         error::ResolveError,
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
+    use semifold_core::{EcosystemId, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::CppResolver;
 
@@ -620,7 +620,7 @@ mod tests {
             manifest_name: "demo-library".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Cpp,
+            ecosystem: EcosystemId::CPP,
             path: "library".into(),
             publishable: true,
             dependencies: vec![],
@@ -662,9 +662,9 @@ mod tests {
         assert!(matches!(
             CppResolver.encode_version(&version),
             Err(AdapterError::InvalidVersion {
-                ecosystem: Ecosystem::Cpp,
+                ecosystem,
                 ..
-            })
+            }) if ecosystem == EcosystemId::CPP
         ));
     }
 }

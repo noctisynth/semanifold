@@ -811,7 +811,7 @@ mod tests {
     };
 
     use camino::Utf8PathBuf;
-    use semifold_core::{Ecosystem, PackageId};
+    use semifold_core::{EcosystemId, PackageId};
 
     use super::*;
     use crate::publish_plan::{PackagePublish, PublishContext, PublishPackageContext, PublishPlan};
@@ -979,7 +979,7 @@ mod tests {
                 package: PublishPackageContext {
                     id: PackageId::new(id),
                     name: id.to_string(),
-                    ecosystem: Ecosystem::Rust,
+                    ecosystem: EcosystemId::RUST,
                     version: semver::Version::new(1, 0, 0),
                     tag: format!("{id}-v1.0.0"),
                     path: Utf8PathBuf::from(id),

@@ -515,7 +515,7 @@ mod tests {
     use std::{fs, path::Path, time::SystemTime};
 
     use semifold_core::{
-        BumpLevel, ChangesetId, CommitContext, DependencyUpdateContext, Ecosystem, PackageId,
+        BumpLevel, ChangesetId, CommitContext, DependencyUpdateContext, EcosystemId, PackageId,
         PackageRelease, PackageSnapshot, PullRequestContext, ReleaseContext, ReleasePackageContext,
         ReleasePlan, ReleaseReason, VersionMap, VersionSource,
     };
@@ -532,7 +532,7 @@ mod tests {
         let id = PackageId::new("package");
         let release = PackageRelease {
             id: id.clone(),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             current_version: Version::new(0, 9, 0),
             next_version: Version::new(1, 0, 0),
             bump: BumpLevel::Major,
@@ -561,7 +561,7 @@ mod tests {
                 manifest_name: "package".to_string(),
                 version: Version::new(0, 9, 0),
                 version_source: VersionSource::PackageManifest,
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: "crates/package".into(),
                 publishable: true,
                 dependencies: Vec::new(),

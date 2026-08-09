@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::Path};
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_changelog::read_latest_changelog;
-use semifold_core::{CiContext, Ecosystem, PackageId, RepositoryContext, WorkspaceGraphError};
+use semifold_core::{CiContext, EcosystemId, PackageId, RepositoryContext, WorkspaceGraphError};
 use semifold_resolver::{
     config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType},
     error::ResolveError,
@@ -26,7 +26,7 @@ pub struct PublishContext {
 pub struct PublishPackageContext {
     pub id: PackageId,
     pub name: String,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub version: Version,
     pub tag: String,
     pub path: Utf8PathBuf,
@@ -160,7 +160,7 @@ pub async fn plan_publish(
         let package = PublishPackageContext {
             id: id.clone(),
             name: snapshot.manifest_name.clone(),
-            ecosystem: snapshot.ecosystem,
+            ecosystem: snapshot.ecosystem.clone(),
             version: snapshot.version.clone(),
             tag: format!("{}-v{}", snapshot.manifest_name, snapshot.version),
             path: snapshot.path.clone(),

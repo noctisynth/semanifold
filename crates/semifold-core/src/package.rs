@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{borrow::Cow, cmp::Ordering, fmt, str::FromStr};
 
 use camino::Utf8PathBuf;
 use semver::Version;
@@ -30,12 +30,29 @@ impl fmt::Display for PackageId {
 }
 
 /// Stable, serializable identity for a built-in or plugin-provided ecosystem.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct EcosystemId(String);
+pub struct EcosystemId(Cow<'static, str>);
 
 impl EcosystemId {
     pub const MAX_LENGTH: usize = 128;
+    pub const RUST: Self = Self(Cow::Borrowed("rust"));
+    pub const NODE: Self = Self(Cow::Borrowed("node"));
+    pub const PYTHON: Self = Self(Cow::Borrowed("python"));
+    pub const CPP: Self = Self(Cow::Borrowed("cpp"));
+
+    #[allow(non_upper_case_globals)]
+    #[deprecated(note = "use EcosystemId::RUST")]
+    pub const Rust: Self = Self::RUST;
+    #[allow(non_upper_case_globals)]
+    #[deprecated(note = "use EcosystemId::NODE")]
+    pub const Node: Self = Self::NODE;
+    #[allow(non_upper_case_globals)]
+    #[deprecated(note = "use EcosystemId::PYTHON")]
+    pub const Python: Self = Self::PYTHON;
+    #[allow(non_upper_case_globals)]
+    #[deprecated(note = "use EcosystemId::CPP")]
+    pub const Cpp: Self = Self::CPP;
 
     /// Creates and validates an ecosystem identifier.
     ///
@@ -44,7 +61,7 @@ impl EcosystemId {
     pub fn new(value: impl Into<String>) -> Result<Self, EcosystemIdError> {
         let value = value.into();
         validate_ecosystem_id(&value)?;
-        Ok(Self(value))
+        Ok(Self(Cow::Owned(value)))
     }
 
     #[must_use]
@@ -56,11 +73,46 @@ impl EcosystemId {
     pub fn is_builtin(&self) -> bool {
         matches!(self.as_str(), "rust" | "node" | "python" | "cpp")
     }
+
+    #[must_use]
+    pub fn display_name(&self) -> &str {
+        match self.as_str() {
+            "rust" => "Rust",
+            "node" => "Node",
+            "python" => "Python",
+            "cpp" => "Cpp",
+            _ => self.as_str(),
+        }
+    }
 }
 
 impl fmt::Display for EcosystemId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
+    }
+}
+
+impl Ord for EcosystemId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        ecosystem_sort_key(self)
+            .cmp(&ecosystem_sort_key(other))
+            .then_with(|| self.as_str().cmp(other.as_str()))
+    }
+}
+
+impl PartialOrd for EcosystemId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn ecosystem_sort_key(ecosystem: &EcosystemId) -> u8 {
+    match ecosystem.as_str() {
+        "rust" => 0,
+        "node" => 1,
+        "python" => 2,
+        "cpp" => 3,
+        _ => 4,
     }
 }
 
@@ -147,33 +199,8 @@ fn validate_ecosystem_id(value: &str) -> Result<(), EcosystemIdError> {
     Ok(())
 }
 
-/// Package ecosystem that owns manifest discovery and edit planning.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Ecosystem {
-    Rust,
-    Node,
-    Python,
-    Cpp,
-}
-
-impl Ecosystem {
-    #[must_use]
-    pub const fn id(self) -> &'static str {
-        match self {
-            Self::Rust => "rust",
-            Self::Node => "node",
-            Self::Python => "python",
-            Self::Cpp => "cpp",
-        }
-    }
-}
-
-impl From<Ecosystem> for EcosystemId {
-    fn from(ecosystem: Ecosystem) -> Self {
-        Self(ecosystem.id().to_string())
-    }
-}
+/// Backwards-compatible name for the ecosystem identity type.
+pub type Ecosystem = EcosystemId;
 
 /// Physical manifest location that owns a package's version value.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -196,7 +223,7 @@ pub struct PackageSnapshot {
     pub manifest_name: String,
     pub version: Version,
     pub version_source: VersionSource,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub path: Utf8PathBuf,
     pub publishable: bool,
     pub dependencies: Vec<Dependency>,
@@ -242,16 +269,51 @@ mod tests {
     #[test]
     fn built_in_ecosystems_keep_their_existing_serialized_ids() {
         let cases = [
-            (Ecosystem::Rust, "rust"),
-            (Ecosystem::Node, "node"),
-            (Ecosystem::Python, "python"),
-            (Ecosystem::Cpp, "cpp"),
+            (Ecosystem::RUST, "rust"),
+            (Ecosystem::NODE, "node"),
+            (Ecosystem::PYTHON, "python"),
+            (Ecosystem::CPP, "cpp"),
         ];
 
         for (ecosystem, expected) in cases {
-            let id = EcosystemId::from(ecosystem);
-            assert_eq!(id.as_str(), expected);
-            assert!(id.is_builtin());
+            assert_eq!(ecosystem.as_str(), expected);
+            assert!(ecosystem.is_builtin());
         }
+        assert_eq!(EcosystemId::RUST.display_name(), "Rust");
+        assert_eq!(
+            EcosystemId::new("com.example.engine")
+                .unwrap()
+                .display_name(),
+            "com.example.engine"
+        );
+    }
+
+    #[test]
+    fn ecosystem_order_preserves_built_ins_then_sorts_plugins_by_id() {
+        let mut ecosystems = [
+            EcosystemId::new("org.example.zeta").unwrap(),
+            EcosystemId::CPP,
+            EcosystemId::NODE,
+            EcosystemId::new("com.example.alpha").unwrap(),
+            EcosystemId::RUST,
+            EcosystemId::PYTHON,
+        ];
+
+        ecosystems.sort();
+
+        assert_eq!(
+            ecosystems
+                .iter()
+                .map(EcosystemId::as_str)
+                .collect::<Vec<_>>(),
+            [
+                "rust",
+                "node",
+                "python",
+                "cpp",
+                "com.example.alpha",
+                "org.example.zeta"
+            ]
+        );
     }
 }

@@ -1166,6 +1166,13 @@ resolver 职责。
 - 结构化诊断，包含插件、操作、package 和相关路径；
 - 显式声明的文件读取范围及其他 host capability。
 
+迁移分两步完成：领域层的 `PackageSnapshot`、release plan/context、config sync、publish context 与
+`EcosystemAdapter` 先统一持有开放的 `EcosystemId`；旧公开名称 `Ecosystem` 只保留为类型别名，
+四个旧 variant 名只作为兼容常量。CLI 与旧 TOML 当前使用的 `ResolverType` 暂时只表示内置 resolver
+选择，并通过显式映射进入 `EcosystemId`；在插件注册表接入配置时，再将 package/resolver 配置值
+开放为动态 ID。迁移期间遇到尚未注册 adapter 的动态 ID 必须返回明确错误，不能回退到任一内置
+resolver。
+
 插件输入必须是不可变快照，输出必须可序列化和确定性排序。同一输入重复执行应产生相同结果；
 host 不信任插件返回的路径、文件内容或依赖关系，所有结果都必须经过与内置 adapter 相同的验证。
 

@@ -1,7 +1,7 @@
 use std::{error::Error, fmt, fs, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use semifold_core::{ConfigSyncPlan, DiscoveredPackage, Ecosystem, PackageId};
+use semifold_core::{ConfigSyncPlan, DiscoveredPackage, EcosystemId, PackageId};
 use semifold_resolver::config::Config;
 use toml_edit::{DocumentMut, Item, Table, value};
 
@@ -125,17 +125,16 @@ fn insert_discovered_package(
 
     let mut table = Table::new();
     table.insert("path", value(package.path.as_str()));
-    table.insert("resolver", value(resolver_name(package.ecosystem)));
+    table.insert("resolver", value(resolver_name(&package.ecosystem)));
     packages.insert(package.id.as_str(), Item::Table(table));
     Ok(())
 }
 
-const fn resolver_name(ecosystem: Ecosystem) -> &'static str {
-    match ecosystem {
-        Ecosystem::Rust => "rust",
-        Ecosystem::Node => "nodejs",
-        Ecosystem::Python => "python",
-        Ecosystem::Cpp => "cpp",
+fn resolver_name(ecosystem: &EcosystemId) -> &str {
+    if ecosystem == &EcosystemId::NODE {
+        "nodejs"
+    } else {
+        ecosystem.as_str()
     }
 }
 
@@ -214,8 +213,8 @@ mod tests {
 
     use camino::Utf8PathBuf;
     use semifold_core::{
-        ConfigConflict, ConfigSyncPlan, ConfiguredPackage, DiscoveredPackage, Ecosystem, PackageId,
-        PackageMove, PackageRename,
+        ConfigConflict, ConfigSyncPlan, ConfiguredPackage, DiscoveredPackage, EcosystemId,
+        PackageId, PackageMove, PackageRename,
     };
 
     use super::TomlConfigEditor;
@@ -283,19 +282,19 @@ custom = "preserved"
             prune_missing: false,
             added: vec![DiscoveredPackage {
                 id: PackageId::new("new-package"),
-                ecosystem: Ecosystem::Python,
+                ecosystem: EcosystemId::PYTHON,
                 path: Utf8PathBuf::from("packages/new-package"),
             }],
             missing: vec![],
             renamed: vec![PackageRename {
                 from: PackageId::new("old-name"),
                 to: PackageId::new("renamed-package"),
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: Utf8PathBuf::from("crates/app"),
             }],
             moved: vec![PackageMove {
                 package: PackageId::new("moved"),
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 from: Utf8PathBuf::from("crates/old-location"),
                 to: Utf8PathBuf::from("crates/new-location"),
             }],
@@ -365,7 +364,7 @@ custom = "preserved"
         plan.moved.clear();
         plan.missing = vec![ConfiguredPackage {
             id: PackageId::new("keep"),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: Utf8PathBuf::from("crates/keep"),
         }];
 
@@ -396,12 +395,12 @@ custom = "preserved"
         plan.added = vec![
             DiscoveredPackage {
                 id: PackageId::new("zeta"),
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: Utf8PathBuf::from("crates/zeta"),
             },
             DiscoveredPackage {
                 id: PackageId::new("alpha"),
-                ecosystem: Ecosystem::Rust,
+                ecosystem: EcosystemId::RUST,
                 path: Utf8PathBuf::from("crates/alpha"),
             },
         ];

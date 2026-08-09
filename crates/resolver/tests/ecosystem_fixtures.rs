@@ -9,8 +9,8 @@ use std::{
 
 use insta::assert_snapshot;
 use semifold_core::{
-    Dependency, DependencySource, Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource,
-    WorkspaceGraph,
+    Dependency, DependencySource, EcosystemId, PackageId, PackageSnapshot, VersionMap,
+    VersionSource, WorkspaceGraph,
 };
 use semifold_resolver::{
     adapter::{EcosystemAdapter, PackageInspection, PackageLocation},
@@ -44,7 +44,7 @@ fn copy_fixture(source: &str, destination: &Path) {
     fs::copy(source, destination).unwrap();
 }
 
-fn snapshot(path: &str, name: &str, ecosystem: Ecosystem) -> PackageSnapshot {
+fn snapshot(path: &str, name: &str, ecosystem: EcosystemId) -> PackageSnapshot {
     PackageSnapshot {
         id: PackageId::new(name),
         manifest_name: name.to_string(),
@@ -231,8 +231,8 @@ fn rust_manifest_rewrite_matches_snapshot() {
     let manifest = root.join("crates/app/Cargo.toml");
     copy_fixture("rust/app.before.toml", &manifest);
 
-    let app = snapshot("crates/app", "app", Ecosystem::Rust);
-    let core = snapshot("crates/core", "core", Ecosystem::Rust);
+    let app = snapshot("crates/app", "app", EcosystemId::RUST);
+    let core = snapshot("crates/core", "core", EcosystemId::RUST);
     let edits = RustResolver::plan_file_edits(
         &root,
         &[&app],
@@ -266,7 +266,7 @@ fn node_manifest_rewrite_matches_snapshot() {
 
     let edit = NodejsResolver::plan_file_edit(
         &root,
-        &snapshot("packages/app", "app", Ecosystem::Node),
+        &snapshot("packages/app", "app", EcosystemId::NODE),
         &VersionMap::from([(
             PackageId::new("app"),
             semver::Version::parse("1.0.1").unwrap(),
@@ -290,7 +290,7 @@ fn python_manifest_rewrite_matches_snapshots() {
     copy_fixture("python/app.before.toml", &manifest);
     copy_fixture("python/init.before.py", &init);
 
-    let package = snapshot("packages/app", "app", Ecosystem::Python);
+    let package = snapshot("packages/app", "app", EcosystemId::PYTHON);
     for edit in PythonResolver::plan_file_edits(
         &root,
         &package,
@@ -323,7 +323,7 @@ fn cpp_manifest_rewrite_matches_snapshots() {
     copy_fixture("cpp/CMakeLists.before.txt", &cmake);
     copy_fixture("cpp/vcpkg.before.json", &vcpkg);
 
-    let package = snapshot(".", "example", Ecosystem::Cpp);
+    let package = snapshot(".", "example", EcosystemId::CPP);
     for edit in CppResolver::plan_file_edits(
         &root,
         &package,

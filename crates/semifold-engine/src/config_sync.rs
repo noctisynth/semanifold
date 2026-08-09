@@ -280,7 +280,7 @@ mod tests {
             [PackageRename {
                 from: PackageId::new("old-name"),
                 to: PackageId::new("new-name"),
-                ecosystem: semifold_core::Ecosystem::Rust,
+                ecosystem: semifold_core::EcosystemId::RUST,
                 path: Utf8PathBuf::from("crates/app"),
             }]
         );

@@ -174,7 +174,7 @@ mod tests {
     use semver::Version;
 
     use super::*;
-    use crate::{Dependency, DependencyKind, DependencySource, Ecosystem, VersionSource};
+    use crate::{Dependency, DependencyKind, DependencySource, EcosystemId, VersionSource};
 
     fn package(id: &str, dependencies: &[&str]) -> PackageSnapshot {
         PackageSnapshot {
@@ -182,7 +182,7 @@ mod tests {
             manifest_name: id.to_owned(),
             version: Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             path: Utf8PathBuf::from(format!("crates/{id}")),
             publishable: true,
             dependencies: dependencies
@@ -269,6 +269,20 @@ mod tests {
             WorkspaceGraph::new(vec![package("zebra", &[]), package("alpha", &[])]).unwrap();
 
         assert_eq!(ids(graph.topological_order().unwrap()), ["alpha", "zebra"]);
+    }
+
+    #[test]
+    fn preserves_dynamic_ecosystem_identity_in_the_workspace_graph() {
+        let ecosystem = EcosystemId::new("com.example.engine").unwrap();
+        let mut plugin_package = package("game", &[]);
+        plugin_package.ecosystem = ecosystem.clone();
+
+        let graph = WorkspaceGraph::new(vec![plugin_package]).unwrap();
+
+        assert_eq!(
+            graph.package(&PackageId::new("game")).unwrap().ecosystem,
+            ecosystem
+        );
     }
 
     #[test]

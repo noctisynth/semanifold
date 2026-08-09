@@ -1,6 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use semifold_core::{
-    DependencyKind, Ecosystem, FileEdit, PackageId, PackageSnapshot, VersionMap, VersionSource,
+    DependencyKind, EcosystemId, FileEdit, PackageId, PackageSnapshot, VersionMap, VersionSource,
 };
 use semver::Version;
 use std::path::PathBuf;
@@ -40,7 +40,7 @@ pub struct PackageInspection {
     pub manifest_name: String,
     pub version: Version,
     pub version_source: VersionSource,
-    pub ecosystem: Ecosystem,
+    pub ecosystem: EcosystemId,
     pub path: Utf8PathBuf,
     pub publishable: bool,
     pub dependencies: Vec<ManifestDependency>,
@@ -57,7 +57,7 @@ pub struct EcosystemPlanInput<'input> {
 
 /// Side-effect-free package discovery, inspection, and file-edit planning.
 pub trait EcosystemAdapter: Send + Sync {
-    fn ecosystem(&self) -> Ecosystem;
+    fn ecosystem(&self) -> EcosystemId;
 
     /// Validates a planned domain version and encodes it for this ecosystem's manifests.
     fn encode_version(&self, version: &Version) -> Result<String, AdapterError>;
@@ -76,9 +76,12 @@ pub enum AdapterError {
     Manifest(#[from] ResolveError),
     #[error("invalid adapter input: {reason}")]
     InvalidInput { reason: String },
-    #[error("{ecosystem:?} cannot encode version {version}: {reason}")]
+    #[error(
+        "{ecosystem_name} cannot encode version {version}: {reason}",
+        ecosystem_name = .ecosystem.display_name()
+    )]
     InvalidVersion {
-        ecosystem: Ecosystem,
+        ecosystem: EcosystemId,
         version: Version,
         reason: String,
     },
@@ -95,8 +98,8 @@ mod tests {
     struct ContractAdapter;
 
     impl EcosystemAdapter for ContractAdapter {
-        fn ecosystem(&self) -> Ecosystem {
-            Ecosystem::Node
+        fn ecosystem(&self) -> EcosystemId {
+            EcosystemId::NODE
         }
 
         fn encode_version(&self, version: &Version) -> Result<String, AdapterError> {

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, path::Path};
 
 use semifold_core::{
-    DependencyKind, Ecosystem, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
+    DependencyKind, EcosystemId, EditSource, FileEdit, FileEditExpectation, FileHash, PackageId,
     PackageSnapshot, VersionMap, VersionSource,
 };
 use semver::{Prerelease, Version};
@@ -107,14 +107,14 @@ fn encode_python_version(version: &Version) -> Result<String, AdapterError> {
     }
     if !version.build.is_empty() {
         return Err(AdapterError::InvalidVersion {
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             version: version.clone(),
             reason: "PEP 440 named channels do not support SemVer build metadata".to_string(),
         });
     }
     let Some((channel, sequence)) = version.pre.as_str().split_once('.') else {
         return Err(AdapterError::InvalidVersion {
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             version: version.clone(),
             reason: "named release channels require a numeric sequence".to_string(),
         });
@@ -124,7 +124,7 @@ fn encode_python_version(version: &Version) -> Result<String, AdapterError> {
         || sequence.contains('.')
     {
         return Err(AdapterError::InvalidVersion {
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             version: version.clone(),
             reason: "named release channel sequences must be non-negative integers".to_string(),
         });
@@ -138,7 +138,7 @@ fn encode_python_version(version: &Version) -> Result<String, AdapterError> {
         "post" => format!("{base}.post{sequence}"),
         _ => {
             return Err(AdapterError::InvalidVersion {
-                ecosystem: Ecosystem::Python,
+                ecosystem: EcosystemId::PYTHON,
                 version: version.clone(),
                 reason: format!("unsupported Python release channel {channel}"),
             });
@@ -175,7 +175,7 @@ impl PythonResolver {
             manifest_name: package.name,
             version: package.version,
             version_source: package.version_source,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path,
             publishable: !package.private,
             dependencies,
@@ -724,8 +724,8 @@ impl PythonResolver {
 }
 
 impl EcosystemAdapter for PythonResolver {
-    fn ecosystem(&self) -> Ecosystem {
-        Ecosystem::Python
+    fn ecosystem(&self) -> EcosystemId {
+        EcosystemId::PYTHON
     }
 
     fn encode_version(&self, version: &Version) -> Result<String, AdapterError> {
@@ -782,7 +782,7 @@ impl EcosystemAdapter for PythonResolver {
         if input
             .workspace_packages
             .iter()
-            .any(|package| package.ecosystem != Ecosystem::Python)
+            .any(|package| package.ecosystem != EcosystemId::PYTHON)
         {
             return Err(AdapterError::InvalidInput {
                 reason: "Python edit planning received a non-Python workspace package".to_string(),
@@ -873,7 +873,7 @@ mod tests {
         error::ResolveError,
         resolver::ResolverType,
     };
-    use semifold_core::{Ecosystem, PackageId, PackageSnapshot, VersionMap, VersionSource};
+    use semifold_core::{EcosystemId, PackageId, PackageSnapshot, VersionMap, VersionSource};
 
     use super::{PythonResolver, parse_python_version};
 
@@ -951,9 +951,9 @@ mod tests {
         assert!(matches!(
             PythonResolver.encode_version(&version),
             Err(crate::adapter::AdapterError::InvalidVersion {
-                ecosystem: Ecosystem::Python,
+                ecosystem,
                 ..
-            })
+            }) if ecosystem == EcosystemId::PYTHON
         ));
     }
 
@@ -970,7 +970,7 @@ mod tests {
             manifest_name: "example".to_string(),
             version: semver::Version::new(1, 2, 3),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path: ".".into(),
             publishable: true,
             dependencies: vec![],
@@ -1223,7 +1223,7 @@ mod tests {
             manifest_name: "example".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path: "packages/example".into(),
             publishable: true,
             dependencies: vec![],
@@ -1275,7 +1275,7 @@ mod tests {
             manifest_name: "cfg-example".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path: ".".into(),
             publishable: true,
             dependencies: vec![],
@@ -1317,7 +1317,7 @@ mod tests {
             manifest_name: "hatch-example".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path: ".".into(),
             publishable: true,
             dependencies: vec![],
@@ -1361,7 +1361,7 @@ mod tests {
             manifest_name: "native-example".to_string(),
             version: semver::Version::new(1, 0, 0),
             version_source: VersionSource::PackageManifest,
-            ecosystem: Ecosystem::Python,
+            ecosystem: EcosystemId::PYTHON,
             path: ".".into(),
             publishable: true,
             dependencies: vec![],

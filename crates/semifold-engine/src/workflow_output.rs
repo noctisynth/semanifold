@@ -166,7 +166,7 @@ const fn failure_stage(stage: PublishFailureStage) -> &'static str {
 mod tests {
     use camino::Utf8PathBuf;
     use semifold_core::{
-        BumpLevel, ChangesetId, Ecosystem, PackageRelease, ReleasePlan, ReleaseReason, VersionMap,
+        BumpLevel, ChangesetId, EcosystemId, PackageRelease, ReleasePlan, ReleaseReason, VersionMap,
     };
 
     use super::*;
@@ -180,7 +180,7 @@ mod tests {
     fn release_context() -> ReleaseContext {
         let package = PackageRelease {
             id: PackageId::new("core"),
-            ecosystem: Ecosystem::Rust,
+            ecosystem: EcosystemId::RUST,
             current_version: Version::new(1, 0, 0),
             next_version: Version::new(1, 1, 0),
             bump: BumpLevel::Minor,
@@ -208,7 +208,7 @@ mod tests {
                     package: PublishPackageContext {
                         id: PackageId::new("core"),
                         name: "core-native".to_string(),
-                        ecosystem: Ecosystem::Rust,
+                        ecosystem: EcosystemId::RUST,
                         version: Version::new(1, 1, 0),
                         tag: "core-v1.1.0".to_string(),
                         path: Utf8PathBuf::from("crates/core"),

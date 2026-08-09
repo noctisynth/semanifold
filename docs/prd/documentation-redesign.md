@@ -21,11 +21,11 @@
 
 ### 2.1 发布状态
 
-- 最新 Semifold tag 为 `semifold-v0.3.0-rc.5`。
+- 最新 Semifold tag 为 `semifold-v0.3.0-rc.6`；`@semifold/plugin-sdk-v0.1.0-rc.0` 与该版本同时发布。
 - 当前领域实现复核到远端基线 commit `50af846`；其后的本地提交只处理文档设计，不改变 Semifold 的公开命令面。
-- `21e08e6` 已消费此前的功能 changeset。当前 manifest 中 `semifold` 为 `0.3.0-rc.6`，
-  `semifold-resolver` 为 `0.4.0-rc.3`，`@semifold/plugin-sdk` 为 `0.1.0-rc.0`；这些版本尚无对应 Git tag，
-  因而仍属于下一次发布内容。
+- `50af846` 同时具有 `semifold-v0.3.0-rc.6`、`semifold-resolver-v0.4.0-rc.3`、
+  `semifold-engine-v0.2.0-rc.4` 与 `@semifold/plugin-sdk-v0.1.0-rc.0` 等发布标签；仓库内插件 runtime、SDK
+  与当前 MCP changeset CRUD 已进入已发布基线，不得继续标记为“下一版本”。
 - 本轮体验复核前只剩文档迁移 changeset；`smif status` 验证该 changeset 只提升 `@semifold/docs`。
 
 文档重构期间，安装与默认工作流必须描述最新已发布版本。面向下一 RC 的页面允许提前编写，但必须满足
@@ -37,7 +37,7 @@
 
 ### 2.2 已发布能力
 
-`0.3.0-rc.5` 已包含并可作为默认文档事实：
+`0.3.0-rc.6` 已包含并可作为默认文档事实：
 
 - Rust、Node.js、Python 与 C++ 内置 ecosystem；
 - changeset 创建、合并 bump 与 changelog 分类；
@@ -50,9 +50,6 @@
 - GitHub Actions version/publish 结构化 outputs；
 - 可完整参数化的 `init` 与 `commit` 非交互路径；
 - TTY/CI、自适应 Unicode 表格、dry-run 与部分失败恢复反馈。
-
-### 2.3 已合入 `main`、等待下一次发布的能力
-
 - 开放 `EcosystemId` 与 repository-local JavaScript ecosystem plugin；
 - Boa 单文件 ESM runtime；
 - 按 glob 授权的只读文件 capability；
@@ -64,6 +61,11 @@
 - strict project load 前执行 `config migrate`，以及 Node.js channel/dist-tag warning；
 - registry 版本已存在时继续补建缺失 GitHub Release；
 - npm trusted publishing/OIDC 与 init workflow 模板保留修复。
+
+### 2.3 已合入 `main`、等待下一次发布的能力
+
+当前没有需要进入本轮生产导航、但只存在于 `main` 且尚未发布的公开能力。后续若出现这类差异，仍按 2.1
+的 availability 规则处理。
 
 ### 2.4 尚未完成、不得写成可用能力
 
@@ -218,6 +220,17 @@ code change
     github-actions
     workflow-outputs
     mcp
+  commands/
+    index
+    init
+    commit
+    config
+    status
+    version
+    publish
+    ci
+    mcp
+    reference
   plugins/
     overview
     quick-start
@@ -232,7 +245,6 @@ code change
     pre-checks
     templates
   reference/
-    cli
     configuration
     changeset-format
     template-contexts
@@ -249,6 +261,10 @@ code change
 - 链接当前版本、GitHub 与双语入口。
 
 首页不得把某一次架构重构（例如不可变计划）或受限环境兼容能力（例如完整参数化的非交互调用）写成产品主卖点。
+
+命令行模块用于查询单条命令的职责、输入、默认交互路径、副作用、失败语义与完整参数，不取代围绕用户任务组织的
+getting started、workflow、workspace 和 automation。原 `/docs/reference/cli` 保留静态迁移入口，规范位置改为
+`/docs/commands/reference`。
 
 ## 8. 页面与写作规范
 
@@ -286,6 +302,10 @@ code change
 - 不允许连续堆叠未解释的英文领域词，也不允许把英文原词当作中文解释的 fallback；
 - 不使用“zero pain”“stable”等无法验证的绝对营销表述；
 - 每项 ecosystem 能力分别说明 discovery、version edit、dependency propagation 与 publish，而不是一个总状态。
+- 英文首页避免把 `polyglot` 当作无需解释的主标题词；优先使用 “multiple languages and package ecosystems”，
+  在解释性正文首次出现时才说明 `polyglot` 是常见同义词。
+- 启用 GitHub Actions 的仓库在 first-release 默认路径中只需要提交 changeset，并合入自动维护的 release PR；
+  手工 `version` / `publish` 作为理解机制或没有工作流时的替代路径，不能让用户误以为两套流程都必须执行。
 
 ## 9. 内容事实来源
 
@@ -344,6 +364,8 @@ URL 都能直达，不以本地 Next dev server 行为代替验证。
 - 两个显式 route tree 共享同一 page renderer；
 - Fumadocs i18n fallback 设为 `null`；
 - 每个页面输出 canonical、`hreflang="en"`、`hreflang="zh-CN"` 与 `x-default`。
+- 语言切换必须按同一 slug 显式映射：英文不加 locale 前缀，中文只加 `/zh`；不得依赖 Fumadocs 默认的
+  `/{locale}` 前缀拼接，也不得产生 `/en/docs/...`。
 
 ### 10.4 搜索
 
@@ -371,7 +393,10 @@ Fumadocs MDX 开启 processed Markdown 输出，并静态生成：
 - 只通过 design tokens、全局样式、首页与少量领域组件定制；
 - 不复制或 fork Fumadocs sidebar、search、mobile nav 的内部实现；
 - 保留现有 Semifold logo；内置生态展示使用可识别、带无障碍名称的官方品牌图形，不使用字母切片或 emoji 充当 logo；
+- 导航中的小尺寸品牌图形使用为实际显示尺寸设计的无阴影 SVG，不得缩放 README 使用的细线大图造成模糊边缘；
 - 首页功能区在常见桌面首屏内保持紧凑，内容量少时不得用固定最小高度制造大块空白；
+- 生命周期等具有阶段关系的内容渲染为可访问、可换行的真实图示，不使用带复制按钮的 `text` 代码块模拟图；
+- 320px、360px 与 390px 宽度下，中文长标题必须允许自然断行，所有 grid/flex 子项必须可收缩，页面不得整体横向溢出；
 - 正文目标宽度约 720–800px，reference table 可在容器内滚动；
 - 提供浅色/深色主题，并尊重系统偏好；
 - 交互目标、焦点可见性和颜色对比满足 WCAG 2.2 AA。
@@ -443,7 +468,7 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 
 ### 阶段 4：Plugin 文档
 
-- SDK 未发布前标记 next release；
+- `0.3.0-rc.6` 与 `@semifold/plugin-sdk 0.1.0-rc.0` 发布后，将 runtime、SDK 和 protocol 页面标记为 released；
 - 文档只覆盖 runtime 已实现能力；
 - Vite plugin 完成并发布后再补写 bundle 工作流。
 
@@ -464,6 +489,9 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 - 英中页面与导航集合完全一致；
 - 中英文搜索只返回当前 locale 的正确结果；
 - 390px 页面无整体水平滚动，代码块和宽表格只在自身容器滚动；
+- 中英文任意同 slug 页面之间切换后目标路由存在，英文目标不包含 `/en`；
+- 页面切换时不得产生 Next.js `missing-data-scroll-behavior` 告警；启用全局 smooth scrolling 时，根 `<html>`
+  必须声明 `data-scroll-behavior="smooth"`；
 - 所有深层页面可从静态服务器直接访问；
 - `docs:check` 和 production build 在 CI 中通过；
 - Lighthouse Accessibility 不低于 95，Performance 不低于 90；
@@ -474,10 +502,12 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 - 使用 Next.js + Fumadocs，不使用 Fumapress/Waku；
 - 第一阶段继续使用 GitHub Pages 静态部署；
 - 英文无前缀，中文使用 `/zh`；
+- Fumadocs 语言选择器使用本站自定义 locale path 映射，不使用默认 `/en` 前缀行为；
 - 使用静态 ZBSearch；
 - 保留现有 logo，重做首页结构但不先做品牌重设计；
 - 首页与用户文档描述已发布版本，下一版本功能显式标注；
 - plugin runtime/SDK 与 Vite bundler 分开描述；
+- 命令行独立成查询模块，workflow 继续按用户任务组织；
 - 第一阶段不加入需要服务端的 AI chat 或 feedback backend。
 
 ## 17. 当前实施状态
@@ -502,8 +532,20 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 - 首页与文档页恢复版权、AGPL-3.0-only、仓库和许可链接完整的全站页脚；
 - First Release 恢复交互式默认路径，自动化参数降为后置补充，并修复 MDX 容器中 Markdown 强调符号的字面量渲染；
 - 新增 installation、configuration overview/reference、plugin overview/quick-start/capabilities 与 glossary，
-  当前英中各 17 个内容/meta 文件，静态构建生成 69 个页面；
+  并进一步新增逐命令说明与 CLI 参数参考；当前英中各 28 个内容/meta 文件，静态构建生成 89 个页面；
 - 中文写作改为中文解释优先、英文检索词首次出现时括注，术语表覆盖仓库、软件包、生态、版本与发布概念；
 - 首页定制 CSS 已迁移到组件内 Tailwind utilities，全局样式从 558 行收敛为 37 行，只保留框架导入、基础规则和跨组件行为。
+- 已发布基线更新为 `0.3.0-rc.6` 与 `@semifold/plugin-sdk 0.1.0-rc.0`，plugin runtime/SDK/protocol
+  改为 released，只有尚未实现的 Vite bundler 继续标记为 planned；
+- 首页小尺寸品牌图改用无阴影 favicon SVG，生命周期改为可访问的响应式图示；320px、360px 与 390px
+  Chromium 验证均满足 `scrollWidth === clientWidth`；
+- Fumadocs 语言切换使用自定义 canonical path 映射，中文 first-release 切换英文后到达
+  `/docs/getting-started/first-release/`，不再生成 `/en/docs/...`；
+- 根 `<html>` 声明 smooth-scroll 行为，真实页面切换的控制台检查没有 scroll behavior、404 或运行时告警；
+- 命令行成为独立查询模块，包含 `init`、`commit`、`config`、`status`、`version`、`publish`、`ci`、`mcp`
+  与参数参考；workflow 内容仍按用户任务组织。
+
+本轮新增第三个独立文档 changeset；`smif status` 验证 3 个 changeset 仍只影响 `@semifold/docs`，计划从
+`1.1.0-beta.0` 提升到 `1.1.0-rc.0`，计划指纹为 `8fc3d5a6632c`。
 
 阶段 2、阶段 3 的其余工作流、workspace、自动化内容与阶段 5 的内容清理仍在进行。旧 Rspress 内容和配置暂时保留为事实核对与迁移线索；生产构建已经切换到 Fumadocs，但当前导航仍未覆盖完整产品内容，不能被解释为全部重写已经结束。

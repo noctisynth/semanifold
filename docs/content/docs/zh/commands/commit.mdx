@@ -1,0 +1,48 @@
+---
+title: smif commit
+description: 通过交互创建变更集，或用明确参数表达同一项发布意图。
+---
+
+`smif commit` 在真正修改版本之前记录发布意图。可见别名 `smif add` 的行为完全相同。
+
+```bash
+smif commit
+```
+
+## 命令会询问什么
+
+交互流程会选择一个或多个已配置的软件包 ID，为每个软件包指定 `patch`、`minor` 或 `major`，选择可选的变更日志标签，再输入文件名和面向使用者的摘要。
+
+输入名称 `add-api` 后，Semifold 创建 `.changes/add-api.md`：
+
+```md title=".changes/add-api.md"
+---
+core: "minor:feat"
+web: "patch:fix"
+---
+
+在 Web 绑定中开放新的 API。
+```
+
+版本提升级别表达版本意图；标签只选择变更日志分组，不会选择发布通道。
+
+## 自动化调用
+
+```bash
+smif commit --name add-api \
+  --package core=minor \
+  --package web=patch \
+  --tag feat \
+  --summary "在 Web 绑定中开放新的 API。"
+```
+
+`--package` 和 `--summary` 可以重复传入。没有内联提升级别的软件包使用 `--level`。不能交互的调用者还必须在 `--tag <标签>` 与 `--no-tag` 中明确选择一个，避免 Semifold 猜测缺失答案。
+
+## 校验与副作用
+
+- 软件包 ID 和标签必须存在于 `.changes/config.toml`；
+- 名称必须能转换成安全的变更集文件，不能悄悄覆盖不同内容；
+- 软件包集合和摘要不能为空；
+- `--dry-run` 只校验并渲染候选内容，不创建文件。
+
+把变更集和代码改动放在同一个提交中。需要检查依赖传播时，在合入前运行 [`smif status`](/zh/docs/commands/status/)。

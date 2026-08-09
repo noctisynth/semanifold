@@ -57,3 +57,17 @@ export function localizedPath(locale: Locale, path: string): string {
   if (locale === 'en') return path;
   return path === '/' ? '/zh/' : `/zh${path}`;
 }
+
+export function localePathFromCurrent(
+  locale: Locale,
+  currentPath: string,
+): string {
+  const canonicalPath =
+    currentPath === '/zh'
+      ? '/'
+      : currentPath.startsWith('/zh/')
+        ? currentPath.slice(3)
+        : currentPath;
+
+  return localizedPath(locale, canonicalPath || '/');
+}

@@ -1,0 +1,29 @@
+---
+title: 命令行
+description: 按任务选择 Semifold 命令，再查看行为说明或完整参数参考。
+---
+
+安装后的短命令是 `smif`，`semifold` 是完全等价的长名称。这里把命令分别说明，方便查询输入、副作用和失败恢复；工作流文档仍然按用户要完成的任务组织。
+
+<Availability status="released">
+  本模块描述 <strong>Semifold 0.3.0-rc.6</strong> 已发布的命令面。
+</Availability>
+
+## 选择命令
+
+| 命令 | 什么时候使用 | 是否修改本地文件 |
+| --- | --- | --- |
+| [`init`](/zh/docs/commands/init/) | 在仓库中接入 Semifold，并按需生成 GitHub Actions 工作流。 | 是 |
+| [`commit`](/zh/docs/commands/commit/) | 把经过判断的发布意图记录为变更集。 | 是 |
+| [`config`](/zh/docs/commands/config/) | 同步、迁移配置或修改发布通道。 | 取决于子命令 |
+| [`status`](/zh/docs/commands/status/) | 写文件前检查受影响的软件包和目标版本。 | 否 |
+| [`version`](/zh/docs/commands/version/) | 手工应用软件包、依赖、变更日志和变更集修改。 | 是 |
+| [`publish`](/zh/docs/commands/publish/) | 按依赖关系发布已经完成版本修改的软件包。 | 会产生外部副作用 |
+| [`ci`](/zh/docs/commands/ci/) | 让生成的 GitHub Actions 工作流维护发布拉取请求或执行发布。 | 是 |
+| [`mcp`](/zh/docs/commands/mcp/) | 通过标准输入输出向 MCP 客户端开放变更集增删改查。 | 取决于工具 |
+
+## 行为说明与参数参考
+
+每个命令页面解释正常行为，而不只是罗列参数。已经理解工作流、只想确认选项名称时，使用[完整 CLI 参数参考](/zh/docs/commands/reference/)。
+
+第一次发布请跟随[入门教程](/zh/docs/getting-started/first-release/)。如果教程生成了 GitHub Actions，贡献者的日常路径在提交变更集后就结束；`smif ci` 会在正确的基础分支运行中处理版本修改和发布。

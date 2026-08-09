@@ -1,0 +1,29 @@
+---
+title: smif mcp
+description: 启动通过标准输入输出提供、具有版本修订保护的变更集增删改查 MCP 服务器。
+---
+
+`smif mcp` 在标准输入输出上启动 JSON-RPC MCP 服务器。它用于已经配置的 MCP 客户端，不是交互式终端命令。
+
+```bash
+smif mcp --project-root /path/to/repository
+```
+
+`-C`、`--project-root` 和可见别名 `--cd` 用来选择仓库。没有指定时，Semifold 从当前目录查找项目。项目采用延迟加载，因此一次无效工具请求不会终止服务器。
+
+## 已发布工具
+
+| 工具 | 输入 | 行为 |
+| --- | --- | --- |
+| `get_changeset` | 可选 `id` | 列出变更集，或返回带 SHA-256 修订值的一条记录。 |
+| `create_changeset` | `name`、`packages`、`summary` | 幂等创建请求的变更集。 |
+| `update_changeset` | `id`、预期 `revision`、`packages`、`summary` | 只有调用者看到的修订仍然匹配时才替换内容。 |
+| `delete_changeset` | `id`、预期 `revision` | 只删除调用者已经读取的精确修订。 |
+
+每个软件包输入包含 `package`、版本提升级别 `bump`（`patch`、`minor` 或 `major`）和可选 `tag`。响应使用协议结构版本 1，并返回结构化状态或错误。
+
+## 并发与安全
+
+修改工具串行执行。更新与删除使用乐观 SHA-256 修订值拒绝过期调用者；工具 panic 会被隔离；无效参数返回结构化错误；下一条请求仍能在同一服务器继续执行。
+
+全局 `--dry-run` 会把修改工具转换成经过校验但不写变更集文件的预览。

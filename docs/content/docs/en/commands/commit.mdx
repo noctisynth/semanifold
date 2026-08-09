@@ -1,0 +1,48 @@
+---
+title: smif commit
+description: Create one changeset interactively or supply the same release intent through explicit arguments.
+---
+
+`smif commit` records release intent before versions change. The visible alias `smif add` behaves the same way.
+
+```bash
+smif commit
+```
+
+## What the command asks
+
+The interactive flow selects one or more configured `PackageId` values, assigns `patch`, `minor`, or `major` to each, selects an optional configured changelog tag, chooses a file name, and collects a user-facing summary.
+
+For the name `add-api`, Semifold creates `.changes/add-api.md`:
+
+```md title=".changes/add-api.md"
+---
+core: "minor:feat"
+web: "patch:fix"
+---
+
+Expose the new API through the web binding.
+```
+
+The bump controls version intent. The tag chooses a changelog section and does not choose a release channel.
+
+## Explicit form for automation
+
+```bash
+smif commit --name add-api \
+  --package core=minor \
+  --package web=patch \
+  --tag feat \
+  --summary "Expose the new API through the web binding."
+```
+
+`--package` and `--summary` are repeatable. A package without an inline level uses `--level`. Non-interactive callers must choose either `--tag <tag>` or `--no-tag` so Semifold never guesses a missing answer.
+
+## Validation and side effects
+
+- package IDs and tags must exist in `.changes/config.toml`;
+- the name must map to a safe changeset file and cannot silently overwrite different content;
+- the package set and summary cannot be empty;
+- `--dry-run` validates and renders the proposed changeset without creating it.
+
+Commit the changeset with the code change. Run [`smif status`](/docs/commands/status/) before merging when you need to inspect dependency propagation.

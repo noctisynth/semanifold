@@ -29,7 +29,7 @@ interface HomeCopy {
 
 const copy: Record<Locale, HomeCopy> = {
   en: {
-    eyebrow: 'Versioning and releases for polyglot monorepos',
+    eyebrow: 'Versioning and releases across languages and ecosystems',
     title: 'One repository. Many ecosystems. One release workflow.',
     lead: 'Semifold connects package discovery, changesets, version propagation, changelogs, and dependency-ordered publishing across every language in your repository.',
     primary: 'Get started',
@@ -63,12 +63,12 @@ const copy: Record<Locale, HomeCopy> = {
     pluginTitle: 'Custom ecosystem plugins',
     pluginDescription:
       'Define package discovery, inspection, and version edits with the typed SDK and capability-scoped runtime.',
-    pluginStatus: 'Next release',
+    pluginStatus: 'Available in 0.3.0-rc.6',
     pluginLink: 'Explore the plugin system',
     closing:
       'Start with the repository you already have. Semifold will help you make its version and release rules explicit.',
     closingLink: 'Make your first release',
-    repositoryLabel: 'your polyglot repository',
+    repositoryLabel: 'your repository across multiple languages',
     lifecycle: ['version together', 'write changelogs', 'publish in order'],
   },
   zh: {
@@ -106,7 +106,7 @@ const copy: Record<Locale, HomeCopy> = {
     pluginTitle: '自定义生态插件',
     pluginDescription:
       '使用带类型的 SDK 定义软件包发现、信息读取和版本修改，并由能力受限的运行时执行。',
-    pluginStatus: '下一版本',
+    pluginStatus: '已随 0.3.0-rc.6 发布',
     pluginLink: '了解插件系统',
     closing:
       '从你已经拥有的仓库开始，让 Semifold 帮你把版本与发布规则变成清楚、可执行的流程。',
@@ -171,13 +171,13 @@ export function LocalizedHomePage({ locale }: { locale: Locale }) {
 
   return (
     <HomeLayout {...baseOptions(locale)}>
-      <section className="relative overflow-hidden border-b border-fd-border bg-[radial-gradient(circle_at_80%_10%,color-mix(in_srgb,#8157e8_14%,transparent),transparent_32rem)]">
-        <div className="mx-auto grid max-w-7xl items-center gap-14 px-6 py-20 lg:grid-cols-[1.08fr_0.92fr] lg:py-28">
-          <div>
+      <section className="relative overflow-x-clip border-b border-fd-border bg-[radial-gradient(circle_at_80%_10%,color-mix(in_srgb,#8157e8_14%,transparent),transparent_32rem)]">
+        <div className="mx-auto grid min-w-0 max-w-7xl items-center gap-12 px-5 py-14 sm:px-6 sm:py-20 lg:grid-cols-[1.08fr_0.92fr] lg:gap-14 lg:py-28">
+          <div className="min-w-0">
             <p className="mb-5 text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
               {text.eyebrow}
             </p>
-            <h1 className="max-w-4xl break-keep text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.055em] text-fd-foreground sm:text-6xl">
+            <h1 className="max-w-4xl break-words text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.045em] text-fd-foreground sm:text-6xl sm:leading-[1.02] sm:tracking-[-0.055em]">
               {text.title}
             </h1>
             <p className="mt-7 max-w-2xl text-pretty text-lg leading-8 text-fd-muted-foreground">
@@ -200,7 +200,7 @@ export function LocalizedHomePage({ locale }: { locale: Locale }) {
           </div>
 
           <div
-            className="overflow-hidden rounded-2xl border border-fd-border bg-fd-card shadow-2xl shadow-violet-500/10"
+            className="min-w-0 overflow-hidden rounded-2xl border border-fd-border bg-fd-card shadow-2xl shadow-violet-500/10"
             aria-label={text.repositoryLabel}
             role="img"
           >
@@ -322,7 +322,7 @@ export function LocalizedHomePage({ locale }: { locale: Locale }) {
                 <h3 className="font-semibold text-fd-foreground">
                   {text.pluginTitle}
                 </h3>
-                <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                <span className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                   {text.pluginStatus}
                 </span>
               </div>

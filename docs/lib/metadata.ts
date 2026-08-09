@@ -5,7 +5,7 @@ import { source } from '@/lib/source';
 export const siteUrl = new URL('https://semifold.noctisynth.org');
 
 const descriptions: Record<Locale, string> = {
-  en: 'Version and publish packages across every ecosystem in a polyglot monorepo.',
+  en: 'Version and publish packages across multiple languages and package ecosystems in one monorepo.',
   zh: '统一管理跨语言单仓库中各类软件包的版本、依赖、变更日志与发布。',
 };
 

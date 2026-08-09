@@ -587,6 +587,10 @@
 - [x] 修复 MDX 容器中的强调标记渲染，并让首发教程默认展示交互式使用路径
 - [x] 补齐 plugin、configuration 与中文术语表的首批双语页面
 - [x] 建立中文术语规则：中文解释优先，首次出现时保留英文检索词，不使用英文 fallback 代替解释
+- [x] 将已发布基线更新为 `0.3.0-rc.6`，并把 plugin runtime/SDK 从下一版本改为已发布
+- [x] 为 first release 明确 GitHub Actions 默认路径，修正文档中的 changeset 文件名表达
+- [x] 修复小尺寸导航 logo、首页生命周期图、窄屏溢出、语言切换与 smooth-scroll 告警
+- [x] 新增逐命令行为文档，并把 CLI 参数参考迁移到命令行模块
 
 ### 内容重写
 
@@ -594,7 +598,8 @@
 - [ ] 补齐 workspace、四个内置 ecosystem 与跨生态依赖
 - [ ] 补齐 configuration、release channel、changelog template 与 publish pre-check
 - [ ] 重写 GitHub Actions、workflow outputs 与当前 MCP changeset CRUD
-- [x] 为已实现 plugin runtime/SDK 编写下一版本文档，并明确 Vite plugin 尚未完成
+- [x] 完成命令行模块的 `init`、`commit`、`config`、`status`、`version`、`publish`、`ci`、`mcp` 与参数参考
+- [x] 为已发布 plugin runtime/SDK 编写文档，并明确 Vite plugin 尚未完成
 - [ ] 同步完成英文与中文内容，不依赖 fallback
 
 ### 质量与迁移
@@ -604,4 +609,4 @@
 - [x] 将部署产物切换为 `docs/out`，部署前运行当前 docs checks
 - [ ] 删除 Rspress 专用依赖、配置、组件与旧内容
 - [x] 创建并验证 `@semifold/docs` changeset
-- [ ] 运行 production build、静态 direct-route smoke test 与 `smif status`
+- [x] 运行 production build、静态 direct-route smoke test 与 `smif status`

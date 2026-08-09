@@ -1,0 +1,64 @@
+---
+title: CLI reference
+description: The complete Semifold 0.3.0-rc.6 command surface and global execution options.
+---
+
+<Availability status="released">
+  This reference is checked against the published <strong>Semifold 0.3.0-rc.6</strong> Clap command surface.
+</Availability>
+
+```text
+smif [OPTIONS] <COMMAND>
+```
+
+`semifold` is an equivalent executable name. Run `smif <command> --help` for the authoritative help installed with your exact binary.
+
+## Commands
+
+| Command | Syntax | Detailed behavior |
+| --- | --- | --- |
+| `init` | `smif init [OPTIONS]` | [Initialization](/docs/commands/init/) |
+| `commit` (`add`) | `smif commit [OPTIONS]` | [Changeset creation](/docs/commands/commit/) |
+| `config sync` | `smif config sync [OPTIONS]` | [Configuration maintenance](/docs/commands/config/) |
+| `config migrate` | `smif config migrate [OPTIONS]` | [Configuration maintenance](/docs/commands/config/) |
+| `config channel set` | `smif config channel set [OPTIONS] <CHANNEL>` | [Configuration maintenance](/docs/commands/config/) |
+| `config channel clear` | `smif config channel clear [OPTIONS]` | [Configuration maintenance](/docs/commands/config/) |
+| `status` | `smif status [OPTIONS]` | [Release inspection](/docs/commands/status/) |
+| `version` | `smif version [OPTIONS]` | [Version application](/docs/commands/version/) |
+| `publish` | `smif publish [OPTIONS]` | [Publish execution](/docs/commands/publish/) |
+| `ci` | `smif ci [OPTIONS]` | [GitHub Actions orchestration](/docs/commands/ci/) |
+| `mcp` | `smif mcp [OPTIONS]` | [MCP server](/docs/commands/mcp/) |
+
+## Global options
+
+| Option | Meaning |
+| --- | --- |
+| `--dry-run` | Enables preview mode. Exact behavior depends on the command; explicitly dry-run-enabled configured commands can still execute. |
+| `--debug` | Enables additional diagnostics without making sensitive configuration a public output contract. |
+| `-h`, `--help` | Prints help for the current command level. |
+| `-V`, `--version` | Prints the executable version. |
+
+## Command-specific options
+
+### `init`
+
+`--target`, repeatable `--resolvers`, `--no-resolvers`, `--force`, `--base-branch`, `--release-branch`, `--default-tags`, `--no-default-tags`, `--github-actions`, `--no-github-actions`, and `--allow-non-root`.
+
+### `commit`
+
+`--name`, `--level`, repeatable `--summary`, repeatable `--package PACKAGE[=LEVEL]`, `--tag`, and `--no-tag`.
+
+### `config`
+
+- `sync`: `--check`, `--prune`, repeatable `--resolver`;
+- `migrate`: `--check`;
+- `channel set`: positional `CHANNEL`, `--bump`, repeatable `--package` or `--all`, `--check`;
+- `channel clear`: repeatable `--package` or `--all`, `--check`.
+
+### Release commands
+
+- `status`: `--comment`;
+- `version`: `--allow-dirty`;
+- `publish`: `--github-release`, `--allow-dirty`;
+- `ci`: no command-specific options;
+- `mcp`: `-C`, `--project-root` (alias `--cd`).

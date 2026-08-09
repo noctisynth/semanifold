@@ -1,0 +1,48 @@
+---
+title: smif config
+description: 同步发现的软件包、迁移旧字段，并在不重写无关策略的情况下维护命名发布通道。
+---
+
+`smif config` 集中维护 `.changes/config.toml`：
+
+```text
+smif config sync
+smif config migrate
+smif config channel set|clear
+```
+
+## 同步工作区
+
+先执行只读检查：
+
+```bash
+smif config sync --check
+```
+
+`sync` 运行软件包发现，再与 `[packages]` 比较。它报告新增、缺失、重命名、移动和冲突，同时保留注释和有意配置的字段。计划没有歧义时，去掉 `--check` 即可应用。
+
+使用 `--resolver rust --resolver nodejs` 可以限制扫描的软件生态。`--prune` 会删除完整、成功扫描中不存在的已配置软件包；部分扫描或冲突无法证明删除安全时，Semifold 会拒绝清理。
+
+## 迁移旧配置
+
+```bash
+smif config migrate --check
+smif config migrate
+```
+
+迁移发生在严格加载项目之前。它可以替换旧 `version-mode`、规范已知的 snake_case 字段，并为旧的版本存在性检查补充必需的 `type`，同时保留无关 TOML 和注释。需要迁移时，`--check` 返回非零状态且不写文件。
+
+## 设置或清除发布通道
+
+```bash
+smif config channel set beta --package web --bump minor
+smif config channel clear --package web
+```
+
+`set` 接受命名通道，并要求可重复的 `--package` 或 `--all`。一次性的 `--bump preserve|patch|minor|major` 决定首次进入通道时使用的稳定版本基线；成功的 `version` 会消费它。`clear` 恢复默认稳定通道。两项操作都支持 `--check`。
+
+对于 Node.js 软件包，如果配置的 `npm publish` 缺少匹配的 `--tag`，Semifold 会报告策略不一致，但不会替用户改写命令。
+
+## `--check` 与 `--dry-run`
+
+`--check` 判断持久化配置是否已经处于请求状态，适合持续集成检查配置漂移；`--dry-run` 用来预览操作。两者都不写配置，但成功条件不同。

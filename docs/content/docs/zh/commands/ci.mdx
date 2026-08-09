@@ -1,0 +1,35 @@
+---
+title: smif ci
+description: 用一条命令执行生成的 GitHub Actions 发布拉取请求或发布分支行为。
+---
+
+在 `smif init` 中选择 GitHub Actions 的仓库，推荐使用 `smif ci` 作为发布入口。它拒绝在 GitHub Actions 之外运行，并跳过配置基础分支以外的分支。
+
+```bash
+smif ci
+```
+
+## 存在变更集时
+
+在基础分支上，`ci` 计算并应用版本修改，渲染配置的发布分支名称，以 `chore(release): bump versions` 提交生成文件，强制更新发布分支，再创建或刷新返回基础分支的拉取请求。
+
+因此，贡献者只需要把变更集与代码一起提交并合入。维护者在自动创建的发布拉取请求中审查版本和变更日志。
+
+## 不再存在变更集时
+
+发布拉取请求合入后，下一次基础分支运行发现没有待处理变更集，于是调用发布操作，并启用 GitHub Release 处理。软件包会先接受检查，再按依赖关系发布。
+
+<LifecycleDiagram
+  items={[
+    '代码与变更集进入基础分支',
+    '自动维护发布拉取请求',
+    '发布拉取请求合入基础分支',
+    '按依赖关系发布软件包',
+  ]}
+/>
+
+## 环境与输出
+
+命令使用 `GITHUB_ACTIONS`、`GITHUB_REF_NAME`、`GITHUB_REPOSITORY` 和 `GITHUB_TOKEN`。生成的工作流通过 `semifold-version` 或 `semifold-publish` 步骤输出提供带版本的 JSON。发布失败会先写出恢复信息，再返回非零状态。
+
+`--dry-run` 会准备相应分支行为，但不会推送分支、创建拉取请求或发布。配置权限时应以生成的工作流为受支持基线，不要从一段缺少权限说明的最小示例重新拼装。

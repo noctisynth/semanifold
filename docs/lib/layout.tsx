@@ -17,14 +17,14 @@ export function baseOptions(
               alt=""
               width={29}
               height={29}
-              src="/logo-light.svg"
+              src="/favicon-light.svg"
             />
             <Image
               className="absolute inset-0 hidden size-full dark:block"
               alt=""
               width={29}
               height={29}
-              src="/logo-dark.svg"
+              src="/favicon-dark.svg"
             />
           </span>
           <span>Semifold</span>

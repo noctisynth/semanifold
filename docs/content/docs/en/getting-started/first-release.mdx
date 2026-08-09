@@ -6,7 +6,7 @@ description: Initialize a small repository, record a change, review affected pac
 This tutorial follows the normal interactive CLI. You will create Semifold configuration, record one changeset, inspect the packages affected by it, update files, and prepare a registry publish.
 
 <Availability status="released">
-  This tutorial uses <strong>Semifold 0.3.0-rc.5</strong> and only features available in that published version.
+  This tutorial uses <strong>Semifold 0.3.0-rc.6</strong> and only features available in that published version.
 </Availability>
 
 ## Before you start
@@ -87,7 +87,7 @@ smif status
 <ExpectedOutput title="What to verify">
 
 - your package appears with the expected current and target versions;
-- its reason points to the `add-api` changeset;
+- its direct reason points to the changeset file named `.changes/add-api.md`;
 - any additional package has an understandable dependency-propagation reason;
 - the final message says the release plan is ready, not that files were changed.
 
@@ -95,7 +95,18 @@ smif status
 
 If a package or version is wrong, stop here. Correct the changeset, package ID, or dependency configuration and run `smif status` again.
 
-## 4. Preview and apply version changes
+## 4. Choose the automated or manual path
+
+If `smif init` generated the GitHub Actions workflows, the recommended path stops using local release commands here:
+
+1. push the code change and `.changes/add-api.md`, then merge that pull request into `main`;
+2. the generated workflow runs `smif ci`, updates the configured `release` branch, and creates or refreshes its release pull request;
+3. review the generated versions and changelogs in that release pull request, then merge it into `main`;
+4. the next workflow run sees no pending changesets and publishes the prepared package versions in dependency order.
+
+Do not also run `smif version` or `smif publish` locally for the same release. Continue below only when the repository does not use the generated workflow, or when you are deliberately learning and testing the manual mechanism in a disposable repository.
+
+## 5. Manually preview and apply version changes
 
 Preview the file and command work first:
 
@@ -115,7 +126,7 @@ Semifold updates package versions and eligible internal requirements, writes cha
 
 Review the Git diff and run the repository's normal tests. Commit these generated files to the `release` branch, or let the generated GitHub Actions workflow maintain the release pull request.
 
-## 5. Publish
+## 6. Manually publish
 
 After the version changes reach the branch used for publishing, provide the registry credentials required by the selected ecosystems.
 

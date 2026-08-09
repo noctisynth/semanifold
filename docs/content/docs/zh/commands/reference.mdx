@@ -1,0 +1,64 @@
+---
+title: CLI 参数参考
+description: Semifold 0.3.0-rc.6 的完整命令面和全局执行选项。
+---
+
+<Availability status="released">
+  本参考已经对照 <strong>Semifold 0.3.0-rc.6</strong> 发布版本的 Clap 命令面检查。
+</Availability>
+
+```text
+smif [OPTIONS] <COMMAND>
+```
+
+`semifold` 是等价的完整命令名。运行 `smif <command> --help` 可以查看当前安装版本的权威帮助。
+
+## 命令
+
+| 命令 | 语法 | 详细行为 |
+| --- | --- | --- |
+| `init` | `smif init [OPTIONS]` | [初始化](/zh/docs/commands/init/) |
+| `commit`（`add`） | `smif commit [OPTIONS]` | [创建变更集](/zh/docs/commands/commit/) |
+| `config sync` | `smif config sync [OPTIONS]` | [维护配置](/zh/docs/commands/config/) |
+| `config migrate` | `smif config migrate [OPTIONS]` | [维护配置](/zh/docs/commands/config/) |
+| `config channel set` | `smif config channel set [OPTIONS] <CHANNEL>` | [维护配置](/zh/docs/commands/config/) |
+| `config channel clear` | `smif config channel clear [OPTIONS]` | [维护配置](/zh/docs/commands/config/) |
+| `status` | `smif status [OPTIONS]` | [检查版本决定](/zh/docs/commands/status/) |
+| `version` | `smif version [OPTIONS]` | [应用版本修改](/zh/docs/commands/version/) |
+| `publish` | `smif publish [OPTIONS]` | [执行发布](/zh/docs/commands/publish/) |
+| `ci` | `smif ci [OPTIONS]` | [GitHub Actions 编排](/zh/docs/commands/ci/) |
+| `mcp` | `smif mcp [OPTIONS]` | [MCP 服务器](/zh/docs/commands/mcp/) |
+
+## 全局选项
+
+| 选项 | 含义 |
+| --- | --- |
+| `--dry-run` | 启用预演。具体行为由命令决定；明确允许预演的配置命令仍可能执行。 |
+| `--debug` | 启用额外诊断，但不会把敏感配置变成公开输出契约。 |
+| `-h`、`--help` | 输出当前命令层级的帮助。 |
+| `-V`、`--version` | 输出可执行文件版本。 |
+
+## 命令专用选项
+
+### `init`
+
+`--target`、可重复的 `--resolvers`、`--no-resolvers`、`--force`、`--base-branch`、`--release-branch`、`--default-tags`、`--no-default-tags`、`--github-actions`、`--no-github-actions` 和 `--allow-non-root`。
+
+### `commit`
+
+`--name`、`--level`、可重复的 `--summary`、可重复的 `--package PACKAGE[=LEVEL]`、`--tag` 和 `--no-tag`。
+
+### `config`
+
+- `sync`：`--check`、`--prune`、可重复的 `--resolver`；
+- `migrate`：`--check`；
+- `channel set`：位置参数 `CHANNEL`、`--bump`、可重复的 `--package` 或 `--all`、`--check`；
+- `channel clear`：可重复的 `--package` 或 `--all`、`--check`。
+
+### 发布相关命令
+
+- `status`：`--comment`；
+- `version`：`--allow-dirty`；
+- `publish`：`--github-release`、`--allow-dirty`；
+- `ci`：没有专用选项；
+- `mcp`：`-C`、`--project-root`（别名 `--cd`）。

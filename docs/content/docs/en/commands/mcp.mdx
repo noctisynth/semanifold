@@ -1,0 +1,29 @@
+---
+title: smif mcp
+description: Start the stdio MCP server that exposes safe, revision-aware changeset CRUD tools.
+---
+
+`smif mcp` starts a JSON-RPC MCP server on standard input and output. It is intended for a configured MCP client, not for an interactive terminal session.
+
+```bash
+smif mcp --project-root /path/to/repository
+```
+
+`-C`, `--project-root`, and the visible `--cd` alias select the repository. Without one, Semifold locates the project from the current directory. Project loading is lazy so one invalid tool request does not terminate the server.
+
+## Published tools
+
+| Tool | Input | Behavior |
+| --- | --- | --- |
+| `get_changeset` | optional `id` | Lists changesets or returns one record with its SHA-256 revision. |
+| `create_changeset` | `name`, `packages`, `summary` | Idempotently creates the requested changeset. |
+| `update_changeset` | `id`, expected `revision`, `packages`, `summary` | Replaces content only when the caller's revision still matches. |
+| `delete_changeset` | `id`, expected `revision` | Deletes only the exact revision the caller inspected. |
+
+Each package input contains `package`, `bump` (`patch`, `minor`, or `major`), and an optional `tag`. Responses use schema version 1 and return structured status or error data.
+
+## Concurrency and safety
+
+Mutation tools are serialized. Update and delete use optimistic SHA-256 revisions to reject stale callers, tool panics are isolated, invalid arguments return structured errors, and a following request can continue on the same server.
+
+The global `--dry-run` changes mutation tools into validated previews without writing changeset files.

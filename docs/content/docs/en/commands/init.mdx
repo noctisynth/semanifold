@@ -1,0 +1,46 @@
+---
+title: smif init
+description: Discover packages, create Semifold configuration, and optionally generate the supported GitHub Actions workflows.
+---
+
+`smif init` adopts Semifold in a repository. Run it once at the repository root; use [`smif config sync`](/docs/commands/config/) for later package additions, removals, or moves.
+
+```bash
+smif init
+```
+
+## Default interactive flow
+
+In a terminal, Semifold asks for the built-in ecosystems to scan, base and release branch names, default changelog categories, and whether to generate GitHub Actions. It then plans package discovery before writing:
+
+- `.changes/config.toml` with branches, tags, changelog templates, discovered packages, and resolver defaults;
+- `.github/workflows/semifold-ci.yaml` when GitHub Actions is selected;
+- `.github/workflows/semifold-status.yaml` for pull-request status comments when GitHub Actions is selected.
+
+Review the stable `PackageId` keys and paths under `[packages]` immediately after initialization.
+
+## Automation form
+
+A non-interactive caller must answer every prompt explicitly:
+
+```bash
+smif init --resolvers rust --resolvers nodejs \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+```
+
+Use the matching `--no-resolvers`, `--no-default-tags`, or `--no-github-actions` option to choose an empty result. This form exists for automation; it is not required for normal local use.
+
+## Important options
+
+| Option | Behavior |
+| --- | --- |
+| `--target <path>` | Changes the changeset directory from the default `.changes`. |
+| `--resolvers <id>` | Scans a built-in ecosystem; repeat for multiple ecosystems. |
+| `--force` | Explicitly reinitializes an existing configuration. It is not a package-sync command. |
+| `--allow-non-root` | Allows invocation from a subdirectory while using the discovered repository root. |
+| `--dry-run` | Plans and reports initialization without writing the files. |
+
+Initialization fails before writing when discovery or required choices are invalid. Existing repositories should not use `--force` as routine maintenance because it can replace intentional policy; run `smif config sync --check` instead.

@@ -1,0 +1,38 @@
+---
+title: smif version
+description: Validate and apply package versions, internal requirements, changelogs, and consumed changesets as one release operation.
+---
+
+`smif version` performs the file-changing half of a release. When the generated GitHub Actions workflow is enabled, prefer [`smif ci`](/docs/commands/ci/) instead of running this command locally for the same release.
+
+```bash
+smif version --dry-run
+smif version
+```
+
+## Plan and validation
+
+The command recomputes the same release decision shown by `smif status`, then asks each built-in adapter or repository plugin for deterministic manifest edits. Before normal writes begin, Semifold validates target paths, expected file hashes, edit conflicts, changelog templates, package identity, and the complete dependency graph.
+
+A normal run can update:
+
+- package versions and eligible internal dependency requirements;
+- shared workspace version sources;
+- package changelogs;
+- one-time `channel-bump` configuration;
+- consumed changeset files;
+- configured `post-version` commands.
+
+## Worktree protection
+
+The command rejects a dirty Git worktree by default. `--allow-dirty` means the existing diff is intentionally part of the operation; it does not make unrelated changes safe.
+
+## Dry run
+
+`--dry-run` prepares and validates the release without normal file writes. A `post-version` command still runs when its configuration explicitly sets `dry-run = true`, so such a command must be safe to repeat.
+
+## Failure and recovery
+
+Planning or validation failure leaves package files and changesets untouched. If a `post-version` command fails after validated file edits were applied, Semifold keeps those edits and retains the changesets, then reports the failed command and recovery facts. Inspect the Git diff, fix the hook, and retry instead of deleting the changeset by hand.
+
+After success, test and review the generated diff before committing it to the configured release branch.

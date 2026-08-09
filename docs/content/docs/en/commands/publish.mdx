@@ -1,0 +1,31 @@
+---
+title: smif publish
+description: Build a fresh publish plan from versioned manifests and changelogs, then release packages in dependency order.
+---
+
+`smif publish` handles packages whose version and changelog edits are already present. It does not depend on the changesets consumed by `version`.
+
+```bash
+smif publish --dry-run
+smif publish
+```
+
+When generated GitHub Actions are enabled, merging the prepared release pull request triggers the recommended publish path through [`smif ci`](/docs/commands/ci/). Do not run a duplicate local publish for that release.
+
+## Planning and preflight
+
+Semifold inspects current manifests and changelogs, orders packages through the workspace graph, expands configured commands, and performs every available registry pre-check before starting publish commands. Missing changelogs, private packages, versions already present, and package policy become explicit skip reasons.
+
+HTTP checks treat `200` as existing and `404` as missing; unexpected status codes fail safely. Command checks use the configured JSON Lines contract.
+
+## Execution
+
+For each eligible package, Semifold runs configured pre-publish and publish commands in dependency order. The final report separates `succeeded`, `skipped`, `failed`, and `not-started` packages so a partial failure can be retried without guessing.
+
+| Option | Behavior |
+| --- | --- |
+| `--dry-run` | Runs read-only preflight and skips registry and Forge mutations. Commands run only when explicitly allowed for dry run. |
+| `--allow-dirty` | Accepts the current worktree diff as intentional publish input. |
+| `--github-release` | Creates configured GitHub Releases and uploads assets; only accepted in CI. |
+
+If a registry version already exists, its registry command is skipped. With GitHub Releases enabled, Semifold can still create a missing Release; an already existing Release does not re-upload missing assets.

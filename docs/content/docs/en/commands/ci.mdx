@@ -1,0 +1,35 @@
+---
+title: smif ci
+description: Run the generated GitHub Actions release-PR or publish branch behavior from one command.
+---
+
+`smif ci` is the recommended release entry point for repositories that selected GitHub Actions during `smif init`. It refuses to run outside GitHub Actions and skips branches other than the configured base branch.
+
+```bash
+smif ci
+```
+
+## When changesets are present
+
+On the base branch, `ci` computes and applies the version operation, renders the configured release branch name, commits the generated files as `chore(release): bump versions`, force-updates that branch, and creates or refreshes its pull request back to the base branch.
+
+Contributors therefore only need to commit a changeset with their code and merge that pull request. Maintainers review versions and changelogs in the generated release pull request.
+
+## When no changesets remain
+
+After the release pull request is merged, the next base-branch run sees no pending changesets and calls the publish operation with GitHub Release handling enabled. Packages are checked and published in dependency order.
+
+<LifecycleDiagram
+  items={[
+    'Code and changeset reach the base branch',
+    'Automation maintains the release pull request',
+    'The release pull request returns to the base branch',
+    'Packages publish in dependency order',
+  ]}
+/>
+
+## Environment and outputs
+
+The command relies on `GITHUB_ACTIONS`, `GITHUB_REF_NAME`, `GITHUB_REPOSITORY`, and `GITHUB_TOKEN`. The generated workflow exposes version or publish JSON through the `semifold-version` and `semifold-publish` step outputs. A publish failure writes recovery output before returning a non-zero status.
+
+`--dry-run` prepares the selected branch behavior without pushing a branch, creating a pull request, or publishing. Use the generated workflow as the supported baseline instead of reconstructing permissions from a minimal snippet.

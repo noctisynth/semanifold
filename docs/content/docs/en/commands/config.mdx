@@ -1,0 +1,48 @@
+---
+title: smif config
+description: Synchronize discovered packages, migrate legacy fields, and manage named release channels without rewriting unrelated policy.
+---
+
+`smif config` groups maintenance operations for `.changes/config.toml`.
+
+```text
+smif config sync
+smif config migrate
+smif config channel set|clear
+```
+
+## Synchronize the workspace
+
+Start with a read-only check:
+
+```bash
+smif config sync --check
+```
+
+`sync` runs package discovery and compares it with `[packages]`. It reports additions, missing packages, renames, moves, and conflicts while preserving comments and intentional fields. Remove `--check` to apply an unambiguous plan.
+
+Use `--resolver rust --resolver nodejs` to limit discovery. `--prune` removes configured packages missing from a complete successful scan; it is intentionally unavailable when a partial scan or conflict makes deletion unsafe.
+
+## Migrate an older configuration
+
+```bash
+smif config migrate --check
+smif config migrate
+```
+
+Migration runs before strict project loading. It can replace legacy `version-mode`, normalize known snake_case keys, and add the required typed `pre-check` discriminator while preserving unrelated TOML and comments. `--check` returns a non-zero status when a migration is needed and never writes the file.
+
+## Set or clear a release channel
+
+```bash
+smif config channel set beta --package web --bump minor
+smif config channel clear --package web
+```
+
+`set` accepts a named channel and either repeatable `--package` values or `--all`. The optional one-time `--bump preserve|patch|minor|major` controls the stable baseline used when entering the channel; a successful `version` consumes it. `clear` restores the default stable channel. Both operations support `--check`.
+
+For Node.js packages, Semifold warns when the configured `npm publish` command lacks the matching `--tag`; it reports the policy mismatch without rewriting the command.
+
+## `--check` versus `--dry-run`
+
+`--check` answers whether persisted configuration already matches the requested state and is designed for CI drift detection. `--dry-run` previews an operation. Neither writes configuration, but their success criteria are different.

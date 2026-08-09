@@ -1,0 +1,29 @@
+---
+title: Command line
+description: Choose a Semifold command by task, then open its behavior guide or the complete option reference.
+---
+
+The installed executable is `smif`; `semifold` is an equivalent long name. Commands are documented separately so you can understand their inputs, side effects, and recovery behavior without turning the rest of the documentation into a list of flags.
+
+<Availability status="released">
+  This module describes the command surface published in <strong>Semifold 0.3.0-rc.6</strong>.
+</Availability>
+
+## Choose a command
+
+| Command | Use it when you need to | Writes local files |
+| --- | --- | --- |
+| [`init`](/docs/commands/init/) | Adopt Semifold in a repository and optionally generate GitHub Actions workflows. | Yes |
+| [`commit`](/docs/commands/commit/) | Record a reviewed release intent as a changeset. | Yes |
+| [`config`](/docs/commands/config/) | Synchronize, migrate, or change release-channel configuration. | Depends on the subcommand |
+| [`status`](/docs/commands/status/) | Inspect affected packages and target versions before writing anything. | No |
+| [`version`](/docs/commands/version/) | Apply package, dependency, changelog, and changeset edits manually. | Yes |
+| [`publish`](/docs/commands/publish/) | Publish already-versioned packages in dependency order. | External side effects |
+| [`ci`](/docs/commands/ci/) | Let the generated GitHub Actions workflow maintain the release PR or publish it. | Yes |
+| [`mcp`](/docs/commands/mcp/) | Expose changeset CRUD tools to an MCP client over stdio. | Depends on the tool |
+
+## Guides versus reference
+
+Each command page explains normal behavior, not only syntax. Use the [complete CLI reference](/docs/commands/reference/) when you already know the workflow and only need an option name.
+
+For a first release, follow the [tutorial](/docs/getting-started/first-release/). If it generated GitHub Actions, the normal contributor path ends after committing a changeset; `smif ci` performs versioning and publishing at the appropriate base-branch runs.

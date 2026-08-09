@@ -6,7 +6,7 @@ description: Install the latest published Semifold CLI and verify that the smif 
 The published command is available as both `smif` and `semifold`. This documentation uses the shorter `smif` form.
 
 <Availability status="released">
-  The latest published Semifold release is <strong>0.3.0-rc.5</strong>. Features marked “Next release” elsewhere in the documentation are present on `main` but not in this tag.
+  The latest published Semifold release is <strong>0.3.0-rc.6</strong>. It includes the ecosystem plugin runtime and the first release of the TypeScript plugin SDK.
 </Availability>
 
 ## Recommended: installation script
@@ -39,7 +39,7 @@ To select a version or installation directory, pass arguments to the downloaded 
 
 ```bash
 curl -L https://semifold.noctisynth.org/install/install.sh | \
-  sh -s -- 0.3.0-rc.5 --install-dir "$HOME/bin"
+  sh -s -- 0.3.0-rc.6 --install-dir "$HOME/bin"
 ```
 
   </Tab>
@@ -47,7 +47,7 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
 
 ```powershell
 & ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
-  0.3.0-rc.5 -InstallDir "$HOME\bin"
+  0.3.0-rc.6 -InstallDir "$HOME\bin"
 ```
 
   </Tab>
@@ -61,21 +61,21 @@ Choose the registry already trusted in your environment:
   <Tab>
 
 ```bash
-cargo install semifold --version 0.3.0-rc.5
+cargo install semifold --version 0.3.0-rc.6
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-npm install --global semifold@0.3.0-rc.5
+npm install --global semifold@0.3.0-rc.6
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-pipx install semifold==0.3.0rc5
+pipx install semifold==0.3.0rc6
 ```
 
   </Tab>
@@ -92,7 +92,7 @@ smif --version
 <ExpectedOutput title="Expected output">
 
 ```text
-semifold 0.3.0-rc.5
+semifold 0.3.0-rc.6
 ```
 
 </ExpectedOutput>

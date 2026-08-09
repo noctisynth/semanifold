@@ -3,10 +3,10 @@ title: Documentation
 description: Learn how Semifold versions and publishes packages across every ecosystem in one repository.
 ---
 
-Semifold is a versioning and release tool for polyglot monorepos. It connects packages that use different manifests and registries, then manages their changesets, related version updates, changelogs, and dependency-ordered publishing as one repository-wide workflow.
+Semifold is a versioning and release tool for monorepos that span multiple languages and package ecosystems. It connects packages that use different manifests and registries, then manages their changesets, related version updates, changelogs, and dependency-ordered publishing as one repository-wide workflow.
 
 <Availability status="released">
-  <strong>Published baseline: Semifold 0.3.0-rc.5.</strong> Features already implemented on `main`, including ecosystem plugins, are documented with an explicit “Next release” label.
+  <strong>Published baseline: Semifold 0.3.0-rc.6.</strong> This release includes the repository-local ecosystem plugin runtime and `@semifold/plugin-sdk 0.1.0-rc.0`.
 </Availability>
 
 ## Choose what you need
@@ -25,7 +25,7 @@ Semifold is a versioning and release tool for polyglot monorepos. It connects pa
     Learn the structure and maintenance workflow of `.changes/config.toml`.
   </Card>
   <Card title="Extend an ecosystem" href="/docs/plugins/overview/">
-    Use the next-release JavaScript plugin runtime and TypeScript SDK for custom package formats.
+    Use the published JavaScript plugin runtime and TypeScript SDK for custom package formats.
   </Card>
   <Card title="Look up a term" href="/docs/concepts/glossary/">
     Distinguish packages, PackageId values, ecosystems, changesets, channels, registries, and plans.
@@ -34,13 +34,15 @@ Semifold is a versioning and release tool for polyglot monorepos. It connects pa
 
 ## The repository-wide lifecycle
 
-```text
-packages in different ecosystems
-  -> one dependency-aware workspace
-  -> changesets describing user-visible changes
-  -> related version and changelog updates
-  -> publish each package with its ecosystem's rules
-```
+<LifecycleDiagram
+  items={[
+    'Packages in different ecosystems',
+    'One dependency-aware workspace',
+    'Changesets describing user-visible changes',
+    'Related version and changelog updates',
+    "Publish with each ecosystem's rules",
+  ]}
+/>
 
 The ecosystem adapter for each package understands its manifest. Semifold owns the relationships across adapters: stable package identity, cross-ecosystem dependency propagation, changeset intent, release channels, changelogs, publish ordering, and recovery reporting.
 
@@ -48,4 +50,4 @@ The ecosystem adapter for each package understands its manifest. Semifold owns t
 
 If Semifold is new to you, read [the introduction](/docs/introduction/) before the configuration reference. Then complete [the first-release tutorial](/docs/getting-started/first-release/) with a small repository. Use the [glossary](/docs/concepts/glossary/) whenever an unfamiliar domain term appears.
 
-The [CLI reference](/docs/reference/cli/) is a lookup page. It is not intended to be the primary way to learn the workflow.
+The [command documentation](/docs/commands/) explains each command in detail. Its [CLI reference](/docs/commands/reference/) is a lookup page, not the primary way to learn the workflow.

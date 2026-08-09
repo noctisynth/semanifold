@@ -6,7 +6,7 @@ description: 学习怎样用 Semifold 统一管理跨语言单仓库中的软件
 Semifold 是面向跨语言单仓库的版本与发布工具。它连接使用不同清单文件和软件包仓库的软件包，再以整座仓库为范围管理变更集、相关版本修改、变更日志和按依赖发布。
 
 <Availability status="released">
-  <strong>当前已发布基线：Semifold 0.3.0-rc.5。</strong>已经在 `main` 实现但尚未发布的功能（包括生态插件）会明确标记为“下一版本”。
+  <strong>当前已发布基线：Semifold 0.3.0-rc.6。</strong>这个版本已经包含仓库内生态插件运行时和 `@semifold/plugin-sdk 0.1.0-rc.0`。
 </Availability>
 
 ## 选择你现在要完成的事情
@@ -25,7 +25,7 @@ Semifold 是面向跨语言单仓库的版本与发布工具。它连接使用�
     学习 `.changes/config.toml` 的结构和日常维护方式。
   </Card>
   <Card title="扩展软件生态" href="/zh/docs/plugins/overview/">
-    使用下一版本的 JavaScript 插件运行时与 TypeScript SDK 接入自定义软件包格式。
+    使用已经发布的 JavaScript 插件运行时与 TypeScript SDK 接入自定义软件包格式。
   </Card>
   <Card title="查询术语" href="/zh/docs/concepts/glossary/">
     区分软件包、PackageId、软件生态、变更集、发布通道、软件包仓库和各种计划。
@@ -34,13 +34,15 @@ Semifold 是面向跨语言单仓库的版本与发布工具。它连接使用�
 
 ## 整座仓库的版本与发布生命周期
 
-```text
-来自不同软件生态的软件包
-  -> 一张包含依赖关系的工作区图
-  -> 记录用户可见变化的变更集
-  -> 联动修改相关版本与变更日志
-  -> 按每种生态自己的规则依次发布
-```
+<LifecycleDiagram
+  items={[
+    '来自不同软件生态的软件包',
+    '一张包含依赖关系的工作区图',
+    '记录用户可见变化的变更集',
+    '联动修改相关版本与变更日志',
+    '按每种生态自己的规则依次发布',
+  ]}
+/>
 
 每个软件包的生态适配器负责理解自己的清单文件。Semifold 则负责适配器之间的关系：稳定的软件包身份、跨生态依赖传播、变更意图、发布通道、变更日志、发布顺序和失败恢复报告。
 
@@ -48,4 +50,4 @@ Semifold 是面向跨语言单仓库的版本与发布工具。它连接使用�
 
 如果你刚接触 Semifold，请先读[介绍](/zh/docs/introduction/)，不要从完整配置参考开始。然后找一座小仓库完成[第一次发布教程](/zh/docs/getting-started/first-release/)。遇到陌生概念时，随时查看[术语表](/zh/docs/concepts/glossary/)。
 
-[CLI 参考](/zh/docs/reference/cli/)适合查找命令，不适合作为理解工作流的起点。
+[命令行文档](/zh/docs/commands/)会逐个解释命令行为，其中的 [CLI 参数参考](/zh/docs/commands/reference/)适合快速查询，不适合作为理解工作流的起点。

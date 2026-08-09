@@ -1,0 +1,15 @@
+{
+  "title": "命令行",
+  "pages": [
+    "index",
+    "init",
+    "commit",
+    "config",
+    "status",
+    "version",
+    "publish",
+    "ci",
+    "mcp",
+    "reference"
+  ]
+}

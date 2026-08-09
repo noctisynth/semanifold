@@ -1,0 +1,46 @@
+---
+title: smif init
+description: 发现软件包、创建 Semifold 配置，并按需生成受支持的 GitHub Actions 工作流。
+---
+
+`smif init` 用来让一座仓库开始使用 Semifold。它通常只在仓库根目录执行一次；以后增加、删除或移动软件包时，使用 [`smif config sync`](/zh/docs/commands/config/)。
+
+```bash
+smif init
+```
+
+## 默认交互流程
+
+在终端中，Semifold 会询问要扫描的内置软件生态、基础与发布分支名称、默认变更日志分类，以及是否生成 GitHub Actions。完成软件包发现后，它会规划并写入：
+
+- `.changes/config.toml`：分支、标签、变更日志模板、发现的软件包和解析器默认配置；
+- `.github/workflows/semifold-ci.yaml`：选择 GitHub Actions 时生成；
+- `.github/workflows/semifold-status.yaml`：选择 GitHub Actions 时生成，用于拉取请求状态评论。
+
+初始化后应立即检查 `[packages]` 下稳定的软件包 ID（`PackageId`）和路径。
+
+## 自动化调用
+
+不能交互的调用者必须明确回答每一项选择：
+
+```bash
+smif init --resolvers rust --resolvers nodejs \
+  --base-branch main \
+  --release-branch release \
+  --default-tags \
+  --github-actions
+```
+
+需要明确选择空结果时，使用对应的 `--no-resolvers`、`--no-default-tags` 或 `--no-github-actions`。这种形式用于自动化，不是本地使用的前置知识。
+
+## 重要选项
+
+| 选项 | 行为 |
+| --- | --- |
+| `--target <路径>` | 把变更集目录从默认 `.changes` 改为其他位置。 |
+| `--resolvers <ID>` | 扫描一种内置软件生态；可以重复指定。 |
+| `--force` | 明确重新初始化已有配置，不用于日常同步软件包。 |
+| `--allow-non-root` | 允许从子目录调用，同时使用自动发现的仓库根目录。 |
+| `--dry-run` | 只规划和报告初始化结果，不写文件。 |
+
+发现失败或必要选择无效时，初始化会在写入前停止。已有仓库不要把 `--force` 当作维护方式，因为它可能替换有意制定的策略；请先运行 `smif config sync --check`。

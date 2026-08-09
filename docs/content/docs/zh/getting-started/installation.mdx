@@ -6,7 +6,7 @@ description: 安装最新发布的 Semifold 命令行工具，并确认 smif 命
 安装后可以使用 `smif` 和 `semifold` 两个等价的命令名称。本文档统一使用较短的 `smif`。
 
 <Availability status="released">
-  Semifold 最新发布版本是 <strong>0.3.0-rc.5</strong>。文档中标记为“下一版本”的功能已经合入 `main`，但不包含在这个标签中。
+  Semifold 最新发布版本是 <strong>0.3.0-rc.6</strong>。这个版本已经包含生态插件运行时和首个 TypeScript 插件 SDK 版本。
 </Availability>
 
 ## 推荐方式：安装脚本
@@ -39,7 +39,7 @@ irm https://semifold.noctisynth.org/install/install.ps1 | iex
 
 ```bash
 curl -L https://semifold.noctisynth.org/install/install.sh | \
-  sh -s -- 0.3.0-rc.5 --install-dir "$HOME/bin"
+  sh -s -- 0.3.0-rc.6 --install-dir "$HOME/bin"
 ```
 
   </Tab>
@@ -47,7 +47,7 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
 
 ```powershell
 & ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
-  0.3.0-rc.5 -InstallDir "$HOME\bin"
+  0.3.0-rc.6 -InstallDir "$HOME\bin"
 ```
 
   </Tab>
@@ -61,21 +61,21 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
   <Tab>
 
 ```bash
-cargo install semifold --version 0.3.0-rc.5
+cargo install semifold --version 0.3.0-rc.6
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-npm install --global semifold@0.3.0-rc.5
+npm install --global semifold@0.3.0-rc.6
 ```
 
   </Tab>
   <Tab>
 
 ```bash
-pipx install semifold==0.3.0rc5
+pipx install semifold==0.3.0rc6
 ```
 
   </Tab>
@@ -92,7 +92,7 @@ smif --version
 <ExpectedOutput title="预期输出">
 
 ```text
-semifold 0.3.0-rc.5
+semifold 0.3.0-rc.6
 ```
 
 </ExpectedOutput>

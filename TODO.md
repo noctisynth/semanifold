@@ -414,10 +414,12 @@
 - [x] 抽取 workflow output writer port，在 CLI 最外层实现 GitHub Actions 安全多行输出格式
 - [x] 非 GitHub Actions 环境不写额外文件，也不改变现有终端输出
 - [x] 让 `smif version` 与 `smif publish` 通过同一个 application output 契约提供后续 step/job 数据
+- [x] 让 `smif ci` 委托 version/publish 的既有 output 路径，不复制 engine 编排或 DTO 写入
+- [x] 为内置模板和项目 workflow 的 Semifold step 设置稳定 ID，并映射 `version` / `publish` job outputs
 
 ### 阶段完成条件
 
-- [x] 后续 GitHub Actions job 无需重新读取 changeset，即可取得 version 阶段的确定性发布事实
+- [x] 后续 GitHub Actions job 无需重新读取 changeset，即可取得 version 或 publish 阶段的确定性事实
 - [x] publish 部分失败时仍能取得完整结构化恢复状态
 - [x] workflow output schema 具有兼容性测试，且敏感字段不会进入输出
 

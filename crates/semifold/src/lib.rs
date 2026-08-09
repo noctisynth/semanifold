@@ -117,6 +117,15 @@ mod tests {
     }
 
     #[test]
+    fn repository_ci_workflow_exposes_semifold_step_outputs() {
+        let workflow = include_str!("../../../.github/workflows/semifold-ci.yaml");
+
+        assert!(workflow.contains("id: semifold"));
+        assert!(workflow.contains("version: ${{ steps.semifold.outputs['semifold-version'] }}"));
+        assert!(workflow.contains("publish: ${{ steps.semifold.outputs['semifold-publish'] }}"));
+    }
+
+    #[test]
     fn debug_paths_do_not_dump_configuration_or_github_payloads() {
         let config_dump = ["Loaded ", "config:"].concat();
         let event_dump = ["GITHUB_EVENT_PATH", " data:"].concat();

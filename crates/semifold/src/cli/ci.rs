@@ -7,13 +7,13 @@ use octocrab::{Octocrab, params};
 use rust_i18n::t;
 
 use crate::cli::{
-    repository_context,
+    publish,
     terminal::{StepOutcome, Terminal},
+    version,
 };
 use semifold_core::ReleaseContext;
 use semifold_engine::{
-    ExecutionMode, Project, PublishOptions, ReleaseExecutionOptions, SemifoldService,
-    SystemDependencies,
+    Project, SemifoldService, SystemDependencies,
     release::{ReleasePullRequestContext, render_release_branch, render_release_pull_request},
 };
 
@@ -58,7 +58,6 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     }
 
     let ref_name = env::var("GITHUB_REF_NAME").context("GITHUB_REF_NAME is not set")?;
-    let github_repo = env::var("GITHUB_REPOSITORY").context("GITHUB_REPOSITORY is not set")?;
 
     log::debug!("GITHUB_REF_NAME: {}", ref_name);
 
@@ -67,13 +66,6 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     let mut git_config = repo.config()?;
     git_config.set_str("user.name", "github-actions[bot]")?;
     git_config.set_str("user.email", "github-actions[bot]@users.noreply.github.com")?;
-
-    let (owner, repo_name) = github_repo
-        .split_once('/')
-        .ok_or(anyhow::anyhow!(t!("cli.ci.github_repo_invalid_format")))?;
-
-    let github_token = env::var("GITHUB_TOKEN").context("GITHUB_TOKEN is not set")?;
-    let octocrab = Octocrab::builder().personal_token(&*github_token).build()?;
 
     let is_base_branch = ref_name == config.branches.base;
     if !is_base_branch {
@@ -84,37 +76,7 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     let release_plan = SemifoldService::new(SystemDependencies).plan_release(project)?;
     if release_plan.consumed_changesets().is_empty() {
         terminal.line(t!("cli.ci.no_changesets_publish"));
-        let repository = repository_context()
-            .ok_or_else(|| anyhow::anyhow!(t!("cli.publish.repo_info_missing")))?;
-        let service = SemifoldService::new(SystemDependencies);
-        let mut publish_plan = service
-            .plan_publish(
-                project,
-                &PublishOptions {
-                    create_forge_release: true,
-                    repository: Some(repository),
-                },
-            )
-            .await
-            .map_err(|error| anyhow::anyhow!(t!("cli.publish.plan_failed", error = error)))?;
-        service
-            .publish(
-                &mut publish_plan,
-                if dry_run {
-                    ExecutionMode::DryRun
-                } else {
-                    ExecutionMode::Apply
-                },
-            )
-            .await?;
-        terminal.summary(
-            StepOutcome::Success,
-            &if dry_run {
-                t!("cli.ci.dry_run_complete").into_owned()
-            } else {
-                t!("cli.ci.publish_complete").into_owned()
-            },
-        );
+        publish::publish(project, dry_run, true, &terminal).await?;
         return Ok(());
     }
 
@@ -122,31 +84,11 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     let release_branch = render_release_branch(&config.branches.release, &release_context)
         .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)))?;
 
-    let service = SemifoldService::new(SystemDependencies);
-    let apply_plan = service
-        .prepare_release(
-            project,
-            release_plan,
-            &ReleaseExecutionOptions {
-                collect_remote_metadata: !dry_run,
-                repository: repository_context(),
-            },
-        )
-        .await
-        .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_prepare_failed", error = error)))?;
     let semifold_engine::ApplyReport {
         changelogs: changelogs_map,
-        file_edits,
+        file_edits: _,
         unconsumed_changesets: _,
-    } = service.apply_release(
-        apply_plan,
-        if dry_run {
-            ExecutionMode::DryRun
-        } else {
-            ExecutionMode::Apply
-        },
-    )?;
-    let _applied_file_count = file_edits.as_ref().map_or(0, |report| report.applied.len());
+    } = version::prepare_and_apply_release(project, release_plan, dry_run, &terminal).await?;
     let pull_request_context = ReleasePullRequestContext {
         release: &release_context,
         branch: release_branch,
@@ -158,6 +100,13 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         terminal.summary(StepOutcome::Success, &t!("cli.ci.dry_run_complete"));
         return Ok(());
     }
+
+    let github_repo = env::var("GITHUB_REPOSITORY").context("GITHUB_REPOSITORY is not set")?;
+    let (owner, repo_name) = github_repo
+        .split_once('/')
+        .ok_or(anyhow::anyhow!(t!("cli.ci.github_repo_invalid_format")))?;
+    let github_token = env::var("GITHUB_TOKEN").context("GITHUB_TOKEN is not set")?;
+    let octocrab = Octocrab::builder().personal_token(&*github_token).build()?;
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;

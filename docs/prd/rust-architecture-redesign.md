@@ -669,6 +669,18 @@ changelog 塞回 `ReleaseContext` 或恢复全局万能模板 map。
 major schema 内只允许增加可选字段，删除、重命名字段或改变既有枚举含义必须提升
 `schema-version`，并至少保留前一个 schema 一个 Semifold minor 发布周期。
 
+`smif ci` 是上述两个命令的 GitHub Actions 编排入口，不能绕过它们的 CLI application 路径后直接
+调用 engine 并丢失 output。存在 changeset 时必须委托 version 的 prepare/apply/output 路径；没有
+changeset、进入发布时必须委托 publish 的 plan/execute/report/output 路径。这样 success、dry-run、
+publish 部分失败和 output writer 失败继续使用同一优先级，`ci` 不重新构造 DTO 或复制 JSON 写入。
+一次 `ci` 执行只产生实际运行分支对应的 output，另一 output 保持未定义。
+
+内置 GitHub Actions workflow 中执行 `semifold ci` 的 step 使用稳定 ID `semifold`。所在 job 将
+`steps.semifold.outputs['semifold-version']` 与 `steps.semifold.outputs['semifold-publish']` 分别映射为
+稳定 job output `version` 与 `publish`，使后续 job 可通过 `needs.<job>.outputs.version` 或
+`needs.<job>.outputs.publish` 消费；未运行分支对应的 job output 是空字符串。项目仓库中实际使用的
+workflow 与内置模板必须遵循同一映射契约。
+
 version output 从 `prepare_release` 构造的同一个 `ReleaseContext` 以及由该 context 渲染、校验的
 release branch 派生，不得在 changeset 消费后重新规划：
 
@@ -721,6 +733,8 @@ GitHub Actions 文件协议。writer 使用进程内逐条唯一且不出现在 
 - publish 部分失败时，先尽力写入携带完整恢复状态的 publish output，再返回原 publish 错误；
   若此时 output 写入也失败，publish 错误保持主错误，writer 错误作为 CLI warning；
 - version 在形成可用 apply 结果前失败时不伪造成功 output，保留原失败语义。
+- `ci` 在 version apply 成功后、Forge PR 操作前写入 version output；因此后续 PR 网络操作失败时，
+  使用 `always()` 的恢复 job 仍可读取已经形成的确定性版本事实。
 
 ### 6.8 CLI 终端反馈与渲染边界
 

@@ -59,6 +59,24 @@ fn run_smif(root: &Path, arguments: &[&str]) -> Output {
         .unwrap()
 }
 
+fn run_smif_in_github(root: &Path, arguments: &[&str], output: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_smif"))
+        .args(arguments)
+        .current_dir(root)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("GITHUB_ACTIONS", "true")
+        .env("GITHUB_OUTPUT", output)
+        .env("GITHUB_REF_NAME", "main")
+        .env("GITHUB_REPOSITORY", "example/semifold-fixture")
+        .env("GITHUB_SERVER_URL", "https://github.com")
+        .env("GITHUB_TOKEN", "test-token")
+        .env_remove("GITHUB_EVENT_PATH")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+}
+
 fn config(package: &str) -> String {
     format!(
         "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\nchore = \"Chores\"\n\n[packages.app]\n# keep this comment\npath = \".\"\nresolver = \"rust\"\n{package}\n\n[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"\n"
@@ -107,6 +125,120 @@ fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
         String::from_utf8_lossy(&init.stderr)
     );
     assert!(output.contains("--resolvers or --no-resolvers"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn init_workflow_exposes_semifold_step_outputs_to_later_jobs() {
+    let root = temporary_repository("init-workflow-outputs");
+
+    let init = run_smif(
+        &root,
+        &[
+            "init",
+            "--resolvers",
+            "rust",
+            "--default-tags",
+            "--base-branch",
+            "main",
+            "--release-branch",
+            "release",
+            "--write-ci",
+        ],
+    );
+
+    assert!(init.status.success(), "{init:?}");
+    let workflow = fs::read_to_string(root.join(".github/workflows/semifold-ci.yaml")).unwrap();
+    assert!(workflow.contains("id: semifold"), "{workflow}");
+    assert!(
+        workflow.contains("version: ${{ steps.semifold.outputs['semifold-version'] }}"),
+        "{workflow}"
+    );
+    assert!(
+        workflow.contains("publish: ${{ steps.semifold.outputs['semifold-publish'] }}"),
+        "{workflow}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ci_version_branch_writes_the_version_workflow_output() {
+    let root = temporary_project("ci-version-output", &config("channel = \"stable\""));
+    let github_output = root.join("github-output");
+
+    let ci = run_smif_in_github(&root, &["--dry-run", "ci"], &github_output);
+
+    assert!(ci.status.success(), "{ci:?}");
+    let output = fs::read_to_string(&github_output).unwrap();
+    assert!(output.contains("semifold-version<<"), "{output}");
+    assert!(!output.contains("semifold-publish<<"), "{output}");
+    assert!(output.contains("\"schema-version\":1"), "{output}");
+    assert!(output.contains("\"dry-run\":true"), "{output}");
+    assert!(output.contains("\"next-version\":\"1.0.1\""), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ci_publish_branch_writes_the_publish_workflow_output() {
+    let publish_config = config("channel = \"stable\"\ngithub-release = false").replace(
+        "url = \"\"",
+        "url = \"https://registry.example.invalid/app/1.0.0\"",
+    );
+    let root = temporary_project("ci-publish-output", &publish_config);
+    fs::remove_file(root.join(".changes/feature.md")).unwrap();
+    let github_output = root.join("github-output");
+
+    let ci = run_smif_in_github(&root, &["--dry-run", "ci"], &github_output);
+
+    assert!(ci.status.success(), "{ci:?}");
+    let output = fs::read_to_string(&github_output).unwrap();
+    assert!(output.contains("semifold-publish<<"), "{output}");
+    assert!(!output.contains("semifold-version<<"), "{output}");
+    assert!(output.contains("\"schema-version\":1"), "{output}");
+    assert!(output.contains("\"dry-run\":true"), "{output}");
+    assert!(output.contains("\"status\":\"skipped\""), "{output}");
+    assert!(
+        output.contains("\"skip-reason\":\"missing-changelog\""),
+        "{output}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ci_publish_failure_writes_recovery_output_before_returning_the_error() {
+    let publish_config = config("channel = \"stable\"\ngithub-release = false").replace(
+        "[resolver.rust.pre-check]\ntype = \"http\"\nurl = \"\"",
+        concat!(
+            "[resolver.rust.pre-check]\n",
+            "type = \"command\"\n",
+            "command = \"sh\"\n",
+            "args = [\"-c\", \"printf '{\\\"exists\\\":false}\\\\n'\"]\n\n",
+            "[[resolver.rust.publish]]\n",
+            "command = \"sh\"\n",
+            "args = [\"-c\", \"exit 7\"]\n",
+            "dry-run = true"
+        ),
+    );
+    let root = temporary_project("ci-publish-failure-output", &publish_config);
+    fs::remove_file(root.join(".changes/feature.md")).unwrap();
+    fs::write(
+        root.join("CHANGELOG.md"),
+        "# Changelog\n\n## v1.0.0\n\n- Existing release.\n",
+    )
+    .unwrap();
+    let github_output = root.join("github-output");
+
+    let ci = run_smif_in_github(&root, &["--dry-run", "ci"], &github_output);
+
+    assert!(!ci.status.success(), "{ci:?}");
+    assert!(github_output.exists(), "{ci:?}");
+    let output = fs::read_to_string(&github_output).unwrap();
+    assert!(output.contains("semifold-publish<<"), "{output}");
+    assert!(output.contains("\"status\":\"failed\""), "{output}");
+    assert!(
+        output.contains("\"failure-stage\":\"publish-command\""),
+        "{output}"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

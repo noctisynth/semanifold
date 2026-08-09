@@ -15,6 +15,9 @@ jobs:
   build:
     name: Version or Publish
     runs-on: ubuntu-latest
+    outputs:
+      version: {% raw %}${{ steps.semifold.outputs['semifold-version'] }}{% endraw %}
+      publish: {% raw %}${{ steps.semifold.outputs['semifold-publish'] }}{% endraw %}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -23,6 +26,7 @@ jobs:
       - name: Setup Semifold
         uses: noctisynth/setup-semifold@main
       - name: Semifold CI
+        id: semifold
         run: semifold ci
         env:
           GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}{% if 'rust' in resolvers %}

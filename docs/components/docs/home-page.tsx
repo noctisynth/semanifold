@@ -63,7 +63,7 @@ const copy: Record<Locale, HomeCopy> = {
     pluginTitle: 'Custom ecosystem plugins',
     pluginDescription:
       'Define package discovery, inspection, and version edits with the typed SDK and capability-scoped runtime.',
-    pluginStatus: 'Available now',
+    pluginStatus: 'Since v0.3.0',
     pluginLink: 'Explore the plugin system',
     closing:
       'Start with the repository you already have. Semifold will help you make its version and release rules explicit.',
@@ -106,7 +106,7 @@ const copy: Record<Locale, HomeCopy> = {
     pluginTitle: '自定义生态插件',
     pluginDescription:
       '使用带类型的 SDK 定义软件包发现、信息读取和版本修改，并由能力受限的运行时执行。',
-    pluginStatus: '现已提供',
+    pluginStatus: '从 v0.3.0 开始',
     pluginLink: '了解插件系统',
     closing:
       '从你已经拥有的仓库开始，让 Semifold 帮你把版本与发布规则变成清楚、可执行的流程。',

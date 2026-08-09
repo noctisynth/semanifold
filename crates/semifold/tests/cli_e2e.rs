@@ -258,7 +258,7 @@ fn ci_publish_failure_writes_recovery_output_before_returning_the_error() {
             "[resolver.rust.pre-check]\n",
             "type = \"command\"\n",
             "command = \"sh\"\n",
-            "args = [\"-c\", \"printf '{\\\"exists\\\":false}\\\\n'\"]\n\n",
+            "args = [\"-c\", \"IFS= read -r context && printf '{\\\"exists\\\":false}\\\\n'\"]\n\n",
             "[[resolver.rust.publish]]\n",
             "command = \"sh\"\n",
             "args = [\"-c\", \"exit 7\"]\n",

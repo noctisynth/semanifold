@@ -1,4 +1,4 @@
 {
   "title": "Getting Started",
-  "pages": ["installation", "first-release"]
+  "pages": ["installation", "first-release", "adopt-existing-monorepo"]
 }

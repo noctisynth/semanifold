@@ -30,6 +30,19 @@ After the release pull request is merged, the next base-branch run sees no pendi
 
 ## Environment and outputs
 
-The command relies on `GITHUB_ACTIONS`, `GITHUB_REF_NAME`, `GITHUB_REPOSITORY`, and `GITHUB_TOKEN`. The generated workflow exposes version or publish JSON through the `semifold-version` and `semifold-publish` step outputs. A publish failure writes recovery output before returning a non-zero status.
+The command relies on `GITHUB_ACTIONS`, `GITHUB_REF_NAME`, `GITHUB_REPOSITORY`, and `GITHUB_TOKEN`. The generated workflow uses the stable step ID `semifold`. The branch that actually runs writes either the `semifold-version` or `semifold-publish` step output key, and the job maps them to `version` and `publish`:
+
+```yaml
+jobs:
+  release:
+    outputs:
+      version: ${{ steps.semifold.outputs['semifold-version'] }}
+      publish: ${{ steps.semifold.outputs['semifold-publish'] }}
+    steps:
+      - id: semifold
+        run: smif ci
+```
+
+Downstream jobs read `needs.release.outputs.version` or `needs.release.outputs.publish`. The branch that did not run produces an empty string. On a partial publish failure, Semifold tries to write publish JSON with recovery states before returning a non-zero status.
 
 `--dry-run` prepares the selected branch behavior without pushing a branch, creating a pull request, or publishing. Use the generated workflow as the supported baseline instead of reconstructing permissions from a minimal snippet.

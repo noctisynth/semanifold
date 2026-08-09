@@ -1,0 +1,68 @@
+---
+title: Rust workspaces
+description: Cargo discovery, shared versions, dependency requirement edits, and private release behavior for Rust packages.
+---
+
+The built-in Rust adapter reads and edits `Cargo.toml` for both a single Cargo package and a Cargo workspace. Cargo remains responsible for builds and dependency resolution; Semifold connects the discovered facts to repository-wide versioning and publishing.
+
+## Package discovery
+
+When the project-root `Cargo.toml` contains `[workspace]`, Semifold expands `workspace.members` globs and inspects member manifests. A root manifest that also contains `[package]` contributes the root package. Without a workspace, the root `Cargo.toml` is read as one package.
+
+The Cargo package name is its manifest name. It may seed a `PackageId` during initialization, but the ID in existing configuration is the stable identity used by changesets and graph edges.
+
+`publish = false` marks a crate as unavailable for registry publishing. A private crate still participates in version calculation, shared-version groups, file edits, and dependency ordering.
+
+## Dependency inspection
+
+The adapter reads:
+
+- `[dependencies]`;
+- `[dev-dependencies]`;
+- `[build-dependencies]`;
+- `[workspace.dependencies]` in the root manifest.
+
+A dependency alias is resolved through its `package` field. When a member uses `workspace = true`, Semifold understands and updates the requirement in shared `[workspace.dependencies]` instead of inserting a duplicate version in the member manifest.
+
+Every internal dependency participates in ordering. Currently, only runtime dependencies from `[dependencies]` receive constraint-aware automatic propagation: when a dependency's new version no longer satisfies the existing Cargo requirement, the dependent receives a `patch` release. Development and build dependencies affect order only.
+
+## Version edits
+
+A normal package receives its target version in `package.version`. Rust manifests use format-preserving TOML edits, so an unrelated layout is not reordered for one version field.
+
+When an internal runtime requirement needs an update, Semifold handles normal, aliased, and workspace-inherited declarations together. It only considers rewriting a requirement when the dependency's target version changes, avoiding needless normalization of a valid broad range.
+
+## Shared workspace versions
+
+Members may use:
+
+```toml
+[package]
+version.workspace = true
+
+[workspace.package]
+version = "1.4.0"
+```
+
+Packages backed by the same `[workspace.package].version` form one version group. When any member changes:
+
+- every member enters the release plan;
+- the highest requested changeset bump applies to the group;
+- every member receives the same target version;
+- the root `Cargo.toml` shared version is edited once;
+- a private member can advance the shared version and bring public members into the release.
+
+All members must have exactly the same `channel` and pending `channel-bump`. A mismatch fails planning rather than choosing whichever package is visited first.
+
+## Publishing
+
+The Rust adapter only provides manifest facts and candidate edits. Registry pre-checks, pre-publish commands, and publish commands come from `[resolver.rust]` and run through the shared publisher in dependency order.
+
+A private crate skips registry preflight and publish commands. It does not create a GitHub Release by default, but `github-release = true` can explicitly enable a Release and assets. This policy is independent of Cargo's `publish = false`.
+
+## Common problems
+
+- A workspace member glob omits a package: fix `workspace.members` instead of inventing the package only in Semifold configuration.
+- `version.workspace = true` has no valid `[workspace.package].version`: provide the shared source.
+- Two crates have the same package name: remove the Cargo-level ambiguity; changing only `PackageId` cannot make manifest dependency matching unique.
+- A Rust change must republish a Node.js or Python binding: add a cross-ecosystem `depends-on` to the binding package.

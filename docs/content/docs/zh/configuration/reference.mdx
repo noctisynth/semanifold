@@ -10,7 +10,17 @@ Semifold 读取 `.changes/config.toml` 中的 TOML 配置。字段名使用 keba
 | 字段 | 类型 | 必需 | 含义 |
 | --- | --- | --- | --- |
 | `base` | 字符串 | 是 | 日常开发与发布准备开始的基础分支。 |
-| `release` | 字符串 | 是 | 用来维护版本修改和发布拉取请求的分支。 |
+| `release` | 严格 MiniJinja 模板字符串 | 是 | 用来维护版本修改和发布拉取请求的分支。 |
+
+不含模板语法的值会保持为固定分支名。需要按当前版本决定生成分支时，可以使用 `release.plan.fingerprint`、`release.plan.common_version`，或通过稳定 `PackageId` 读取 `release.plan.packages["<PackageId>"].next_version`：
+
+```toml
+[branches]
+base = "main"
+release = 'release/v{{ release.plan.packages["semifold"].next_version }}'
+```
+
+模板使用严格变量检查。引用的软件包不在本次发布集合，或计划中的软件包没有共同版本时，渲染会失败而不是生成含糊的分支名。
 
 ## `[tags]`
 
@@ -111,7 +121,9 @@ args = ["--json-lines"]
 extra-env = { REGISTRY = "internal" }
 ```
 
-命令检查通过带版本的 JSON Lines 请求与响应契约交换信息。非零退出状态、格式错误或软件包身份不一致都会安全地让检查失败。
+命令在被检查的软件包目录中运行。stdin 接收单行 `PublishPackageContext` JSON，并以换行结束；stdout 必须严格只包含一行 `{"exists": true}` 或 `{"exists": false}`。
+
+命令无法启动、非零退出、无效 JSON 或额外的非空 stdout 内容都会让预检失败。stderr 继承用于诊断。命令 pre-check 在普通发布和全局 `--dry-run` 中都会执行，因此脚本必须只读且可以安全重复运行。
 
 ### 命令条目
 

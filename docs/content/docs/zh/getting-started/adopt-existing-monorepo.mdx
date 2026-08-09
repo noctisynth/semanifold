@@ -1,0 +1,93 @@
+---
+title: 接入已有单仓库
+description: 在不改变现有构建方式的前提下，让 Semifold 发现软件包、固定身份并接管版本与发布流程。
+---
+
+Semifold 不要求重新组织仓库，也不要求统一各种语言的构建工具。接入的关键是先让 Semifold 正确理解现有软件包及其关系，再逐步启用变更集、版本修改和自动发布。
+
+## 开始之前
+
+先安装 `latest` 版本，并在仓库根目录确认：
+
+- 各软件包的清单文件可以被原有工具正常解析；
+- Git 工作区没有无关的未提交修改；
+- 你知道日常开发使用的基础分支和希望用于发布拉取请求的分支名称。
+
+如果仓库包含特殊清单格式，不必先把它改造成四种内置生态之一。可以先接入内置软件包，再通过[插件系统](/zh/docs/plugins/overview/)补充自定义生态。
+
+## 1. 初始化并检查发现结果
+
+从仓库根目录运行：
+
+```bash
+smif init
+```
+
+选择仓库实际使用的软件生态，并按需要生成 GitHub Actions 工作流。初始化只创建 Semifold 配置、变更集目录和可选工作流，不会移动软件包或改写业务源码。
+
+打开 `.changes/config.toml`，重点检查 `[packages]`：
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.web-client]
+path = "packages/web"
+resolver = "nodejs"
+depends-on = ["rust-core"]
+```
+
+表名中的 `rust-core` 和 `web-client` 是稳定的软件包 ID（`PackageId`）。它们用于变更集、依赖图和配置引用，可以与清单中的发布名称不同。确定 ID 后应尽量保持稳定；移动目录时通常只需更新 `path`。
+
+阅读[软件包发现](/zh/docs/workspace/package-discovery/)并逐个核对发现范围。不要因为某个目录“看起来像软件包”就假设它一定会被识别。
+
+## 2. 补充无法从清单推断的关系
+
+同一生态的清单依赖会进入统一工作区图。跨生态关系不会根据同名软件包猜测，需要在依赖方上显式配置 `depends-on`：
+
+```toml
+[packages.python-binding]
+path = "bindings/python"
+resolver = "python"
+depends-on = ["rust-core"]
+```
+
+这表示 `python-binding` 依赖 `rust-core`：发布时先处理 Rust 软件包；当 `rust-core` 发布新版本时，绑定软件包会获得一次 `patch` 发布。详细规则见[依赖与版本传播](/zh/docs/workspace/dependencies/)。
+
+## 3. 先预览，不修改文件
+
+创建第一份变更集前，先检查当前配置能否形成工作区：
+
+```bash
+smif config sync --check
+smif status
+```
+
+`config sync --check` 在发现结果与配置不一致时返回非零状态，但不会写文件。`status` 只计算版本决定；没有变更集时不会为了“测试发布”凭空创建版本。
+
+如果发现重复的同生态清单名称、未知 `PackageId` 或依赖环，先修正这些结构问题。Semifold 会拒绝用含糊关系继续规划。
+
+## 4. 用一次真实改动验证流程
+
+选择一个影响明确的小改动，运行交互式命令：
+
+```bash
+smif commit
+smif status
+smif version --dry-run
+```
+
+确认直接变化的软件包、依赖传播原因、目标版本和待修改文件都符合预期，再把代码与 `.changes/*.md` 一起提交。
+
+启用 GitHub Actions 时，推荐让自动化维护发布拉取请求并在合入后发布；本地不需要重复执行 `version` 和 `publish`。完整过程见[完成第一次发布](/zh/docs/getting-started/first-release/)。
+
+## 仓库继续变化时
+
+增加、移动或移除软件包后运行：
+
+```bash
+smif config sync
+```
+
+默认同步安全的新增和路径变化，并报告已经无法发现的软件包；只有明确使用 `--prune` 才删除缺失配置。不要通过重复运行 `smif init --force` 来维护已有配置，否则很难区分发现结果与手工发布策略。

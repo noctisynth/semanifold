@@ -10,7 +10,17 @@ Semifold accepts TOML configuration at `.changes/config.toml`. Field names use k
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `base` | string | yes | Branch that normal development and release preparation start from. |
-| `release` | string | yes | Branch maintained for prepared version changes and the release pull request. |
+| `release` | strict MiniJinja template string | yes | Branch maintained for prepared version changes and the release pull request. |
+
+A value without template syntax remains a fixed branch name. To derive a branch from the current version decision, use `release.plan.fingerprint`, `release.plan.common_version`, or read `release.plan.packages["<PackageId>"].next_version` through a stable `PackageId`:
+
+```toml
+[branches]
+base = "main"
+release = 'release/v{{ release.plan.packages["semifold"].next_version }}'
+```
+
+The template uses strict variable checks. Rendering fails instead of inventing an ambiguous branch when the referenced package is not in this release or the plan has no common version.
 
 ## `[tags]`
 
@@ -111,7 +121,9 @@ args = ["--json-lines"]
 extra-env = { REGISTRY = "internal" }
 ```
 
-Command pre-checks use Semifold's versioned JSON Lines request/response contract. A non-zero exit, malformed response, or mismatched package identity fails safely.
+The command runs in the package directory. stdin receives one line of `PublishPackageContext` JSON followed by a newline. stdout must contain exactly one line: `{"exists": true}` or `{"exists": false}`.
+
+A start failure, non-zero exit, invalid JSON, or extra non-empty stdout content fails preflight. stderr is inherited for diagnostics. Command pre-checks run during both normal publishing and global `--dry-run`, so the script must be read-only and safe to repeat.
 
 ### Command entries
 

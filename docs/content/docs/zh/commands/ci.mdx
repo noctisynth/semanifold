@@ -30,6 +30,19 @@ smif ci
 
 ## 环境与输出
 
-命令使用 `GITHUB_ACTIONS`、`GITHUB_REF_NAME`、`GITHUB_REPOSITORY` 和 `GITHUB_TOKEN`。生成的工作流通过 `semifold-version` 或 `semifold-publish` 步骤输出提供带版本的 JSON。发布失败会先写出恢复信息，再返回非零状态。
+命令使用 `GITHUB_ACTIONS`、`GITHUB_REF_NAME`、`GITHUB_REPOSITORY` 和 `GITHUB_TOKEN`。生成的工作流使用稳定 step ID `semifold`；该 step 实际运行的分支会写出 `semifold-version` 或 `semifold-publish` output key。所在 job 再把它们映射成 `version` 和 `publish`：
+
+```yaml
+jobs:
+  release:
+    outputs:
+      version: ${{ steps.semifold.outputs['semifold-version'] }}
+      publish: ${{ steps.semifold.outputs['semifold-publish'] }}
+    steps:
+      - id: semifold
+        run: smif ci
+```
+
+后续 job 使用 `needs.release.outputs.version` 或 `needs.release.outputs.publish`；本次没有运行的分支对应空字符串。发布部分失败时，Semifold 会先尽力写出包含恢复状态的 publish JSON，再返回非零状态。
 
 `--dry-run` 会准备相应分支行为，但不会推送分支、创建拉取请求或发布。配置权限时应以生成的工作流为受支持基线，不要从一段缺少权限说明的最小示例重新拼装。

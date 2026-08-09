@@ -1,0 +1,66 @@
+---
+title: 软件包发现
+description: 理解 Semifold 如何从不同清单建立统一工作区，以及配置中的稳定软件包身份从哪里来。
+---
+
+Semifold 先让每个软件生态适配器发现自己的软件包，再把结果合并成一张工作区图。后续的变更集校验、版本联动、文件修改和发布顺序都以这张图为基础。
+
+## 发现结果包含什么
+
+每个被发现的软件包至少提供：
+
+- 清单中的名称和当前版本；
+- 所属软件生态与仓库相对路径；
+- 是否可以发布到外部软件包仓库；
+- 能够从清单中识别的内部依赖。
+
+`smif init` 用发现结果生成初始 `[packages]`；`smif config sync` 则把已有配置与最新发现结果比较。适配器不会决定全局版本，也不会直接写文件、执行发布命令或访问 GitHub。
+
+## 内置发现范围
+
+| 软件生态 | 主要清单或版本来源 | 发现入口 | 详细规则 |
+| --- | --- | --- | --- |
+| Rust | `Cargo.toml` | 单软件包或 Cargo workspace members | [Rust 工作区](/zh/docs/workspace/rust/) |
+| Node.js | `package.json` | 根软件包、`workspaces` 或 `pnpm-workspace.yaml` | [Node.js 工作区](/zh/docs/workspace/nodejs/) |
+| Python | `pyproject.toml`、`setup.cfg` 或源码版本文件 | 根目录以及 `packages/*`、`libs/*`、`apps/*` | [Python 工作区](/zh/docs/workspace/python/) |
+| C++ | 带 `project(... VERSION ...)` 的 `CMakeLists.txt` | 根项目和可静态跟随的 `add_subdirectory(...)` | [C++ 工作区](/zh/docs/workspace/cpp/) |
+
+这张表只帮助选择入口。各生态页面会分别说明动态版本、私有软件包、依赖类别和静态分析限制。
+
+## `PackageId` 与清单名称
+
+配置表名是稳定的软件包 ID（`PackageId`）：
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+```
+
+清单名称是 Cargo、npm、PyPI 或 CMake 使用的原生名称；发现时它只是默认 ID 的建议。配置一旦建立，Semifold 使用 `rust-core` 识别这一个软件包，即使清单名称或目录以后变化。
+
+一份配置中的 `PackageId` 必须全局唯一。同一生态内的清单名称也必须唯一，否则 Semifold 无法判断清单依赖指向哪个软件包。不同生态可以使用相同清单名称，但应选择不同 ID，例如 `rust-shared` 和 `node-shared`。
+
+Semifold 不会因为两个生态的软件包同名就推断依赖。跨生态关系必须使用 [`depends-on`](/zh/docs/workspace/dependencies/) 显式引用稳定 ID。
+
+## 插件定义的软件生态
+
+内置适配器不是封闭清单。JavaScript 插件可以实现与内置生态相同的三个工作区操作：
+
+1. 发现软件包；
+2. 读取一个已配置软件包的当前事实；
+3. 为目标版本返回候选文件修改。
+
+插件返回的数据仍会进入同一张工作区图，并接受相同的身份、未知依赖、依赖环和文件修改校验。插件不能直接发布软件包；实际的软件包仓库检查和命令继续由 `[resolver.<ecosystem-id>]` 配置负责。参见[插件概览](/zh/docs/plugins/overview/)。
+
+## 发现失败意味着什么
+
+以下问题会阻止工作区加载，而不是被静默忽略：
+
+- 已配置路径离开项目根目录或不再包含预期清单；
+- 同一生态出现无法区分的重复清单名称；
+- 配置中的 `depends-on` 引用了未知 `PackageId`；
+- 内部依赖形成环；
+- 清单存在，但名称、显式版本或结构无效。
+
+修正清单或配置后重新运行 `smif config sync --check`。如果问题来自某种生态的发现边界，请根据对应页面判断是调整仓库结构、显式配置关系，还是编写插件。

@@ -1,0 +1,73 @@
+---
+title: 同步工作区配置
+description: 在软件包增加、移动或移除后安全维护 .changes/config.toml，而不覆盖发布策略。
+---
+
+`smif init` 负责第一次创建配置。仓库结构继续变化后，使用 `smif config sync` 重新发现软件包并局部更新 `[packages]`。
+
+```bash
+smif config sync
+```
+
+同步使用保留格式的 TOML 修改：已有注释、字段顺序、空行、发布命令、附件、通道设置和 `depends-on` 会保留。相同输入重复运行不会继续产生差异。
+
+## 默认同步行为
+
+命令比较“配置中的软件包”和“当前发现的软件包”，然后先展示计划：
+
+- 新发现的软件包可以加入配置；
+- 能够可靠匹配的软件包路径变化可以更新；
+- 已配置但无法发现的软件包会被报告，默认不会删除；
+- 无法安全判断的重命名、重复名称或解析错误会停止同步。
+
+同步不会根据目录名称猜测跨生态依赖，也不会为新软件包自动生成 `depends-on`。这些关系需要维护者明确决定。
+
+## 用于 CI 的只读检查
+
+```bash
+smif config sync --check
+```
+
+`--check` 不写文件。只要存在需要同步的差异就返回非零状态，适合在拉取请求中防止新增软件包遗漏配置。
+
+全局 `--dry-run` 也不写文件，但用途不同：它预览完整同步计划，并不把“存在差异”当作断言失败。
+
+## 删除已经移除的软件包
+
+```bash
+smif config sync --prune
+```
+
+`--prune` 会删除当前无法发现的软件包配置，因此必须先确认它确实已经从仓库移除，而不是暂时解析失败或超出发现范围。`--prune` 与 `--check` 不能同时使用。
+
+删除配置也会让引用该 `PackageId` 的变更集或 `depends-on` 失效。应用后运行：
+
+```bash
+smif status
+```
+
+让工作区图重新校验这些引用。
+
+## 只同步部分生态
+
+`--resolver` 可以重复指定：
+
+```bash
+smif config sync --resolver rust --resolver nodejs
+```
+
+这只扫描指定的软件生态，适合大型仓库中的定向维护。参数值是配置中的生态 ID；插件生态也使用自己的 ID。
+
+## 不要混淆迁移与同步
+
+`smif config migrate` 用于把 v0.2.x 配置中的旧字段转换为当前 TOML 契约，例如将 `version-mode` 迁移为 `channel`、把已知 snake_case 字段改为 kebab-case，并为旧 HTTP pre-check 补上 `type = "http"`。
+
+它不执行软件包发现。旧配置先迁移，再使用 `config sync` 对齐当前仓库：
+
+```bash
+smif config migrate --check
+smif config migrate
+smif config sync --check
+```
+
+完整参数和冲突关系见[配置文件命令](/zh/docs/commands/config/)。

@@ -1,0 +1,71 @@
+---
+title: Python workspaces
+description: pyproject.toml, setup.cfg, dynamic version sources, discovery directories, and release-channel limits.
+---
+
+The built-in Python adapter prefers `pyproject.toml` and falls back to `setup.cfg` when no usable project metadata is available. It handles both static versions and a defined set of common dynamic-version layouts.
+
+## Package discovery
+
+Semifold inspects the project root and direct children of:
+
+- `packages/*`;
+- `libs/*`;
+- `apps/*`.
+
+A directory is parsed only when it contains `pyproject.toml` or `setup.cfg`. Arbitrarily deep directories, tool-specific workspace declarations, and projects generated at runtime are not discovered automatically. Use an adjusted layout or a plugin for those cases.
+
+Supported project metadata includes:
+
+- PEP 621 `[project]`;
+- Poetry `[tool.poetry]`;
+- package metadata in `setup.cfg`.
+
+## Dynamic versions
+
+When PEP 621 declares `dynamic = ["version"]`, the adapter checks these explicitly supported sources:
+
+- a static `__version__` in a common package `__init__.py`;
+- `__version__.py`;
+- the corresponding file under a `src/...` layout;
+- a sibling `Cargo.toml` version for common maturin or PyO3 projects;
+- Hatch `version.path`.
+
+Only a source that can be located and parsed statically can be edited safely. When a dynamic version cannot currently be read, discovery warns and uses `0.0.0`. Before creating real version edits, confirm that the source is in the supported set so a placeholder is not mistaken for repository fact.
+
+## Version edits
+
+Depending on the discovered source, Semifold can edit:
+
+- PEP 621 `project.version`;
+- Poetry `version`;
+- the version field in `setup.cfg`;
+- a static `__version__`;
+- the file referenced by Hatch `version.path`.
+
+A Python binding may read a sibling `Cargo.toml` as a dynamic version source, but the Python adapter never writes a Rust manifest. Cross-ecosystem packages keep independent version sequences by default. Add `depends-on` to the binding when a Rust release must trigger its Python release.
+
+## Dependencies and propagation
+
+The adapter reads dependencies from supported Python formats and adds workspace matches to ordering. Python manifest constraints do not currently trigger dependent releases because PEP 440 semantics cannot be replaced with Rust semver rules.
+
+Use explicit `depends-on` for bindings, generated packages, or other upper layers that must rebuild and republish.
+
+## Release channels
+
+Python versions support these named channel mappings:
+
+| Semifold channel | Python version form |
+| --- | --- |
+| `alpha` | `aN` |
+| `beta` | `bN` |
+| `rc` | `rcN` |
+| `post` | `.postN` |
+
+Other named channels cannot produce a supported Python version and fail planning. Stable releases are unaffected.
+
+## Publishing
+
+Registry pre-checks and publish commands come from `[resolver.python]`; the Python adapter does not execute them directly. Use `smif publish --dry-run` to validate the current version and preflight before publishing.
+
+Built-in Python discovery does not currently infer a private-package marker from project metadata; every discovered Python package is treated as publishable. Keep only Python projects that should enter the release flow in configuration. A custom format with a private marker should return that fact from its plugin. Package-level `github-release` still controls GitHub Release behavior independently.

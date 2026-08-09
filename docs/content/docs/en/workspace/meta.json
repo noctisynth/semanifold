@@ -1,0 +1,12 @@
+{
+  "title": "Workspace",
+  "pages": [
+    "package-discovery",
+    "config-sync",
+    "dependencies",
+    "rust",
+    "nodejs",
+    "python",
+    "cpp"
+  ]
+}

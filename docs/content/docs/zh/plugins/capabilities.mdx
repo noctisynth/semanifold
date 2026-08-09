@@ -32,7 +32,7 @@ export const metadata = definePluginMetadata({
 });
 ```
 
-`host.listFiles(pattern)` 不能扩大权限：请求的模式必须包含在已经声明的模式内，每条返回路径也会再次检查。`host.readText(path)` 会执行相同的项目根目录、glob、路径编码、文件大小和单次操作累计预算检查。
+`host.listFiles(pattern)` 不能扩大权限：请求的 glob 必须与 `readPatterns` 中的某一项完全相同，每条返回路径也会再次检查。不能用一个看似更窄的不同 glob 代替已声明值。`host.readText(path)` 会执行相同的项目根目录、glob、路径编码、文件大小和单次操作累计预算检查。
 
 协议数据应统一使用正斜杠和仓库相对路径，不要依赖调用者的当前工作目录。
 

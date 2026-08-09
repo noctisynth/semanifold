@@ -1,0 +1,77 @@
+---
+title: 依赖与版本传播
+description: 区分依赖排序、自动版本传播与跨生态 depends-on，理解为什么相关软件包会进入发布。
+---
+
+Semifold 把所有内置生态和插件发现的软件包放进同一张依赖图。依赖图同时回答两个不同问题：
+
+1. 文件修改、构建和发布时谁必须先处理；
+2. 某个依赖发布新版本时，依赖方是否也需要发布。
+
+“参与排序”不等于“自动发布”。这是理解 `smif status` 结果最重要的区别。
+
+## 清单依赖总是参与排序
+
+只要适配器能把清单中的依赖唯一匹配到同一生态的软件包，它就成为内部依赖边。Rust 的 runtime、dev 和 build 依赖，以及 Node.js、Python、C++ 能识别的依赖，都会参与确定性拓扑排序。
+
+排序保证依赖在前、依赖方在后。没有依赖关系的软件包按稳定 `PackageId` 排序，避免相同仓库在不同运行中出现随机顺序。
+
+## 当前自动传播规则
+
+| 依赖来源 | 是否参与排序 | 依赖发布时是否自动让依赖方发布 |
+| --- | --- | --- |
+| Rust `[dependencies]` | 是 | 只有新版本不再满足 Rust 版本约束时，依赖方获得 `patch` 发布 |
+| Rust dev/build 依赖 | 是 | 否 |
+| Node.js、Python、C++ 清单依赖 | 是 | 否 |
+| 配置中的 `depends-on` | 是 | 是，依赖方获得 `patch` 发布 |
+
+Semifold 不使用 Rust semver 近似解释 npm、PEP 440 或 CMake 约束。因此这些生态的清单依赖当前只决定顺序。需要“底层软件包一发布，上层绑定就重新发布”时，显式配置 `depends-on`。
+
+## 声明跨生态关系
+
+在依赖方的软件包配置中引用依赖的稳定 `PackageId`：
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.node-binding]
+path = "bindings/node"
+resolver = "nodejs"
+depends-on = ["rust-core"]
+```
+
+这条边产生三个结果：
+
+- `rust-core` 始终先于 `node-binding` 修改和发布；
+- `rust-core` 发生任意版本发布时，尚未进入计划的 `node-binding` 获得 `patch` 发布；
+- 如果 `node-binding` 已有 `minor` 或 `major` 变更集，保留更高提升并追加依赖传播原因。
+
+`depends-on` 也可以连接同一生态的软件包，用来表达清单无法表示的构建或重新发布关系。
+
+## 名称如何匹配
+
+清单依赖按“软件生态 + 清单名称”匹配，不直接按 `PackageId` 匹配。因此：
+
+- 不在工作区内的依赖被视为外部依赖；
+- 同一生态内重复清单名称会导致歧义错误；
+- 不同生态中的同名软件包不会形成隐式边；
+- `depends-on` 必须使用配置表中的准确 `PackageId`。
+
+## 诊断意外传播
+
+运行：
+
+```bash
+smif status
+```
+
+每个进入计划的软件包都会列出直接变更集或依赖传播原因。如果结果不符合预期，依次检查：
+
+1. 变更集是否引用了正确 `PackageId`；
+2. Rust runtime 版本约束是否仍包含依赖的新版本；
+3. `depends-on` 是否表达了真实的重新发布需求；
+4. 清单名称是否意外重复。
+
+未知 `PackageId` 和依赖环都会作为结构化错误停止规划。环路必须在清单或配置中消除，Semifold 不会通过任意选择顺序来掩盖它。

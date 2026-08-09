@@ -1,0 +1,93 @@
+---
+title: Adopt an existing monorepo
+description: Let Semifold discover packages, assign stable identities, and manage versions and releases without replacing existing build tools.
+---
+
+Semifold does not require a repository reorganization or one build tool for every language. Adoption starts by making the existing packages and their relationships explicit, then introducing changesets, version edits, and release automation.
+
+## Before you start
+
+Install the `latest` release, then verify at the repository root that:
+
+- each package manifest is valid for its existing tool;
+- the Git worktree has no unrelated changes;
+- you know the base branch used for development and the branch to use for the release pull request.
+
+A custom manifest format does not need to be converted to one of the four built-in ecosystems. Adopt the built-in packages first, then add the custom format through the [plugin system](/docs/plugins/overview/).
+
+## 1. Initialize and review discovery
+
+Run from the repository root:
+
+```bash
+smif init
+```
+
+Select the ecosystems that the repository actually uses and optionally generate the GitHub Actions workflows. Initialization creates Semifold configuration, a changeset directory, and optional workflows. It does not move packages or rewrite application source.
+
+Open `.changes/config.toml` and review `[packages]` first:
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.web-client]
+path = "packages/web"
+resolver = "nodejs"
+depends-on = ["rust-core"]
+```
+
+`rust-core` and `web-client` are stable package IDs (`PackageId` values). Changesets, graph edges, and configuration references use these IDs, which may differ from registry names in manifests. Keep an ID stable after choosing it; moving a package normally changes only `path`.
+
+Read [Package discovery](/docs/workspace/package-discovery/) and verify each ecosystem's discovery boundary. A directory that looks package-like is not necessarily in the supported scan range.
+
+## 2. Add relationships manifests cannot express
+
+Manifest dependencies within one ecosystem enter the shared workspace graph. Semifold never guesses a cross-ecosystem edge from matching names. Add `depends-on` to the dependent package instead:
+
+```toml
+[packages.python-binding]
+path = "bindings/python"
+resolver = "python"
+depends-on = ["rust-core"]
+```
+
+This says that `python-binding` depends on `rust-core`: the Rust package is processed first, and a new `rust-core` release gives the binding a `patch` release. See [Dependencies and version propagation](/docs/workspace/dependencies/) for the complete distinction between ordering and propagation.
+
+## 3. Preview before changing files
+
+Before creating the first changeset, check that the configuration forms a valid workspace:
+
+```bash
+smif config sync --check
+smif status
+```
+
+`config sync --check` returns a non-zero status when discovery and configuration differ, but does not write files. `status` computes version decisions only; an empty changeset directory does not invent a release just to test publishing.
+
+Resolve duplicate manifest names within one ecosystem, unknown `PackageId` references, and dependency cycles first. Semifold refuses to plan through ambiguous relationships.
+
+## 4. Validate with one real change
+
+Choose a small change with a clear impact and use the interactive commands:
+
+```bash
+smif commit
+smif status
+smif version --dry-run
+```
+
+Confirm the directly changed package, propagation reasons, target versions, and planned files. Then commit the code and `.changes/*.md` together.
+
+When GitHub Actions are enabled, let automation maintain the release pull request and publish after it is merged; do not repeat `version` and `publish` locally. [Make your first release](/docs/getting-started/first-release/) walks through the complete path.
+
+## As the repository changes
+
+After adding, moving, or removing packages, run:
+
+```bash
+smif config sync
+```
+
+The default operation applies safe additions and path changes while reporting packages that can no longer be discovered. Configuration is removed only with an explicit `--prune`. Avoid maintaining an existing setup by repeatedly running `smif init --force`, because that obscures the boundary between discovery facts and hand-maintained release policy.

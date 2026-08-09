@@ -1,0 +1,62 @@
+---
+title: Node.js workspaces
+description: Current support for package.json, npm and pnpm workspaces, dependency prefixes, and private packages.
+---
+
+The built-in Node.js adapter uses `package.json` as the package fact source and supports npm-style `workspaces` together with `pnpm-workspace.yaml`.
+
+## Package discovery
+
+Semifold reads these declarations from the project root:
+
+- `workspaces` in the root `package.json`;
+- `packages` in `pnpm-workspace.yaml`.
+
+In workspace mode, the root `package.json` is also inspected and discovered as a package. Without a workspace declaration, the root `package.json` is read as one package.
+
+The manifest `name` is used for dependency matching. An explicit `version` must be valid semver. A template package with no `version` is read as `0.0.0`, and its first version operation inserts the target version.
+
+`private: true` disables registry publishing while the package continues to participate in version plans, dependency ordering, and file edits.
+
+## Dependency inspection
+
+The adapter reads:
+
+- `dependencies`;
+- `devDependencies`;
+- `peerDependencies`;
+- `optionalDependencies`.
+
+A dependency that matches another Node.js manifest name in the workspace enters the shared topological order. These npm constraints do not currently trigger automatic dependent releases because npm ranges cannot be approximated with Cargo's constraint rules.
+
+If a Node.js package must rebuild or republish whenever an internal dependency releases, add `depends-on` to its Semifold package configuration.
+
+## Version and dependency edits
+
+When editing `package.json`, Semifold validates the complete document with a JSON parser, preserves existing object key order, writes standard indentation, and keeps one trailing newline. It does not promise to retain original whitespace that a standard JSON parser cannot represent.
+
+When an internal dependency target must be updated, common declaration intent is retained:
+
+- `workspace:*` remains `workspace:*`;
+- `workspace:^` and `workspace:~` keep their respective prefixes;
+- ordinary `^` and `~` ranges keep their prefixes.
+
+Use `smif version --dry-run` to inspect the exact diff before applying it, especially for historically hand-formatted `package.json` files.
+
+## Release channels and npm tags
+
+Configuration such as `channel = "rc"` controls the version calculated by Semifold, but does not rewrite `npm publish` arguments in a shared resolver. A package on a named channel should configure a matching `--tag` explicitly so a prerelease does not enter npm's default `latest` tag.
+
+`smif config channel set` warns when an affected Node.js resolver lacks an explicit `--tag`, but it does not choose or edit the tag for you.
+
+## Publishing
+
+Registry pre-check, prepublish, and publish commands come from `[resolver.nodejs]`. Semifold runs them in dependency order after unified preflight.
+
+A package with `private: true` skips registry preflight and publish commands. GitHub Releases are disabled by default as well, but package-level `github-release = true` can enable one independently.
+
+## Current boundaries
+
+- Only root `package.json.workspaces` and `packages` in `pnpm-workspace.yaml` are built-in workspace entry points. Package-manager-specific discovery beyond these needs a plugin or explicit support.
+- Node.js manifest dependencies affect ordering but do not automatically propagate versions.
+- A missing `version` reads as `0.0.0`; an explicitly invalid version is an error rather than a defaultable value.

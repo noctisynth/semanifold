@@ -1,0 +1,68 @@
+---
+title: Rust 工作区
+description: Rust 软件包的 Cargo 发现、共享版本、依赖约束修改与私有发布规则。
+---
+
+Rust 内置适配器读取和修改 `Cargo.toml`，支持单个 Cargo 软件包与 Cargo workspace。Cargo 仍负责构建和解析依赖；Semifold 负责把发现结果接入统一的版本与发布流程。
+
+## 软件包发现
+
+当项目根 `Cargo.toml` 包含 `[workspace]` 时，Semifold 展开 `workspace.members` glob，并检查成员清单。根清单同时包含 `[package]` 时，根软件包也属于工作区。没有 workspace 时，根 `Cargo.toml` 作为单个软件包读取。
+
+每个软件包的 Cargo package name 是清单名称。初始化时它可作为 `PackageId` 建议，但已有配置中的 ID 才是变更集和依赖图使用的稳定身份。
+
+`publish = false` 表示不向 crates.io 或其他软件包仓库发布。私有 crate 仍参与版本计算、共享版本组、文件修改和依赖排序。
+
+## 依赖识别
+
+适配器读取：
+
+- `[dependencies]`；
+- `[dev-dependencies]`；
+- `[build-dependencies]`；
+- 根清单中的 `[workspace.dependencies]`。
+
+依赖别名通过 `package` 字段还原真实 Cargo package name。成员使用 `workspace = true` 时，Semifold 在共享的 `[workspace.dependencies]` 中理解和修改约束，不会向成员清单复制一份版本。
+
+所有内部依赖都参与排序。当前只有 `[dependencies]` 中的 runtime 依赖参与约束感知的自动传播：如果依赖的新版本不再满足现有 Cargo 版本约束，依赖方进入一次 `patch` 发布。dev 和 build 依赖只决定顺序。
+
+## 版本写入
+
+普通软件包在自己的 `package.version` 中获得目标版本。Rust 清单使用保留格式的 TOML 编辑，不会为了一个版本字段重排无关内容。
+
+内部 runtime 依赖需要更新时，Semifold 同时处理普通、别名和 workspace 继承声明。只有目标软件包版本确实变化时才考虑重写约束，避免无意义地规范化仍然有效的宽松范围。
+
+## 共享 workspace 版本
+
+成员可以使用：
+
+```toml
+[package]
+version.workspace = true
+
+[workspace.package]
+version = "1.4.0"
+```
+
+共享同一个 `[workspace.package].version` 的软件包形成一个版本组。组内任意成员发生变化时：
+
+- 所有成员进入同一份发布计划；
+- 组内取最高的变更集提升等级；
+- 所有成员获得相同目标版本；
+- 根 `Cargo.toml` 的共享版本只修改一次；
+- 私有成员也会推动共享版本，并可能让同组公开成员进入发布。
+
+同组软件包必须使用完全相同的 `channel` 与待消费的 `channel-bump`，否则规划失败。Semifold 不会按软件包顺序选择其中一个配置。
+
+## 发布
+
+Rust 适配器只提供清单事实和候选修改。实际的版本存在性检查、发布前命令和发布命令来自 `[resolver.rust]` 配置，并由统一发布引擎按依赖顺序执行。
+
+私有 crate 跳过软件包仓库检查与发布命令。它默认不创建 GitHub Release，但可以通过 `github-release = true` 显式启用 Release 和附件；这项策略独立于 Cargo 的 `publish = false`。
+
+## 常见问题
+
+- workspace member glob 没有包含目标目录：修正 `workspace.members`，不要只在 Semifold 配置中伪造软件包。
+- `version.workspace = true` 却缺少有效 `[workspace.package].version`：补齐共享版本来源。
+- 两个 crate 使用相同 package name：在 Cargo 层消除歧义；仅修改 `PackageId` 无法让清单依赖唯一匹配。
+- Rust crate 变化需要重新发布 Node.js 或 Python binding：在绑定软件包上添加跨生态 `depends-on`。

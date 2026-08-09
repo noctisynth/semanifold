@@ -1,0 +1,71 @@
+---
+title: Python 工作区
+description: pyproject.toml、setup.cfg、动态版本来源、发现目录和发布通道限制。
+---
+
+Python 内置适配器优先读取 `pyproject.toml`，在没有可用项目元数据时回退到 `setup.cfg`。它同时处理静态版本和常见动态版本布局。
+
+## 软件包发现
+
+Semifold 检查项目根目录，以及这些一层目录中的直接子目录：
+
+- `packages/*`；
+- `libs/*`；
+- `apps/*`。
+
+目录中存在 `pyproject.toml` 或 `setup.cfg` 时才会尝试解析。更深的任意递归目录、工具专有 workspace 声明或运行时生成的项目不会自动发现；这类布局可以调整配置结构或使用插件。
+
+支持的项目元数据包括：
+
+- PEP 621 `[project]`；
+- Poetry `[tool.poetry]`；
+- `setup.cfg` 中的 package metadata。
+
+## 动态版本
+
+当 PEP 621 声明 `dynamic = ["version"]`，适配器会尝试当前支持的明确来源：
+
+- 常见 package `__init__.py` 中的静态 `__version__`；
+- `__version__.py`；
+- `src/...` 布局中的对应文件；
+- 同一目录 `Cargo.toml` 的版本，用于常见 maturin/PyO3 项目；
+- Hatch 的 `version.path`。
+
+只有能够静态定位和解析的来源才能安全写入。动态版本暂时无法读取时，当前实现会告警并用 `0.0.0` 参与发现；在真正创建版本修改前，应先确认来源属于上面的支持范围，避免把占位版本当作仓库事实。
+
+## 版本写入
+
+根据发现的来源，Semifold 可以修改：
+
+- PEP 621 `project.version`；
+- Poetry `version`；
+- `setup.cfg` 的版本字段；
+- 静态 `__version__`；
+- Hatch `version.path` 指向的文件。
+
+Python binding 可以从同目录 `Cargo.toml` 读取动态版本，但 Python 适配器不会写 Rust 清单。跨生态软件包默认保持各自的版本序列；需要 Rust 变化触发 Python binding 发布时，在 binding 上配置 `depends-on`。
+
+## 依赖与传播
+
+适配器会读取支持格式中的 Python 依赖并把工作区内部匹配加入排序。当前不会使用 Python 清单约束自动触发依赖方发布，因为 PEP 440 语义不能由 Rust semver 规则替代。
+
+发布绑定、生成包或需要重新构建的上层软件包时，使用显式 `depends-on` 表达传播意图。
+
+## 发布通道
+
+Python 版本只支持这些命名通道映射：
+
+| Semifold 通道 | Python 版本形式 |
+| --- | --- |
+| `alpha` | `aN` |
+| `beta` | `bN` |
+| `rc` | `rcN` |
+| `post` | `.postN` |
+
+其他命名通道无法生成受支持的 Python 版本，规划会失败。稳定版本不受此限制。
+
+## 发布
+
+实际的软件包仓库检查与发布命令来自 `[resolver.python]`，不由 Python 适配器直接执行。发布前先用 `smif publish --dry-run` 验证当前版本和预检。
+
+当前内置 Python 发现不会从项目元数据推断“私有软件包”，发现的软件包都会被视为可发布。请只把真正需要进入发布流程的 Python 项目保留在配置中；如果自定义格式带有私有标记，应由插件在发现结果中明确返回。GitHub Release 是否创建仍由软件包级 `github-release` 策略独立控制。

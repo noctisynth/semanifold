@@ -140,23 +140,23 @@ const repositoryFiles = [
 const ecosystems = [
   {
     name: 'Rust',
-    detail: 'Cargo.toml · crates.io',
     icon: '/ecosystems/rust.svg',
+    slug: 'rust',
   },
   {
     name: 'Node.js',
-    detail: 'package.json · npm',
     icon: '/ecosystems/nodejs.svg',
+    slug: 'nodejs',
   },
   {
     name: 'Python',
-    detail: 'pyproject.toml · PyPI',
     icon: '/ecosystems/python.svg',
+    slug: 'python',
   },
   {
     name: 'C++',
-    detail: 'CMake · vcpkg',
     icon: '/ecosystems/cplusplus.svg',
+    slug: 'cpp',
   },
 ];
 
@@ -294,8 +294,12 @@ export function LocalizedHomePage({ locale }: { locale: Locale }) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             {ecosystems.map((ecosystem) => (
-              <div
+              <Link
                 className="flex items-center gap-4 rounded-xl border border-fd-border bg-fd-background p-4"
+                href={localizedPath(
+                  locale,
+                  `/docs/workspace/${ecosystem.slug}/`,
+                )}
                 key={ecosystem.name}
               >
                 <Image
@@ -304,15 +308,10 @@ export function LocalizedHomePage({ locale }: { locale: Locale }) {
                   src={ecosystem.icon}
                   width={34}
                 />
-                <div>
-                  <p className="font-semibold text-fd-foreground">
-                    {ecosystem.name}
-                  </p>
-                  <p className="text-sm text-fd-muted-foreground">
-                    {ecosystem.detail}
-                  </p>
-                </div>
-              </div>
+                <p className="font-semibold text-fd-foreground">
+                  {ecosystem.name}
+                </p>
+              </Link>
             ))}
             <article className="rounded-xl border border-blue-600/30 bg-blue-600/[0.04] p-5 sm:col-span-2">
               <div className="flex flex-wrap items-center gap-3">

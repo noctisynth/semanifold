@@ -1,0 +1,66 @@
+---
+title: Package discovery
+description: Understand how Semifold builds one workspace from different manifests and where stable configured package identities come from.
+---
+
+Each ecosystem adapter discovers its own packages, then Semifold combines those results into one workspace graph. Changeset validation, version propagation, file edits, and publish ordering all use this graph.
+
+## What discovery returns
+
+Every discovered package provides at least:
+
+- its manifest name and current version;
+- its ecosystem and repository-relative path;
+- whether it can be published to an external registry;
+- internal dependencies that can be recognized from its manifest.
+
+`smif init` uses these facts to create the initial `[packages]` configuration. `smif config sync` compares existing configuration with the latest discovery result. An adapter does not decide repository-wide versions, write files directly, run publish commands, or access GitHub.
+
+## Built-in discovery boundaries
+
+| Ecosystem | Primary manifest or version source | Discovery entry point | Complete rules |
+| --- | --- | --- | --- |
+| Rust | `Cargo.toml` | A single package or Cargo workspace members | [Rust workspaces](/docs/workspace/rust/) |
+| Node.js | `package.json` | Root package, `workspaces`, or `pnpm-workspace.yaml` | [Node.js workspaces](/docs/workspace/nodejs/) |
+| Python | `pyproject.toml`, `setup.cfg`, or a source version file | Root plus `packages/*`, `libs/*`, and `apps/*` | [Python workspaces](/docs/workspace/python/) |
+| C++ | `CMakeLists.txt` with `project(... VERSION ...)` | Root project and statically reachable `add_subdirectory(...)` entries | [C++ workspaces](/docs/workspace/cpp/) |
+
+This table only helps select an entry point. Each ecosystem page explains dynamic versions, private packages, dependency categories, and static-analysis limits.
+
+## `PackageId` versus manifest name
+
+A package table key is its stable `PackageId`:
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+```
+
+The manifest name is the native Cargo, npm, PyPI, or CMake name. Discovery proposes it as an initial ID, but configured identity is stable. After configuration exists, Semifold uses `rust-core` for this package even if its directory or manifest name later changes.
+
+Every `PackageId` in one configuration must be globally unique. Manifest names must also be unique within an ecosystem so manifest dependencies have one unambiguous target. Different ecosystems may use the same manifest name, but should receive different IDs such as `rust-shared` and `node-shared`.
+
+Matching names in two ecosystems never imply a dependency. A cross-ecosystem edge must use [`depends-on`](/docs/workspace/dependencies/) to reference a stable ID.
+
+## Plugin-defined ecosystems
+
+Built-in adapters are not a closed list. A JavaScript plugin can implement the same three workspace operations:
+
+1. discover packages;
+2. inspect the current facts for a configured package;
+3. return candidate file edits for target versions.
+
+Plugin results enter the same workspace graph and receive the same identity, unknown-dependency, cycle, and file-edit validation. A plugin does not publish packages directly; registry pre-checks and commands remain in `[resolver.<ecosystem-id>]` configuration. See [Plugin overview](/docs/plugins/overview/).
+
+## What a discovery failure means
+
+The following problems stop workspace loading instead of being silently ignored:
+
+- a configured path leaves the project root or no longer contains the expected manifest;
+- duplicate manifest names within one ecosystem are ambiguous;
+- `depends-on` references an unknown `PackageId`;
+- internal dependencies form a cycle;
+- a manifest exists but its name, explicit version, or structure is invalid.
+
+Fix the manifest or configuration and rerun `smif config sync --check`. If the issue is an ecosystem discovery boundary, use the matching page to decide whether to adjust repository structure, configure an explicit relationship, or write a plugin.

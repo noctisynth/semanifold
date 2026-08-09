@@ -1,0 +1,73 @@
+---
+title: Synchronize workspace configuration
+description: Maintain .changes/config.toml after packages are added, moved, or removed without overwriting release policy.
+---
+
+`smif init` creates configuration once. As repository structure changes, use `smif config sync` to discover packages again and update `[packages]` locally.
+
+```bash
+smif config sync
+```
+
+Synchronization edits TOML while preserving formatting. Existing comments, field order, blank lines, publish commands, assets, channels, and `depends-on` values remain intact. Repeating the command with the same input produces no further diff.
+
+## Default synchronization behavior
+
+The command compares configured packages with current discovery and shows a plan before applying it:
+
+- newly discovered packages can be added to configuration;
+- package path changes can be updated when the match is reliable;
+- configured packages that are no longer discovered are reported but not removed by default;
+- ambiguous renames, duplicate names, and parse failures stop synchronization.
+
+Synchronization never guesses cross-ecosystem dependencies from directory names and does not create `depends-on` for new packages. Those relationships require an explicit maintainer decision.
+
+## Read-only checks in CI
+
+```bash
+smif config sync --check
+```
+
+`--check` writes nothing and returns a non-zero status whenever configuration needs synchronization. It is suitable for preventing an unconfigured package from entering a pull request.
+
+Global `--dry-run` also writes nothing, but serves a different purpose: it previews the complete synchronization plan and does not treat drift as an assertion failure.
+
+## Remove packages that are gone
+
+```bash
+smif config sync --prune
+```
+
+`--prune` removes configuration for packages that cannot currently be discovered. Confirm that each package was deliberately removed rather than temporarily invalid or outside a discovery boundary. `--prune` conflicts with `--check`.
+
+Removing configuration may invalidate changesets or `depends-on` entries that reference its `PackageId`. After applying the change, run:
+
+```bash
+smif status
+```
+
+to validate those references through the workspace graph.
+
+## Synchronize selected ecosystems
+
+`--resolver` is repeatable:
+
+```bash
+smif config sync --resolver rust --resolver nodejs
+```
+
+Only the selected ecosystems are scanned, which is useful for targeted maintenance in a large repository. Values are ecosystem IDs from configuration; a plugin ecosystem uses its own ID as well.
+
+## Migration and synchronization are different
+
+`smif config migrate` converts legacy v0.2.x fields to the current TOML contract. It can replace `version-mode` with `channel`, rename known snake_case fields to kebab-case, and add `type = "http"` to a legacy HTTP pre-check.
+
+It does not perform package discovery. Migrate old configuration first, then synchronize it with the repository:
+
+```bash
+smif config migrate --check
+smif config migrate
+smif config sync --check
+```
+
+See [Configuration commands](/docs/commands/config/) for the complete options and conflicts.

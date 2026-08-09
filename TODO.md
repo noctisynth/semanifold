@@ -597,8 +597,8 @@
 
 ### 内容重写
 
-- [ ] 重写 getting started 与完整 release workflow
-- [ ] 补齐 workspace、四个内置 ecosystem 与跨生态依赖
+- [ ] 重写 getting started 与完整 release workflow（包括既有单仓库接入）
+- [x] 补齐 workspace、四个内置 ecosystem 与跨生态依赖；首页只保留紧凑概览
 - [ ] 补齐 configuration、release channel、changelog template 与 publish pre-check
 - [ ] 重写 GitHub Actions、workflow outputs 与当前 MCP changeset CRUD
 - [x] 完成命令行模块的 `init`、`commit`、`config`、`status`、`version`、`publish`、`ci`、`mcp` 与参数参考

@@ -1,0 +1,77 @@
+---
+title: Dependencies and version propagation
+description: Distinguish dependency ordering, automatic version propagation, and cross-ecosystem depends-on edges.
+---
+
+Semifold places packages from every built-in ecosystem and plugin into one dependency graph. The graph answers two separate questions:
+
+1. which package must be processed first for edits, builds, and publishing;
+2. whether publishing a dependency also requires a release of its dependent.
+
+“Participates in ordering” does not mean “automatically publishes.” This distinction is essential when reading `smif status`.
+
+## Manifest dependencies always participate in ordering
+
+When an adapter can uniquely match a manifest dependency to a package in the same ecosystem, it becomes an internal graph edge. Rust runtime, development, and build dependencies, together with recognized Node.js, Python, and C++ dependencies, all participate in deterministic topological ordering.
+
+Dependencies appear before dependents. Unrelated packages are ordered by stable `PackageId`, so repeated runs do not produce arbitrary sequences.
+
+## Current automatic propagation rules
+
+| Dependency source | Participates in ordering | Automatically releases the dependent |
+| --- | --- | --- |
+| Rust `[dependencies]` | yes | only when the dependency's new version no longer satisfies the Rust requirement; the dependent receives `patch` |
+| Rust development/build dependency | yes | no |
+| Node.js, Python, or C++ manifest dependency | yes | no |
+| Configured `depends-on` | yes | yes; the dependent receives `patch` |
+
+Semifold does not approximate npm, PEP 440, or CMake constraints with Rust semver. Their manifest edges currently determine order only. When a lower-level package release must rebuild and republish a binding, declare `depends-on` explicitly.
+
+## Declare a cross-ecosystem relationship
+
+Reference the dependency's stable `PackageId` from the dependent package:
+
+```toml
+[packages.rust-core]
+path = "crates/core"
+resolver = "rust"
+
+[packages.node-binding]
+path = "bindings/node"
+resolver = "nodejs"
+depends-on = ["rust-core"]
+```
+
+This edge has three effects:
+
+- `rust-core` is edited and published before `node-binding`;
+- any `rust-core` release gives an otherwise unchanged `node-binding` a `patch` release;
+- if `node-binding` already has a `minor` or `major` changeset, the higher bump remains and the propagation reason is added.
+
+`depends-on` may also connect packages in the same ecosystem when a manifest cannot express a rebuild or republish relationship.
+
+## How names are matched
+
+Manifest dependencies match by ecosystem plus manifest name, not directly by `PackageId`. Therefore:
+
+- a dependency outside the workspace remains external;
+- duplicate manifest names within one ecosystem are ambiguous and fail loading;
+- equal names in different ecosystems never create an implicit edge;
+- `depends-on` must use the exact `PackageId` from configuration.
+
+## Diagnose unexpected propagation
+
+Run:
+
+```bash
+smif status
+```
+
+Every planned package lists either a direct changeset or a dependency-propagation reason. If the result is surprising, check in order:
+
+1. whether the changeset names the correct `PackageId`;
+2. whether a Rust runtime requirement still includes the dependency's new version;
+3. whether each `depends-on` represents a real republish requirement;
+4. whether manifest names are accidentally duplicated.
+
+Unknown `PackageId` values and dependency cycles stop planning with structured errors. Remove a cycle from the manifests or configuration; Semifold does not hide it by selecting an arbitrary order.

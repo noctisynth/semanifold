@@ -32,7 +32,7 @@ export const metadata = definePluginMetadata({
 });
 ```
 
-`host.listFiles(pattern)` does not expand authority. Its requested pattern must stay within a declared pattern, and every returned path is checked again. `host.readText(path)` applies the same project-root, glob, path-encoding, file-size, and cumulative-operation checks.
+`host.listFiles(pattern)` does not expand authority. The requested glob must exactly equal one entry in `readPatterns`, and every returned path is checked again. A different glob is rejected even when it appears narrower than a declared value. `host.readText(path)` applies the same project-root, glob, path-encoding, file-size, and cumulative-operation checks.
 
 Use forward-slash, repository-relative paths in protocol data. Do not depend on the caller's current working directory.
 

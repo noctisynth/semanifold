@@ -1,0 +1,62 @@
+---
+title: Node.js 工作区
+description: package.json、npm/pnpm workspace、依赖前缀和私有软件包的当前支持范围。
+---
+
+Node.js 内置适配器以 `package.json` 为软件包事实来源，并支持 npm 风格 `workspaces` 与 `pnpm-workspace.yaml`。
+
+## 软件包发现
+
+Semifold 从项目根读取以下工作区声明：
+
+- 根 `package.json` 中的 `workspaces`；
+- `pnpm-workspace.yaml` 中的 `packages`。
+
+工作区模式下，根 `package.json` 本身也会被检查并作为软件包发现。没有工作区声明时，根 `package.json` 作为单个软件包读取。
+
+清单中的 `name` 是依赖匹配使用的名称。显式 `version` 必须是有效语义化版本；缺少 `version` 的模板软件包暂时按 `0.0.0` 读取，并在第一次版本修改时写入目标版本。
+
+`private: true` 表示不执行 registry 发布，但软件包仍参与版本计划、依赖排序和文件修改。
+
+## 依赖识别
+
+适配器读取：
+
+- `dependencies`；
+- `devDependencies`；
+- `peerDependencies`；
+- `optionalDependencies`。
+
+匹配到工作区内同名 Node.js 软件包的依赖会进入统一拓扑排序。当前这些 npm 约束不会自动触发依赖方发布，因为 npm 范围与 Cargo 版本约束不能使用同一套解析规则近似处理。
+
+如果一个 Node.js 软件包必须在内部依赖发布后重新构建或重新发布，请在它的 Semifold 配置中添加 `depends-on`。
+
+## 版本与依赖修改
+
+修改 `package.json` 时，Semifold 使用 JSON 解析器验证完整结构，保持已有对象键顺序，输出标准缩进并保留一个尾部换行。它不承诺保留 JSON 中无法由标准解析器表示的原始空白布局。
+
+内部依赖目标版本变化并需要修改清单时，会保留常见声明意图：
+
+- `workspace:*` 保持 `workspace:*`；
+- `workspace:^` 与 `workspace:~` 保留对应前缀；
+- 普通 `^` 与 `~` 范围保留前缀。
+
+在应用版本修改前使用 `smif version --dry-run` 检查实际 diff，尤其是长期手工格式化的 `package.json`。
+
+## 发布通道与 npm tag
+
+`channel = "rc"` 等配置决定 Semifold 计算的版本，但不会自动改写共享 resolver 中的 `npm publish` 参数。命名通道的软件包应为发布命令显式配置匹配的 `--tag`，避免预发布版本进入 npm 的默认 `latest` tag。
+
+`smif config channel set` 会在相关 Node.js resolver 缺少显式 `--tag` 时给出警告，但不会替你选择或修改 tag。
+
+## 发布
+
+实际的软件包仓库检查、prepublish 和 publish 命令由 `[resolver.nodejs]` 配置提供。Semifold 在统一预检完成后按依赖顺序运行它们。
+
+`private: true` 的软件包跳过 registry pre-check 与发布命令。GitHub Release 默认也关闭，但可以通过软件包级 `github-release = true` 单独启用。
+
+## 当前边界
+
+- 只有根 `package.json.workspaces` 和 `pnpm-workspace.yaml` 的 `packages` 是内置工作区入口；其他包管理器的专有发现规则需要插件或显式配置支持。
+- Node.js 清单依赖参与排序，但不会自动传播版本。
+- 缺少 `version` 会按 `0.0.0` 读取；显式无效版本则是错误，不会被替换为默认值。

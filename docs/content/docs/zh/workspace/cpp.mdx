@@ -1,0 +1,70 @@
+---
+title: C++ 工作区
+description: 基于 CMake 的静态软件包发现、版本修改、内部链接排序和当前限制。
+---
+
+C++ 内置适配器围绕能够静态分析的 CMake 项目工作。它不运行 CMake，也不尝试解释构建时才出现的目录和 target。
+
+## 根项目要求
+
+项目根必须包含 `CMakeLists.txt`，并能从 `project(...)` 调用中读取数字版本：
+
+```cmake
+project(my_library VERSION 1.4.0 LANGUAGES CXX)
+```
+
+缺少 `VERSION` 的根项目不能作为当前 C++ 工作区入口。`project` 名称是清单名称，用于同一 C++ 工作区内的软件包匹配。
+
+## 子项目发现
+
+Semifold 递归跟随字面量形式的：
+
+```cmake
+add_subdirectory(libs/core)
+```
+
+中间目录可以只负责分组；每个可达目录只要自己的 `CMakeLists.txt` 包含带 `VERSION` 的 `project(...)`，就会被发现为软件包。
+
+为保证发现是确定且安全的，当前不会解释：
+
+- 变量拼接的子目录；
+- generator expression；
+- 下载、脚本或配置阶段生成的路径；
+- 逃出项目根目录的相对路径。
+
+解析后的路径如果离开项目根目录会直接失败，而不是读取外部项目。
+
+## 内部依赖
+
+适配器识别以当前项目名为第一个参数的静态调用：
+
+```cmake
+target_link_libraries(my_library PRIVATE support_library)
+```
+
+当 `support_library` 也是同一工作区中发现的 `project` 名称时，建立内部依赖边。`PUBLIC`、`PRIVATE` 和 `INTERFACE` 当前都只影响依赖顺序，不自动触发版本传播。
+
+变量、别名 target、generator expression 或其他间接链接无法可靠匹配时，不会猜测关系。需要重新发布语义时，在 Semifold 配置中加入 `depends-on`。
+
+## 版本修改
+
+Semifold 修改对应 `CMakeLists.txt` 的 `project(... VERSION ...)`。如果软件包目录存在 `vcpkg.json`，还会同步其根级 `version` 字段，避免两个公开版本来源漂移。
+
+CMake 适配器当前只接受稳定数字版本，因此不支持 `alpha`、`beta`、`rc` 等命名发布通道。为 C++ 软件包设置命名 `channel` 会让版本规划失败；需要预发布语义时，应先评估自定义插件和发布流程是否能完整表达目标格式。
+
+## 发布
+
+CMake 描述构建图，不规定统一的软件包仓库。Semifold 因而把检查、构建、上传和发布行为留在 `[resolver.cpp]` 的命令配置中，并在统一发布计划中按依赖顺序运行。
+
+使用 `smif publish --dry-run` 检查将运行的预检与命令。命令在软件包目录中执行；复杂的 CMake 配置、打包或 registry 客户端逻辑应放在仓库脚本中，而不是依赖 shell 操作符写进 `args`。
+
+## 何时使用插件
+
+以下情况通常超出内置静态规则：
+
+- 版本不在 `project(... VERSION ...)`；
+- workspace 成员由自定义元数据或运行时脚本生成；
+- 内部依赖来自无法静态展开的 CMake 逻辑；
+- 需要非数字或自定义预发布版本格式。
+
+插件可以为这些仓库定义发现、读取和候选版本修改，但发布命令仍由 resolver 配置负责。

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0-rc.4
+
+### Chores
+
+- [`9632bac`](https://github.com/noctisynth/semifold/commit/9632bacee5412b6a37103a68b8db1e7b8e86909a): Migrate the repository JavaScript workspace, SDK checks, runtime tests, documentation build, and CI/CD dependency installation from pnpm to Bun canary with a committed `bun.lock`.
+
 ## v0.4.0-rc.3
 
 ### Bug Fixes

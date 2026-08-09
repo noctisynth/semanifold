@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.0-rc.0
+
+### New Features
+
+- [`174b41d`](https://github.com/noctisynth/semifold/commit/174b41d2b16dbd516a366d78307dc9ad267b5c9e): Reframe Semifold around polyglot monorepo versioning and releases, document configuration and the complete plugin system in both languages, add a localized glossary and site footer, and replace the homepage's custom CSS and placeholder ecosystem badges with Tailwind utilities and official logos.
+- [`48f4a96`](https://github.com/noctisynth/semifold/commit/48f4a966ae98abf8c0348a0c83fa958c8137531f): Migrate the documentation foundation to Next.js and Fumadocs with explicit English and Chinese routes, static search and LLM exports, a redesigned homepage, and a verified first-release documentation slice.
+- [`48508a6`](https://github.com/noctisynth/semifold/commit/48508a626457124b1f3e5c88a988ed2ffe486f65): Add detailed per-command documentation, update the published baseline to Semifold 0.3.0-rc.6, clarify the GitHub Actions release path, and fix locale switching, responsive overflow, lifecycle visualization, navigation logo rendering, and route-transition scrolling diagnostics.
+
 ## v1.1.0-beta.0
 
 ### New Features

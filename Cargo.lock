@@ -2749,7 +2749,7 @@ dependencies = [
 
 [[package]]
 name = "semifold-resolver"
-version = "0.4.0-rc.3"
+version = "0.4.0-rc.4"
 dependencies = [
  "boa_engine",
  "boa_gc",

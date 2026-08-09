@@ -23,7 +23,7 @@ use super::file::{
 };
 use super::protocol::{PluginMetadataV1, PluginProtocolError, PluginRequestV1, PluginResponseV1};
 
-const MAX_SOURCE_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_SOURCE_BYTES: usize = 1024 * 1024;
 const MAX_REQUEST_BYTES: usize = 8 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_LOOP_ITERATIONS: u64 = 10_000_000;

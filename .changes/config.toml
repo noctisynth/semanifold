@@ -71,4 +71,4 @@ retry = [2, 5, 15, 30]
 
 [[resolver.nodejs.publish]]
 command = "npm"
-args = ["publish", "--provenance", "--access", "public"]
+args = ["publish", "--provenance", "--access", "public", "--tag", "rc"]

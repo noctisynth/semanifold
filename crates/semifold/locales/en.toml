@@ -44,7 +44,7 @@ invalid_package_level = "Package bump level %{level} must be patch, minor, or ma
 [cli.commit.flags]
 name = "Name of the changeset to commit"
 level = "Default version bump for packages without an inline level"
-summary = "Summary of changes"
+summary = "Summary paragraph; may be repeated to create multiple paragraphs"
 package = "Package to include, optionally with its bump as PACKAGE=LEVEL; may be repeated"
 tag = "Changelog tag to apply to every selected package"
 no_tag = "Create the changeset without a changelog tag"

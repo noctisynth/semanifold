@@ -126,6 +126,8 @@ fn commit_accepts_complete_arguments_with_stdin_closed() {
             "chore",
             "-m",
             "Exercise the parameter-only path.",
+            "-m",
+            "Render the follow-up as a continuation paragraph.",
         ],
     );
 
@@ -133,8 +135,21 @@ fn commit_accepts_complete_arguments_with_stdin_closed() {
     let changeset = fs::read_to_string(root.join(".changes/automated-change.md")).unwrap();
     assert!(changeset.contains("app: \"minor:chore\""), "{changeset}");
     assert!(
-        changeset.contains("Exercise the parameter-only path."),
+        changeset.contains(
+            "Exercise the parameter-only path.\n\nRender the follow-up as a continuation paragraph."
+        ),
         "{changeset}"
+    );
+
+    let version = run_smif(&root, &["version", "--allow-dirty"]);
+
+    assert!(version.status.success(), "{version:?}");
+    let changelog = fs::read_to_string(root.join("CHANGELOG.md")).unwrap();
+    assert!(
+        changelog.contains(
+            "- Exercise the parameter-only path.\n\n    Render the follow-up as a continuation paragraph."
+        ),
+        "{changelog}"
     );
     fs::remove_dir_all(root).unwrap();
 }

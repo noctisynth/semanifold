@@ -44,7 +44,7 @@ invalid_package_level = "包提升级别 %{level} 必须是 patch、minor 或 ma
 [cli.commit.flags]
 name = "要提交的变更集名称"
 level = "未内联指定提升级别时使用的默认级别"
-summary = "变更摘要"
+summary = "变更摘要段落；可重复传入以创建多个段落"
 package = "要包含的包，可用 PACKAGE=LEVEL 指定提升级别；可重复传入"
 tag = "应用到所有已选包的 changelog 标签"
 no_tag = "创建不带 changelog 标签的变更集"

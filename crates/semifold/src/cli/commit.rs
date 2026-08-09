@@ -73,7 +73,7 @@ pub(crate) struct Commit {
     #[arg(short, long, help = t!("cli.commit.flags.level"))]
     pub level: Option<Level>,
     #[arg(short = 'm', long, help = t!("cli.commit.flags.summary"))]
-    pub summary: Option<String>,
+    pub summary: Vec<String>,
     #[arg(
         short = 'p',
         long = "package",
@@ -231,9 +231,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let summary = if let Some(summary) = &commit.summary {
-        summary.clone()
-    } else {
+    let summary = if commit.summary.is_empty() {
         super::require_interactive(&t!("cli.commit.query_summary"), "--summary")?;
         loop {
             let summary = inquire::prompt_text(&t!("cli.commit.query_summary"))?;
@@ -243,6 +241,8 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
             }
             break summary;
         }
+    } else {
+        commit.summary.join("\n\n")
     };
     SemifoldService::new(SystemDependencies)
         .create_changeset(

@@ -13,11 +13,37 @@ use semifold_engine::{
 
 use crate::cli::terminal::{StepOutcome, Terminal};
 
-#[derive(clap::ValueEnum, Clone, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum Level {
     Patch,
     Minor,
     Major,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PackageArgument {
+    package: String,
+    level: Option<Level>,
+}
+
+fn parse_package_argument(value: &str) -> Result<PackageArgument, String> {
+    let (package, level) = value
+        .split_once('=')
+        .map_or((value, None), |(package, level)| (package, Some(level)));
+    let package = package.trim();
+    if package.is_empty() {
+        return Err(t!("cli.commit.invalid_package_argument").into_owned());
+    }
+    let level = level
+        .map(|level| {
+            Level::from_str(level, true)
+                .map_err(|_| t!("cli.commit.invalid_package_level", level = level).into_owned())
+        })
+        .transpose()?;
+    Ok(PackageArgument {
+        package: package.to_string(),
+        level,
+    })
 }
 
 impl fmt::Display for Level {
@@ -31,7 +57,7 @@ impl fmt::Display for Level {
 }
 
 impl Level {
-    pub fn to_bump_level(&self) -> BumpLevel {
+    pub fn to_bump_level(self) -> BumpLevel {
         match self {
             Level::Patch => BumpLevel::Patch,
             Level::Minor => BumpLevel::Minor,
@@ -48,6 +74,18 @@ pub(crate) struct Commit {
     pub level: Option<Level>,
     #[arg(short, long, help = t!("cli.commit.flags.summary"))]
     pub summary: Option<String>,
+    #[arg(
+        short = 'p',
+        long = "package",
+        value_name = "PACKAGE[=LEVEL]",
+        value_parser = parse_package_argument,
+        help = t!("cli.commit.flags.package")
+    )]
+    pub packages: Vec<PackageArgument>,
+    #[arg(long, conflicts_with = "no_tag", help = t!("cli.commit.flags.tag"))]
+    pub tag: Option<String>,
+    #[arg(long, conflicts_with = "tag", help = t!("cli.commit.flags.no_tag"))]
+    pub no_tag: bool,
 }
 
 pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
@@ -58,6 +96,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
     let name = if let Some(name) = &commit.name {
         name.clone()
     } else {
+        super::require_interactive(&t!("cli.commit.query_name"), "--name")?;
         loop {
             let name = Text::new(&t!("cli.commit.query_name"))
                 .prompt()?
@@ -73,26 +112,73 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
     log::debug!("Change name: {name}");
 
     let all_packages = config.packages.keys().cloned().collect::<Vec<_>>();
-    let mut packages = loop {
+    let selected_packages = if commit.packages.is_empty() {
         if all_packages.len() == 1 {
-            break all_packages;
+            all_packages
+                .into_iter()
+                .map(|package| PackageArgument {
+                    package,
+                    level: None,
+                })
+                .collect()
+        } else {
+            super::require_interactive(&t!("cli.commit.query_packages"), "--package")?;
+            loop {
+                let packages =
+                    MultiSelect::new(&t!("cli.commit.query_packages"), all_packages.clone())
+                        .prompt()?;
+                if packages.is_empty() {
+                    terminal.warning(&t!("cli.commit.warn_no_packages"));
+                    continue;
+                }
+                break packages
+                    .into_iter()
+                    .map(|package| PackageArgument {
+                        package,
+                        level: None,
+                    })
+                    .collect();
+            }
         }
-        let packages =
-            MultiSelect::new(&t!("cli.commit.query_packages"), all_packages.clone()).prompt()?;
-        if packages.is_empty() {
-            terminal.warning(&t!("cli.commit.warn_no_packages"));
-            continue;
-        }
-        break packages;
+    } else {
+        commit.packages.clone()
     };
 
-    let tag = Select::new(
-        &t!("cli.commit.query_tags"),
-        config.tags.keys().cloned().collect::<Vec<_>>(),
-    )
-    .prompt()?;
+    let tag = if let Some(tag) = &commit.tag {
+        Some(tag.clone())
+    } else if commit.no_tag || config.tags.is_empty() {
+        None
+    } else {
+        super::require_interactive(&t!("cli.commit.query_tags"), "--tag or --no-tag")?;
+        Some(
+            Select::new(
+                &t!("cli.commit.query_tags"),
+                config.tags.keys().cloned().collect::<Vec<_>>(),
+            )
+            .prompt()?,
+        )
+    };
 
     let mut package_inputs = Vec::new();
+    let mut packages = Vec::new();
+    for package in selected_packages {
+        if let Some(level) = package.level.or(commit.level) {
+            package_inputs.push(ChangesetPackageInput {
+                package: PackageId::new(package.package),
+                bump: level.to_bump_level(),
+                tag: tag.clone(),
+            });
+        } else {
+            packages.push(package.package);
+        }
+    }
+
+    if !packages.is_empty() {
+        super::require_interactive(
+            &t!("cli.commit.query_pkg_bump", level = "patch/minor/major"),
+            "--level or --package PACKAGE=LEVEL",
+        )?;
+    }
     let level_variants = Level::value_variants().iter().rev();
     for variant in level_variants {
         if packages.is_empty() {
@@ -131,7 +217,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
                 .map(|package| ChangesetPackageInput {
                     package: PackageId::new(package),
                     bump: variant.to_bump_level(),
-                    tag: Some(tag.clone()),
+                    tag: tag.clone(),
                 }),
         );
         packages.retain(|p| !selected_packages.contains(p));
@@ -148,6 +234,7 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
     let summary = if let Some(summary) = &commit.summary {
         summary.clone()
     } else {
+        super::require_interactive(&t!("cli.commit.query_summary"), "--summary")?;
         loop {
             let summary = inquire::prompt_text(&t!("cli.commit.query_summary"))?;
             if summary.is_empty() {

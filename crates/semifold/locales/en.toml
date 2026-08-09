@@ -38,11 +38,16 @@ empty_name = "Commit name cannot be empty"
 commit_exists = "Commit with name %{name} already exists"
 warn_no_packages = "No packages selected"
 empty_summary = "Summary cannot be empty"
+invalid_package_argument = "Package argument must include a package name"
+invalid_package_level = "Package bump level %{level} must be patch, minor, or major"
 
 [cli.commit.flags]
 name = "Name of the changeset to commit"
-level = "Level of version bump"
+level = "Default version bump for packages without an inline level"
 summary = "Summary of changes"
+package = "Package to include, optionally with its bump as PACKAGE=LEVEL; may be repeated"
+tag = "Changelog tag to apply to every selected package"
+no_tag = "Create the changeset without a changelog tag"
 
 [cli.init]
 heading = "Semifold initialization"

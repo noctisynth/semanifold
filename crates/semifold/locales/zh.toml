@@ -38,11 +38,16 @@ empty_name = "提交名称不能为空"
 commit_exists = "名为 %{name} 的提交已存在"
 warn_no_packages = "未选择任何包"
 empty_summary = "摘要不能为空"
+invalid_package_argument = "package 参数必须包含包名"
+invalid_package_level = "包提升级别 %{level} 必须是 patch、minor 或 major"
 
 [cli.commit.flags]
 name = "要提交的变更集名称"
-level = "要提升的版本级别"
+level = "未内联指定提升级别时使用的默认级别"
 summary = "变更摘要"
+package = "要包含的包，可用 PACKAGE=LEVEL 指定提升级别；可重复传入"
+tag = "应用到所有已选包的 changelog 标签"
+no_tag = "创建不带 changelog 标签的变更集"
 
 [cli.init]
 heading = "Semifold 初始化"

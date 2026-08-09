@@ -111,6 +111,90 @@ fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
 }
 
 #[test]
+fn commit_accepts_complete_arguments_with_stdin_closed() {
+    let root = temporary_project("commit-arguments", &config("channel = \"stable\""));
+
+    let commit = run_smif(
+        &root,
+        &[
+            "commit",
+            "--name",
+            "automated-change",
+            "--package",
+            "app=minor",
+            "--tag",
+            "chore",
+            "--summary",
+            "Exercise the parameter-only path.",
+        ],
+    );
+
+    assert!(commit.status.success(), "{commit:?}");
+    let changeset = fs::read_to_string(root.join(".changes/automated-change.md")).unwrap();
+    assert!(changeset.contains("app: \"minor:chore\""), "{changeset}");
+    assert!(
+        changeset.contains("Exercise the parameter-only path."),
+        "{changeset}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn commit_level_applies_to_packages_without_an_inline_level() {
+    let root = temporary_project("commit-default-level", &config("channel = \"stable\""));
+
+    let commit = run_smif(
+        &root,
+        &[
+            "commit",
+            "--name",
+            "default-level",
+            "--package",
+            "app",
+            "--level",
+            "major",
+            "--no-tag",
+            "--summary",
+            "Use the default package level.",
+        ],
+    );
+
+    assert!(commit.status.success(), "{commit:?}");
+    let changeset = fs::read_to_string(root.join(".changes/default-level.md")).unwrap();
+    assert!(changeset.contains("app: major"), "{changeset}");
+    assert!(!changeset.contains("major:"), "{changeset}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn commit_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
+    let root = temporary_project("commit-missing-arguments", &config("channel = \"stable\""));
+
+    let commit = run_smif(
+        &root,
+        &[
+            "commit",
+            "--name",
+            "missing-tag",
+            "--package",
+            "app=patch",
+            "--summary",
+            "Missing an explicit tag choice.",
+        ],
+    );
+
+    assert!(!commit.status.success(), "{commit:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&commit.stdout),
+        String::from_utf8_lossy(&commit.stderr)
+    );
+    assert!(output.contains("--tag or --no-tag"), "{output}");
+    assert!(!root.join(".changes/missing-tag.md").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn status_reports_the_complete_dependency_cycle() {
     let root = temporary_project(
         "dependency-cycle",

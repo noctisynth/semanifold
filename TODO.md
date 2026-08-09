@@ -490,7 +490,7 @@
 
 ### TypeScript SDK 与构建工具
 
-- [x] 新增独立发布的 `@semifold/plugin-sdk` ESM package，并接入 pnpm workspace、Semifold release plan 与 npm publish workflow
+- [x] 新增独立发布的 `@semifold/plugin-sdk` ESM package，并接入 pnpm workspace、Semifold release plan 与 OIDC-only npm publish workflow
 - [x] 导出 schema v1 的 kebab-case wire types、metadata/entrypoint/diagnostic/response 构造辅助函数
 - [x] 精确声明 `PluginHostV1` 与 Boa 实际支持的 `fetch`、`URL` 子集，不引入 DOM 或 Node.js ambient API
 - [x] 以无 DOM/Node ambient 的类型 fixture 和运行时 JSON 测试锁定 SDK/Rust 协议边界

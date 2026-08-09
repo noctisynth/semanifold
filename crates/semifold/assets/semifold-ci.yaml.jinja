@@ -24,12 +24,17 @@ jobs:
         with:
           fetch-depth: 0
       - name: Setup Semifold
-        uses: noctisynth/setup-semifold@main
+        uses: noctisynth/setup-semifold@main{% if 'nodejs' in resolvers %}
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Setup npm trusted publishing CLI
+        run: npm install --global npm@11.18.0{% endif %}
       - name: Semifold CI
         id: semifold
         run: semifold ci
         env:
           GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}{% if 'rust' in resolvers %}
-          CARGO_REGISTRY_TOKEN: {% raw %}${{ secrets.CARGO_REGISTRY_TOKEN }}{% endraw %}{% endif %}{% if 'nodejs' in resolvers %}
-          # Remove `NODE_AUTH_TOKEN` if you want to use OIDC
-          NODE_AUTH_TOKEN: {% raw %}${{ secrets.NODE_AUTH_TOKEN }}{% endraw %}{% endif %}
+          CARGO_REGISTRY_TOKEN: {% raw %}${{ secrets.CARGO_REGISTRY_TOKEN }}{% endraw %}{% endif %}

@@ -3,19 +3,27 @@
   "version": "0.1.0",
   "description": "Next-generation cross-language monorepo version and release management tool",
   "private": true,
+  "workspaces": [
+    "docs",
+    "packages/*"
+  ],
   "scripts": {
-    "docs:build": "pnpm --filter @semifold/docs build",
-    "docs:check": "pnpm --filter @semifold/docs check",
-    "docs:dev": "pnpm --filter @semifold/docs dev",
-    "docs:preview": "pnpm --filter @semifold/docs preview",
-    "lint:fix": "pnpm biome check docs --fix"
+    "docs:build": "bun run --filter @semifold/docs build",
+    "docs:check": "bun run --filter @semifold/docs check",
+    "docs:dev": "bun run --filter @semifold/docs dev",
+    "docs:preview": "bun run --filter @semifold/docs preview",
+    "lint:fix": "bun run biome check docs --fix"
   },
   "author": {
     "name": "苏向夜",
     "email": "fu050409@163.com"
   },
   "license": "AGPL-3.0-only",
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "bun@canary",
+  "trustedDependencies": [
+    "core-js",
+    "esbuild"
+  ],
   "dependencies": {
     "@biomejs/biome": "^2.3.4"
   }

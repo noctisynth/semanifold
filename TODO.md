@@ -498,7 +498,7 @@
 
 ### TypeScript SDK 与构建工具
 
-- [x] 新增独立发布的 `@semifold/plugin-sdk` ESM package，并接入 pnpm workspace、Semifold release plan 与 OIDC-only npm publish workflow
+- [x] 新增独立发布的 `@semifold/plugin-sdk` ESM package，并接入 Bun workspace、Semifold release plan 与 OIDC-only npm publish workflow
 - [x] 导出 schema v1 的 kebab-case wire types、metadata/entrypoint/diagnostic/response 构造辅助函数
 - [x] 精确声明 `PluginHostV1` 与 Boa 实际支持的 `fetch`、`URL` 子集，不引入 DOM 或 Node.js ambient API
 - [x] 以无 DOM/Node ambient 的类型 fixture 和运行时 JSON 测试锁定 SDK/Rust 协议边界
@@ -507,6 +507,7 @@
   - [x] 从生成 union 派生现有 operation-specific 类型，并在公共出口递归施加只读约束
   - [x] 提供确定性生成与 CI drift 检查，同时保留跨语言 JSON fixture
   - [x] 生成与 drift 检查统一经过固定版本 Biome，并将 SDK 的 Biome format/lint 接入只读检查与 CI
+- [x] 将仓库 JavaScript 工具链、锁文件和 CI/CD 从 pnpm 迁移到显式 `canary` 通道的 Bun
 - [ ] 实现配套 Vite 插件的单文件 ESM bundle 与不支持能力检查
 
 ### 阶段完成条件

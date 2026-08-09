@@ -18,14 +18,14 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "pnpm run check:protocol && pnpm run check:biome",
+    "check": "bun run check:protocol && bun run check:biome",
     "check:biome": "biome check src test package.json tsconfig.json",
     "check:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs -- --check",
     "format": "biome format --write src test package.json tsconfig.json",
     "generate:protocol": "cargo run -p semifold-resolver --example generate_plugin_sdk --features ts-rs",
     "prepack": "tsc -p tsconfig.json",
-    "test": "pnpm run build && pnpm run test:types && pnpm run test:runtime",
-    "test:runtime": "node --test test/*.test.mjs",
+    "test": "bun run build && bun run test:types && bun run test:runtime",
+    "test:runtime": "bun test test/*.test.mjs",
     "test:types": "tsc -p test/tsconfig.json"
   },
   "author": {

@@ -4,8 +4,8 @@ The schema-versioned wire types are generated from Semifold's Rust plugin protoc
 `crates/resolver/src/plugin/protocol.rs`, regenerate and verify them from the repository root:
 
 ```sh
-pnpm --filter @semifold/plugin-sdk generate:protocol
-pnpm --filter @semifold/plugin-sdk check:protocol
+bun run --filter @semifold/plugin-sdk generate:protocol
+bun run --filter @semifold/plugin-sdk check:protocol
 ```
 
 The generated source is committed so packaging the SDK never requires Cargo.

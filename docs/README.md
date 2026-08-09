@@ -7,7 +7,7 @@ The documentation site uses Next.js 16, Fumadocs, and Tailwind CSS 4. English pa
 Install the dependencies:
 
 ```sh
-pnpm install
+bun install
 ```
 
 ## Get started
@@ -15,19 +15,19 @@ pnpm install
 Start the dev server:
 
 ```sh
-pnpm --filter @semifold/docs dev
+bun run --filter @semifold/docs dev
 ```
 
 Build the website for production:
 
 ```sh
-pnpm --filter @semifold/docs check
+bun run --filter @semifold/docs check
 ```
 
 Preview the production build locally:
 
 ```sh
-pnpm --filter @semifold/docs preview
+bun run --filter @semifold/docs preview
 ```
 
 The production artifact is written to `docs/out`. Content belongs in `content/docs/en` and `content/docs/zh`; both locale trees must keep the same slugs.

@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "build": "next build --webpack",
-    "check": "pnpm run typecheck && node scripts/check-locales.mjs && pnpm run build && node scripts/check-static-output.mjs",
+    "check": "bun run typecheck && bun run ./scripts/check-locales.mjs && bun run build && bun run ./scripts/check-static-output.mjs",
     "dev": "next dev",
-    "generate": "node scripts/generate-source.mjs",
+    "generate": "bun run ./scripts/generate-source.mjs",
     "preview": "serve out --listen 4173",
-    "typecheck": "pnpm generate && tsc --noEmit"
+    "typecheck": "bun run generate && tsc --noEmit"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

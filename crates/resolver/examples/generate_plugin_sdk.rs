@@ -41,7 +41,7 @@ mod generator {
             })?;
             if current != generated {
                 return Err(io::Error::other(format!(
-                    "generated plugin SDK types are stale; run `pnpm --filter @semifold/plugin-sdk generate:protocol` to update {}",
+                    "generated plugin SDK types are stale; run `bun run --filter @semifold/plugin-sdk generate:protocol` to update {}",
                     path.display()
                 ))
                 .into());
@@ -128,7 +128,7 @@ mod generator {
                 io::Error::new(
                     error.kind(),
                     format!(
-                        "failed to start Biome for plugin SDK generation; run `pnpm install` first: {error}"
+                        "failed to start Biome for plugin SDK generation; run `bun install` first: {error}"
                     ),
                 )
             })?;

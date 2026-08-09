@@ -341,7 +341,7 @@ CLI reference 必须由 `clap` command surface 生成或由快照检查约束。
 - Fumadocs Core、UI 与 MDX；
 - React 19；
 - Tailwind CSS 4；
-- pnpm workspace；
+- Bun canary workspace；
 - TypeScript strict mode。
 
 首页、页脚和简单布局优先使用 Tailwind utilities。全局 CSS 只保留主题 token、Fumadocs/MDX 需要的跨组件规则、
@@ -352,7 +352,8 @@ islands，避免再引入一层 UI runtime 边界。
 
 ### 10.2 静态部署
 
-Next.js 使用 `output: 'export'`，部署产物为 `docs/out`。GitHub Pages workflow 不运行 Node server。
+Next.js 使用 `output: 'export'`，部署产物为 `docs/out`。GitHub Pages workflow 通过显式配置
+`bun-version: canary` 的 Bun 安装锁定依赖并执行检查，不运行 Node server。
 静态导出必须验证：
 
 - 根首页；

@@ -1204,15 +1204,24 @@ host capability 声明，不把 Node.js 或浏览器 ambient API 伪装成可用
 `0.1.0-rc.0`，避免在引入 release plan 前手工伪造已发布版本。SDK 以 ES2022 为最低输出目标，生成
 JavaScript 与 declaration files；其源码和类型 fixture 的 TypeScript 编译环境只加载 ECMAScript 标准库，
 显式排除 DOM 与 Node.js ambient 类型。SDK package 不负责 bundle 插件，也不成为 Semifold CLI 的
-JavaScript runtime 依赖。package 的 `prepack` 必须从受版本控制的源码重建 `dist`，发布工作流必须先安装
-锁定的 SDK 开发依赖，再由现有 Node.js resolver 在 package 目录执行带 provenance 的公开 npm publish；
-不能依赖开发者提交生成目录或在 release job 中临时变更 lockfile。npm package 必须声明与当前 GitHub
-仓库一致的 repository metadata；release job 通过 `actions/setup-node` 配置 Node 24 和 npm registry，并直接
-使用该 Node 版本自带且满足 trusted publishing 最低版本要求的 npm CLI，不再单独安装或固定 npm。在
+JavaScript runtime 依赖。package 的 `prepack` 必须从受版本控制的源码重建 `dist`，发布工作流必须先通过
+仓库根 Bun workspace 和 `bun.lock` 安装锁定的 SDK 开发依赖，再由现有 Node.js resolver 在 package 目录
+执行带 provenance 的公开 npm publish；不能依赖开发者提交生成目录或在 release job 中临时变更 lockfile。
+npm package 必须声明与当前 GitHub 仓库一致的 repository metadata；release job 通过
+`actions/setup-node` 配置 Node 24 和 npm registry，并直接使用该 Node 版本自带且满足 trusted publishing
+最低版本要求的 npm CLI，不再单独安装或固定 npm。在
 GitHub-hosted runner 上以既有 `id-token: write` 权限仅使用 OIDC。SDK 首版先由 maintainer 在本地
 应用 version、以本机 npm 身份运行默认不创建 Forge release 的 `smif publish`，再将 version 提交合入 base
 branch；对应 CD 通过 registry preflight 跳过已经发布的 npm 版本，只补建 GitHub Release。首发后再为
 package 配置 trusted publisher，当前仓库的 workflow 不为 bootstrap 注入任何 npm token。
+
+仓库自身的 JavaScript 开发工具链统一使用 Bun workspace：workspace 成员在根 `package.json` 声明，唯一
+依赖锁文件为文本格式 `bun.lock`，安装、workspace script、文档构建和 SDK 测试均不得依赖 pnpm、
+`pnpm-lock.yaml` 或 `pnpm-workspace.yaml`。所有需要 JavaScript 工具链的 CI/CD job 必须使用
+`oven-sh/setup-bun` 并显式配置 `bun-version: canary`；不得依赖 action 默认版本，也不得固定为本地稳定版
+`1.4.0`。Bun canary 作为有意采用的滚动工具链通道，第三方依赖版本仍由 `bun.lock` 固定。发布 job 继续
+单独安装 Node 24，仅用于 npm trusted publishing。此仓库工具链决策不改变 Node adapter 对外部 npm 与
+pnpm workspace 的解析兼容性，也不改变 npm registry 的 package 格式和发布协议。
 
 SDK 的所有 wire types 使用与 Rust 协议相同的 kebab-case JSON 字段，并以 `V1` 后缀表达 schema 边界；
 不得增加一层自动 camelCase 转换。公共构造 API 首版固定为 `definePluginMetadata`、`definePlugin`、

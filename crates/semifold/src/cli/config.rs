@@ -1,12 +1,12 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand, ValueEnum};
 use rust_i18n::t;
-use semifold_core::ConfigSyncWarning;
+use semifold_core::{ConfigSyncWarning, EcosystemId};
 use semifold_engine::{
     AppError, ChannelUpdate, ConfigMutationError, ConfigSyncOptions, Project, SemifoldService,
     SystemDependencies, config_sync::ConfigSyncPlanningError,
 };
-use semifold_resolver::{config::ChannelBump, resolver::ResolverType};
+use semifold_resolver::config::ChannelBump;
 
 use crate::cli::terminal::{StepOutcome, Terminal};
 
@@ -38,10 +38,9 @@ struct Sync {
     prune: bool,
     #[arg(
         long = "resolver",
-        value_enum,
         help = t!("cli.config.flags.resolver_sync")
     )]
-    resolvers: Vec<ResolverType>,
+    resolvers: Vec<EcosystemId>,
 }
 
 #[derive(Parser, Debug)]
@@ -378,6 +377,7 @@ mod tests {
 
     use camino::Utf8PathBuf;
     use clap::Parser as _;
+    use semifold_core::EcosystemId;
     use semifold_engine::{
         ChannelUpdate, ConfigMutationError, ConfigMutationPlan, Project,
         config_management::{
@@ -385,7 +385,7 @@ mod tests {
             plan_config_migration as engine_plan_config_migration,
         },
     };
-    use semifold_resolver::{config, resolver::ResolverType};
+    use semifold_resolver::config;
 
     use super::{
         ChannelBumpArg, ChannelTarget, Config as ConfigCommand, Migrate, Sync, migrate, sync,
@@ -955,6 +955,10 @@ resolver = "rust"
             ])
             .is_ok()
         );
+        assert!(
+            ConfigCommand::try_parse_from(["config", "sync", "--resolver", "com.example.game",])
+                .is_ok()
+        );
     }
 
     #[test]
@@ -973,7 +977,7 @@ resolver = "rust"
         let rust_only = Sync {
             check: false,
             prune: false,
-            resolvers: vec![ResolverType::Rust],
+            resolvers: vec![EcosystemId::RUST],
         };
 
         sync(&rust_only, &sync_project(&root), false).unwrap();
@@ -985,7 +989,7 @@ resolver = "rust"
             &Sync {
                 check: true,
                 prune: false,
-                resolvers: vec![ResolverType::Rust],
+                resolvers: vec![EcosystemId::RUST],
             },
             &sync_project(&root),
             false,
@@ -1005,7 +1009,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: false,
-                resolvers: vec![ResolverType::Nodejs],
+                resolvers: vec![EcosystemId::NODE],
             },
             &sync_project(&root),
             false,
@@ -1028,7 +1032,7 @@ resolver = "rust"
             &Sync {
                 check: false,
                 prune: true,
-                resolvers: vec![ResolverType::Rust],
+                resolvers: vec![EcosystemId::RUST],
             },
             &sync_project(&root),
             false,
@@ -1058,6 +1062,7 @@ resolver = "rust"
                 tags: Default::default(),
                 changelog: Default::default(),
                 packages: Default::default(),
+                plugins: Default::default(),
                 resolver: Default::default(),
             },
         );

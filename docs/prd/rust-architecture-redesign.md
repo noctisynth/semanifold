@@ -1169,10 +1169,11 @@ engine 的既有端口统一编排。普通 HTTP 请求只能通过显式授权�
 
 迁移分两步完成：领域层的 `PackageSnapshot`、release plan/context、config sync、publish context 与
 `EcosystemAdapter` 先统一持有开放的 `EcosystemId`；旧公开名称 `Ecosystem` 只保留为类型别名，
-四个旧 variant 名只作为兼容常量。CLI 与旧 TOML 当前使用的 `ResolverType` 暂时只表示内置 resolver
-选择，并通过显式映射进入 `EcosystemId`；在插件注册表接入配置时，再将 package/resolver 配置值
-开放为动态 ID。迁移期间遇到尚未注册 adapter 的动态 ID 必须返回明确错误，不能回退到任一内置
-resolver。
+四个旧 variant 名只作为兼容常量。插件注册表接入配置后，package 的 `resolver` 值与顶层
+`[resolver.<id>]` key 都直接解析为开放的 `EcosystemId`；四个内置 canonical ID 固定为 `rust`、
+`nodejs`、`python`、`cpp`，因此现有 TOML 不需要别名迁移。CLI 的 `ResolverType` 继续只表示四个
+内置 resolver 的交互式选择，并显式转换为相同 `EcosystemId`。遇到尚未注册 adapter 的动态 ID
+必须返回明确错误，不能回退到任一内置 resolver。
 
 插件输入必须是不可变快照，输出必须可序列化和确定性排序。在相同输入及相同 capability 响应记录
 下重复执行应产生相同结果；网络响应被视为显式外部输入，测试和重放必须使用可注入的 fetch backend。
@@ -1217,12 +1218,25 @@ QuickJS heap limit 等价的硬内存上限，因此 host 还必须限制 reques
 循环、递归、栈、capability 或载荷预算超限均转换为结构化插件诊断，host 不复用失败的 Context。
 
 首版只加载仓库内、相对项目根目录的单文件 `.js` 插件，不支持 URL、registry 或运行时下载。配置
-以稳定 `EcosystemId` 注册插件路径，并强制固定脚本内容的 SHA-256；加载前必须校验 digest，注册表
-按 `EcosystemId` 排序并拒绝重复 ID 或覆盖 `rust`、`nodejs`、`python`、`cpp` 四个内置 ID。
+以稳定 `EcosystemId` 注册插件路径；`sha256` 可选，存在时加载前必须严格校验 digest，不存在时仍
+计算并记录本次实际加载内容的 SHA-256，但不把它当作跨次加载的内容锁。网络授权缺省为空：
+
+```toml
+[plugins."com.example.engine"]
+path = "plugins/engine.js"
+# sha256 = "可选的 64 位小写十六进制摘要"
+allowed-origins = ["https://api.example.com"]
+
+[packages.engine]
+path = "engine"
+resolver = "com.example.engine"
+```
+
+注册表按 `EcosystemId` 排序并拒绝重复 ID 或覆盖 `rust`、`nodejs`、`python`、`cpp` 四个内置 ID。
 `EcosystemId` 使用小写 ASCII 点分段，每段以字母开头、以字母或数字结尾，中间允许数字与连字符；
 最长 128 字节。插件元数据包含 SemVer plugin version，
-但可执行内容以 digest 为最终锁定事实。首版 package version model 仅支持 SemVer，与现有
-`VersionMap` 和 release planner 保持一致。
+配置了 `sha256` 时可执行内容以 digest 为最终锁定事实；未配置时 repository commit 是唯一外部
+内容边界。首版 package version model 仅支持 SemVer，与现有 `VersionMap` 和 release planner 保持一致。
 
 host 与插件只交换 UTF-8 JSON。首版协议 schema version 为整数 `1`，覆盖 metadata、discover、
 inspect、plan-edits、不可变 workspace/version 快照、候选 file edit 和结构化诊断。host 只接受

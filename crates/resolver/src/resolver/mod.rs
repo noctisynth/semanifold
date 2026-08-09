@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use semifold_core::EcosystemId;
+
 use crate::{changeset::Changeset, config::Config, error::ResolveError, utils};
 use core::fmt;
 use std::path::{Path, PathBuf};
@@ -17,6 +19,24 @@ pub enum ResolverType {
     Nodejs,
     Python,
     Cpp,
+}
+
+impl ResolverType {
+    #[must_use]
+    pub const fn ecosystem(self) -> EcosystemId {
+        match self {
+            Self::Rust => EcosystemId::RUST,
+            Self::Nodejs => EcosystemId::NODE,
+            Self::Python => EcosystemId::PYTHON,
+            Self::Cpp => EcosystemId::CPP,
+        }
+    }
+}
+
+impl From<ResolverType> for EcosystemId {
+    fn from(resolver: ResolverType) -> Self {
+        resolver.ecosystem()
+    }
 }
 
 impl fmt::Display for ResolverType {

@@ -612,7 +612,7 @@ mod tests {
     fn package_config() -> PackageConfig {
         PackageConfig {
             path: "package".into(),
-            resolver: ResolverType::Nodejs,
+            resolver: ResolverType::Nodejs.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),

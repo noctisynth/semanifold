@@ -161,7 +161,7 @@ mod tests {
                     "app".to_string(),
                     PackageConfig {
                         path: "app".into(),
-                        resolver: ResolverType::Rust,
+                        resolver: ResolverType::Rust.into(),
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: Vec::new(),
@@ -169,6 +169,7 @@ mod tests {
                         depends_on: Vec::new(),
                     },
                 )]),
+                plugins: BTreeMap::new(),
                 resolver: BTreeMap::new(),
             },
         }

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -10,17 +10,17 @@ use semifold_core::{
     ReleasePlanner, ReleasePlannerError, ReleasePolicies, WorkspaceGraph,
 };
 use semifold_resolver::{
-    adapter::{AdapterError, EcosystemAdapter, EcosystemPlanInput},
+    adapter::{AdapterError, EcosystemPlanInput},
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
     config::{ChannelBump, Config, ReleaseChannel as ResolverReleaseChannel},
-    resolver::{
-        cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver, rust::RustResolver,
-    },
 };
 use semver::VersionReq;
 use thiserror::Error;
 
-use crate::workspace::{WorkspaceLoadError, load_workspace_graph};
+use crate::{
+    discovery::{ResolverRegistry, ResolverRegistryError},
+    workspace::{WorkspaceLoadError, load_workspace_graph_with_registry},
+};
 
 pub struct ReleasePullRequestContext<'a> {
     pub release: &'a ReleaseContext,
@@ -87,83 +87,44 @@ pub fn plan_release(
     config: &Config,
     changesets: &[Changeset],
 ) -> Result<ReleasePlan, ReleasePlanningError> {
-    let graph = load_workspace_graph(root, config)?;
+    let registry = ResolverRegistry::load(root, config)?;
+    let graph = load_workspace_graph_with_registry(root, config, &registry)?;
     let changesets = changeset_inputs(changesets);
     let policies = release_policies(&graph, config)?;
     let plan = ReleasePlanner::plan(&graph, &changesets, &policies)?;
-    let rust_workspace_packages = graph
-        .packages()
-        .filter(|package| package.ecosystem == EcosystemId::RUST)
-        .cloned()
-        .collect::<Vec<_>>();
-    let rust_released_packages = plan
-        .packages()
-        .iter()
-        .filter(|release| release.ecosystem == EcosystemId::RUST)
-        .map(|release| release.id.clone())
-        .collect::<Vec<_>>();
     let project_root = camino::Utf8Path::from_path(root).ok_or_else(|| {
         ReleasePlanningError::NonUtf8ProjectRoot {
             path: root.to_path_buf(),
         }
     })?;
-    let mut file_edits = RustResolver.plan_edits(EcosystemPlanInput {
-        project_root,
-        workspace_packages: &rust_workspace_packages,
-        released_packages: &rust_released_packages,
-        versions: plan.versions(),
-    })?;
-    let node_workspace_packages = graph
+    let ecosystems = graph
         .packages()
-        .filter(|package| package.ecosystem == EcosystemId::NODE)
-        .cloned()
-        .collect::<Vec<_>>();
-    let node_released_packages = plan
-        .packages()
-        .iter()
-        .filter(|release| release.ecosystem == EcosystemId::NODE)
-        .map(|release| release.id.clone())
-        .collect::<Vec<_>>();
-    file_edits.extend(NodejsResolver.plan_edits(EcosystemPlanInput {
-        project_root,
-        workspace_packages: &node_workspace_packages,
-        released_packages: &node_released_packages,
-        versions: plan.versions(),
-    })?);
-    let python_workspace_packages = graph
-        .packages()
-        .filter(|package| package.ecosystem == EcosystemId::PYTHON)
-        .cloned()
-        .collect::<Vec<_>>();
-    let python_released_packages = plan
-        .packages()
-        .iter()
-        .filter(|release| release.ecosystem == EcosystemId::PYTHON)
-        .map(|release| release.id.clone())
-        .collect::<Vec<_>>();
-    file_edits.extend(PythonResolver.plan_edits(EcosystemPlanInput {
-        project_root,
-        workspace_packages: &python_workspace_packages,
-        released_packages: &python_released_packages,
-        versions: plan.versions(),
-    })?);
-    let cpp_workspace_packages = graph
-        .packages()
-        .filter(|package| package.ecosystem == EcosystemId::CPP)
-        .cloned()
-        .collect::<Vec<_>>();
-    let cpp_released_packages = plan
-        .packages()
-        .iter()
-        .filter(|release| release.ecosystem == EcosystemId::CPP)
-        .map(|release| release.id.clone())
-        .collect::<Vec<_>>();
-    file_edits.extend(CppResolver.plan_edits(EcosystemPlanInput {
-        project_root,
-        workspace_packages: &cpp_workspace_packages,
-        released_packages: &cpp_released_packages,
-        versions: plan.versions(),
-    })?);
+        .map(|package| package.ecosystem.clone())
+        .collect::<BTreeSet<_>>();
+    let mut file_edits = Vec::new();
+    for ecosystem in ecosystems {
+        let workspace_packages = graph
+            .packages()
+            .filter(|package| package.ecosystem == ecosystem)
+            .cloned()
+            .collect::<Vec<_>>();
+        let released_packages = plan
+            .packages()
+            .iter()
+            .filter(|release| release.ecosystem == ecosystem)
+            .map(|release| release.id.clone())
+            .collect::<Vec<_>>();
+        if released_packages.is_empty() {
+            continue;
+        }
+        let adapter = registry.create_adapter(&ecosystem)?;
+        file_edits.extend(adapter.plan_edits(EcosystemPlanInput {
+            project_root,
+            workspace_packages: &workspace_packages,
+            released_packages: &released_packages,
+            versions: plan.versions(),
+        })?);
+    }
     Ok(plan.with_file_edits(file_edits)?)
 }
 
@@ -272,6 +233,8 @@ pub enum ReleasePlanningError {
     Domain(#[from] ReleasePlannerError),
     #[error(transparent)]
     Adapter(#[from] AdapterError),
+    #[error(transparent)]
+    Registry(#[from] ResolverRegistryError),
     #[error("invalid release plan")]
     ReleasePlan(#[from] ReleasePlanError),
 }
@@ -341,7 +304,7 @@ mod tests {
     fn package(path: &str) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Rust,
+            resolver: ResolverType::Rust.into(),
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -353,7 +316,7 @@ mod tests {
     fn python_package(path: &str) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Python,
+            resolver: ResolverType::Python.into(),
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -365,7 +328,7 @@ mod tests {
     fn node_package(path: &str, depends_on: &[&str]) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Nodejs,
+            resolver: ResolverType::Nodejs.into(),
             channel: ResolverReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -495,6 +458,7 @@ mod tests {
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("core-major".to_string(), &root);
@@ -565,6 +529,7 @@ mod tests {
                 ("private".to_string(), package("crates/private")),
                 ("public".to_string(), package("crates/public")),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("private-feature".to_string(), &root);
@@ -621,6 +586,7 @@ mod tests {
                 ),
                 ("rust-core".to_string(), package("rust-core")),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("native-core-minor".to_string(), &root);
@@ -674,6 +640,7 @@ mod tests {
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("core-major".to_string(), &root);
@@ -724,6 +691,7 @@ mod tests {
                 ("app".to_string(), node_package("app", &[])),
                 ("core".to_string(), node_package("core", &[])),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("core-major".to_string(), &root);
@@ -770,6 +738,7 @@ mod tests {
                 ("app-id".to_string(), package("app")),
                 ("core-id".to_string(), package("core")),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("core-major".to_string(), &root);
@@ -829,6 +798,7 @@ mod tests {
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([("native-example".to_string(), python_package("."))]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("python-patch".to_string(), &root);
@@ -869,6 +839,7 @@ mod tests {
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([("example".to_string(), package)]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
         let mut changeset = Changeset::new("python-post".to_string(), &root);

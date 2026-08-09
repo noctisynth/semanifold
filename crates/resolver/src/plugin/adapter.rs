@@ -871,12 +871,11 @@ mod tests {
         let plugin_path = Utf8Path::new("plugins/example.js");
         fs::create_dir_all(root.join("plugins")).unwrap();
         fs::write(root.join(plugin_path), source).unwrap();
-        let definition = PluginDefinition::new(
-            EcosystemId::new("com.example.game").unwrap(),
-            plugin_path,
-            digest(source.as_bytes()),
-        )
-        .unwrap();
+        let definition =
+            PluginDefinition::new(EcosystemId::new("com.example.game").unwrap(), plugin_path)
+                .unwrap()
+                .with_sha256(digest(source.as_bytes()))
+                .unwrap();
         let registry =
             PluginRegistry::load(root, [definition], BoaPluginRuntime::default()).unwrap();
         registry

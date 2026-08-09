@@ -469,9 +469,9 @@
 
 - [x] 决定首版使用 JavaScript、Lua 或同时支持二者，并确定沙箱、capability、资源限制与超时策略
 - [x] 决定插件分发、版本锁定、协议兼容周期，以及首版版本模型是否限定为 SemVer
-- [ ] 将闭集 `Ecosystem` / `ResolverType` 演进为稳定 `EcosystemId`，同时保留内置生态固定 ID
+- [x] 将闭集 `Ecosystem` / `ResolverType` 演进为稳定 `EcosystemId`，同时保留内置生态固定 ID
   - [x] 领域 package、plan/context、config sync 与 adapter 使用开放 `EcosystemId`
-  - [ ] package/resolver 配置与 registry 从内置 `ResolverType` 开放到动态 ID
+  - [x] package/resolver 配置与 registry 从内置 `ResolverType` 开放到动态 ID
 - [x] 定义带 schema version 的插件元数据及 discover、inspect、plan-edits 序列化协议
 - [x] 定义插件结构化诊断，携带插件、操作、package 和相关路径
 
@@ -480,18 +480,18 @@
 - [x] 实现 Boa 脚本运行时 host 和稳定插件注册表，加载结果不得依赖发现顺序
   - [x] 嵌入 Boa，以拒绝 import 的 loader 执行单文件 ESM，并支持同步或异步默认入口
   - [x] 注入受项目边界与预算约束的文件 capability
-  - [x] 以稳定 ecosystem ID、仓库内相对路径和 SHA-256 内容锁加载插件注册表
+  - [x] 以稳定 ecosystem ID、仓库内相对路径和可选 SHA-256 内容锁加载插件注册表
   - [x] 注入默认拒绝、按 HTTPS origin 授权且可替换 backend 的 `fetch` capability
 - [x] 将插件协议适配到现有 `EcosystemAdapter` 边界，不允许插件恢复全局 resolver 职责
-- [ ] 禁止插件直接写文件、运行发布命令、取得 registry/Forge 宿主凭据或创建 Forge release
-- [ ] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
-- [ ] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID
+- [x] 禁止插件直接写文件、运行发布命令、取得 registry/Forge 宿主凭据或创建 Forge release
+- [x] 对插件返回的 package、依赖和候选 `FileEdit` 复用 host 的路径、hash、冲突和依赖图校验
+- [x] 让 discovery、workspace load、`config sync` 和 version 规划支持动态 ecosystem ID
 
 ### 阶段完成条件
 
-- [ ] 至少一个仓库外脚本插件完成单包、workspace、内部依赖和版本修改 fixture
-- [ ] 同一插件输入与 capability 响应记录重复运行产生稳定结果，越界路径、非法 edit、预算超限和协议不兼容均返回结构化错误
-- [ ] ecosystem 插件不改变 publish/pre-check/Forge 的既有应用层职责边界
+- [x] 至少一个仓库外脚本插件完成单包、workspace、内部依赖和版本修改 fixture
+- [x] 同一插件输入与 capability 响应记录重复运行产生稳定结果，越界路径、非法 edit、预算超限和协议不兼容均返回结构化错误
+- [x] ecosystem 插件不改变 publish/pre-check/Forge 的既有应用层职责边界
 
 ## 最终验收
 
@@ -516,7 +516,7 @@
 - [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 - [x] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
-- [ ] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning
+- [x] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning
 
 ## 实施前需要确认的决策
 

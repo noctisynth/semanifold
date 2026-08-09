@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use reqwest::Url;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::runtime::{Builder as RuntimeBuilder, Handle, Runtime};
 use tokio::sync::oneshot;
 
@@ -104,6 +105,25 @@ impl FromStr for PluginHttpOrigin {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
+    }
+}
+
+impl Serialize for PluginHttpOrigin {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for PluginHttpOrigin {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(&value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -851,6 +871,14 @@ mod tests {
     fn canonicalizes_exact_https_origins_and_rejects_unsafe_shapes() {
         let origin = PluginHttpOrigin::parse("https://EXAMPLE.com:443/").unwrap();
         assert_eq!(origin.as_str(), "https://example.com");
+        assert_eq!(
+            serde_json::to_string(&origin).unwrap(),
+            r#""https://example.com""#
+        );
+        assert_eq!(
+            serde_json::from_str::<PluginHttpOrigin>(r#""https://EXAMPLE.com:443/""#).unwrap(),
+            origin
+        );
         assert!(matches!(
             PluginHttpOrigin::parse("http://example.com"),
             Err(PluginHttpError::InvalidOrigin { .. })

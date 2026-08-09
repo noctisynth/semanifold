@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
+use semifold_core::EcosystemId;
 use semifold_resolver::{
     config::{self, BranchesConfig, CommandConfig, PreCheckConfig, ResolverConfig, StdioType},
     resolver::ResolverType,
@@ -51,8 +52,12 @@ pub fn plan_init(
     options: InitOptions,
 ) -> Result<InitPlan, InitPlanningError> {
     let resolvers = ResolverRegistry::normalize_selection(&options.resolvers);
+    let ecosystems = resolvers
+        .iter()
+        .map(|resolver| resolver.ecosystem())
+        .collect::<Vec<_>>();
     let discovery = PackageDiscoveryService::default()
-        .discover(location.root.as_std_path(), &resolvers)
+        .discover(location.root.as_std_path(), &ecosystems)
         .map_err(InitPlanningError::Discovery)?;
     let packages = discovery
         .default_package_configs()
@@ -66,6 +71,7 @@ pub fn plan_init(
         tags: options.tags,
         changelog: semifold_changelog::default_changelog_config(),
         packages,
+        plugins: BTreeMap::new(),
         resolver,
     };
     let config_path = options.target.join("config.toml");
@@ -115,11 +121,11 @@ fn render_workflow(
     )
 }
 
-fn resolver_configs(resolvers: &[ResolverType]) -> BTreeMap<ResolverType, ResolverConfig> {
+fn resolver_configs(resolvers: &[ResolverType]) -> BTreeMap<EcosystemId, ResolverConfig> {
     resolvers
         .iter()
         .copied()
-        .map(|resolver| (resolver, resolver_config(resolver)))
+        .map(|resolver| (resolver.ecosystem(), resolver_config(resolver)))
         .collect()
 }
 
@@ -276,7 +282,7 @@ mod tests {
         assert!(matches!(
             parsed
                 .resolver
-                .get(&ResolverType::Nodejs)
+                .get(&EcosystemId::NODE)
                 .and_then(|resolver| resolver.pre_check.as_ref()),
             Some(PreCheckConfig::Http { retry, .. }) if retry == &[2, 5, 15, 30]
         ));

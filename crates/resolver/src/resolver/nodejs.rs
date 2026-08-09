@@ -14,7 +14,6 @@ use crate::{
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::ResolverType,
 };
 
 #[derive(Deserialize)]
@@ -41,7 +40,7 @@ impl NodejsResolver {
     fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Nodejs,
+            resolver: EcosystemId::NODE,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -419,7 +418,7 @@ impl NodejsResolver {
                 root,
                 &PackageConfig {
                     path: ".".into(),
-                    resolver: ResolverType::Nodejs,
+                    resolver: EcosystemId::NODE,
                     channel: ReleaseChannel::Stable,
                     channel_bump: None,
                     assets: vec![],
@@ -435,7 +434,7 @@ impl NodejsResolver {
             root,
             &PackageConfig {
                 path: ".".into(),
-                resolver: ResolverType::Nodejs,
+                resolver: EcosystemId::NODE,
                 channel: ReleaseChannel::Stable,
                 channel_bump: None,
                 assets: vec![],
@@ -471,7 +470,7 @@ impl NodejsResolver {
                         root,
                         &PackageConfig {
                             path: rel_path,
-                            resolver: ResolverType::Nodejs,
+                            resolver: EcosystemId::NODE,
                             channel: ReleaseChannel::Stable,
                             channel_bump: None,
                             assets: vec![],
@@ -520,7 +519,7 @@ mod tests {
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Nodejs,
+            resolver: ResolverType::Nodejs.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

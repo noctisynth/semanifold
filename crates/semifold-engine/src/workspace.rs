@@ -14,7 +14,7 @@ use semifold_resolver::{
 use thiserror::Error;
 
 use crate::{
-    discovery::ResolverRegistry,
+    discovery::{ResolverRegistry, ResolverRegistryError},
     package_path::{PackagePathError, normalize_package_path},
 };
 
@@ -28,20 +28,28 @@ pub fn load_workspace_graph(
     root: &Path,
     config: &Config,
 ) -> Result<WorkspaceGraph, WorkspaceLoadError> {
+    let registry = ResolverRegistry::load(root, config)?;
+    load_workspace_graph_with_registry(root, config, &registry)
+}
+
+pub(crate) fn load_workspace_graph_with_registry(
+    root: &Path,
+    config: &Config,
+    registry: &ResolverRegistry,
+) -> Result<WorkspaceGraph, WorkspaceLoadError> {
     let mut resolved = Vec::with_capacity(config.packages.len());
-    let registry = ResolverRegistry;
     for (id, package_config) in &config.packages {
         let project_root = camino::Utf8PathBuf::from_path_buf(root.to_path_buf())
             .map_err(|path| WorkspaceLoadError::NonUtf8Path { path })?;
         let path = normalize_package_path(root, &package_config.path)?;
-        let inspection =
-            registry
-                .create_adapter(package_config.resolver)
-                .inspect(&PackageLocation {
-                    id: PackageId::new(id),
-                    project_root,
-                    path,
-                })?;
+        let inspection = registry
+            .create_adapter(&package_config.resolver)
+            .map_err(WorkspaceLoadError::Registry)?
+            .inspect(&PackageLocation {
+                id: PackageId::new(id),
+                project_root,
+                path,
+            })?;
         resolved.push(ConfiguredInspection {
             package: inspection,
             explicit_dependencies: package_config.depends_on.clone(),
@@ -132,6 +140,8 @@ pub enum WorkspaceLoadError {
     #[error(transparent)]
     Adapter(#[from] AdapterError),
     #[error(transparent)]
+    Registry(#[from] ResolverRegistryError),
+    #[error(transparent)]
     Domain(#[from] WorkspaceGraphError),
 }
 
@@ -188,7 +198,7 @@ mod tests {
     fn package(path: &str, resolver: ResolverType) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver,
+            resolver: resolver.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -268,6 +278,7 @@ mod tests {
                     package("rust/core", ResolverType::Rust),
                 ),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
 
@@ -352,6 +363,7 @@ mod tests {
                     package("rust/core", ResolverType::Rust),
                 ),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
 
@@ -388,6 +400,7 @@ mod tests {
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([("node-binding".to_string(), binding)]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
 
@@ -430,6 +443,7 @@ mod tests {
                 ("node-binding".to_string(), node),
                 ("rust-core".to_string(), rust),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
 
@@ -469,6 +483,7 @@ mod tests {
                 ("first".to_string(), package("first", ResolverType::Rust)),
                 ("second".to_string(), package("second", ResolverType::Rust)),
             ]),
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         };
 

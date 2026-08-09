@@ -19,7 +19,7 @@ use super::runtime::{BoaPluginRuntime, MAX_SOURCE_BYTES, PluginRuntimeError};
 pub struct PluginDefinition {
     ecosystem: EcosystemId,
     path: Utf8PathBuf,
-    sha256: String,
+    sha256: Option<String>,
     allowed_origins: BTreeSet<PluginHttpOrigin>,
 }
 
@@ -27,24 +27,31 @@ impl PluginDefinition {
     pub fn new(
         ecosystem: EcosystemId,
         path: impl Into<Utf8PathBuf>,
-        sha256: impl Into<String>,
     ) -> Result<Self, PluginRegistryError> {
         if ecosystem.is_builtin() {
             return Err(PluginRegistryError::BuiltInEcosystemReserved { ecosystem });
         }
         let path = path.into();
         validate_plugin_path(&path)?;
-        let mut sha256 = sha256.into();
-        if sha256.len() != 64 || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(PluginRegistryError::InvalidDigest { digest: sha256 });
-        }
-        sha256.make_ascii_lowercase();
         Ok(Self {
             ecosystem,
             path,
-            sha256,
+            sha256: None,
             allowed_origins: BTreeSet::new(),
         })
+    }
+
+    pub fn with_sha256(mut self, sha256: impl Into<String>) -> Result<Self, PluginRegistryError> {
+        let sha256 = sha256.into();
+        if sha256.len() != 64
+            || !sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(PluginRegistryError::InvalidDigest { digest: sha256 });
+        }
+        self.sha256 = Some(sha256);
+        Ok(self)
     }
 
     #[must_use]
@@ -67,8 +74,8 @@ impl PluginDefinition {
     }
 
     #[must_use]
-    pub fn sha256(&self) -> &str {
-        &self.sha256
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
     }
 
     #[must_use]
@@ -82,6 +89,7 @@ impl PluginDefinition {
 pub struct LoadedPlugin {
     project_root: Utf8PathBuf,
     definition: PluginDefinition,
+    content_sha256: String,
     metadata: PluginMetadataV1,
     source: Arc<str>,
     runtime: BoaPluginRuntime,
@@ -92,6 +100,7 @@ impl std::fmt::Debug for LoadedPlugin {
         formatter
             .debug_struct("LoadedPlugin")
             .field("definition", &self.definition)
+            .field("content_sha256", &self.content_sha256)
             .field("metadata", &self.metadata)
             .finish_non_exhaustive()
     }
@@ -111,6 +120,11 @@ impl LoadedPlugin {
     #[must_use]
     pub const fn metadata(&self) -> &PluginMetadataV1 {
         &self.metadata
+    }
+
+    #[must_use]
+    pub fn content_sha256(&self) -> &str {
+        &self.content_sha256
     }
 
     pub fn execute(
@@ -187,7 +201,7 @@ impl PluginRegistry {
 
         let mut plugins = BTreeMap::new();
         for definition in definitions {
-            let source = load_authenticated_source(&project_root, &definition)?;
+            let (source, content_sha256) = load_authenticated_source(&project_root, &definition)?;
             let metadata =
                 runtime
                     .metadata(&source)
@@ -223,6 +237,7 @@ impl PluginRegistry {
             let plugin = LoadedPlugin {
                 project_root: project_root.clone(),
                 definition,
+                content_sha256,
                 metadata,
                 source: Arc::from(source),
                 runtime: runtime.with_file_client(file_client),
@@ -280,7 +295,7 @@ fn canonical_project_root(root: Utf8PathBuf) -> Result<Utf8PathBuf, PluginRegist
 fn load_authenticated_source(
     project_root: &Utf8Path,
     definition: &PluginDefinition,
-) -> Result<String, PluginRegistryError> {
+) -> Result<(String, String), PluginRegistryError> {
     let configured_path = project_root.join(&definition.path);
     let canonical = std::fs::canonicalize(&configured_path).map_err(|source| {
         PluginRegistryError::ResolvePluginPath {
@@ -348,18 +363,21 @@ fn load_authenticated_source(
     }
 
     let actual = sha256_hex(&bytes);
-    if actual != definition.sha256 {
+    if let Some(expected) = &definition.sha256
+        && &actual != expected
+    {
         return Err(PluginRegistryError::DigestMismatch {
             ecosystem: definition.ecosystem.clone(),
-            expected: definition.sha256.clone(),
+            expected: expected.clone(),
             actual,
         });
     }
-    String::from_utf8(bytes).map_err(|source| PluginRegistryError::InvalidUtf8 {
+    let source = String::from_utf8(bytes).map_err(|source| PluginRegistryError::InvalidUtf8 {
         ecosystem: definition.ecosystem.clone(),
         path: definition.path.clone(),
         source,
-    })
+    })?;
+    Ok((source, actual))
 }
 
 fn validate_plugin_path(path: &Utf8Path) -> Result<(), PluginRegistryError> {
@@ -552,12 +570,10 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split('"').next())
             .unwrap();
-        PluginDefinition::new(
-            EcosystemId::new(ecosystem).unwrap(),
-            path,
-            sha256_hex(source.as_bytes()),
-        )
-        .unwrap()
+        PluginDefinition::new(EcosystemId::new(ecosystem).unwrap(), path)
+            .unwrap()
+            .with_sha256(sha256_hex(source.as_bytes()))
+            .unwrap()
     }
 
     fn discover_request() -> PluginRequestV1 {
@@ -608,6 +624,27 @@ mod tests {
             .unwrap()
             .execute(&discover_request())
             .unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn loads_without_a_configured_digest_and_records_the_actual_content_hash() {
+        let root = fixture_root("optional-digest");
+        let source = plugin_source("com.example.unpinned", "data/*.json");
+        fs::write(root.join("plugin.js"), &source).unwrap();
+        let definition = PluginDefinition::new(
+            EcosystemId::new("com.example.unpinned").unwrap(),
+            "plugin.js",
+        )
+        .unwrap();
+        assert_eq!(definition.sha256(), None);
+
+        let registry =
+            PluginRegistry::load(root.clone(), [definition], BoaPluginRuntime::default()).unwrap();
+        let plugin = registry
+            .get(&EcosystemId::new("com.example.unpinned").unwrap())
+            .unwrap();
+        assert_eq!(plugin.content_sha256(), sha256_hex(source.as_bytes()));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -681,8 +718,9 @@ mod tests {
         let definition = PluginDefinition::new(
             EcosystemId::new("com.example.invalid").unwrap(),
             "invalid.js",
-            "0".repeat(64),
         )
+        .unwrap()
+        .with_sha256("0".repeat(64))
         .unwrap();
 
         assert!(matches!(
@@ -697,12 +735,11 @@ mod tests {
         let root = fixture_root("source-limits");
         let large = vec![b'x'; MAX_SOURCE_BYTES + 1];
         fs::write(root.join("large.js"), &large).unwrap();
-        let large_definition = PluginDefinition::new(
-            EcosystemId::new("com.example.large").unwrap(),
-            "large.js",
-            sha256_hex(&large),
-        )
-        .unwrap();
+        let large_definition =
+            PluginDefinition::new(EcosystemId::new("com.example.large").unwrap(), "large.js")
+                .unwrap()
+                .with_sha256(sha256_hex(&large))
+                .unwrap();
         assert!(matches!(
             PluginRegistry::load(
                 root.clone(),
@@ -717,8 +754,9 @@ mod tests {
         let utf8_definition = PluginDefinition::new(
             EcosystemId::new("com.example.invalid-utf8").unwrap(),
             "invalid-utf8.js",
-            sha256_hex(&invalid_utf8),
         )
+        .unwrap()
+        .with_sha256(sha256_hex(&invalid_utf8))
         .unwrap();
         assert!(matches!(
             PluginRegistry::load(root.clone(), [utf8_definition], BoaPluginRuntime::default()),
@@ -732,18 +770,15 @@ mod tests {
         let root = fixture_root("stable-errors");
         fs::write(root.join("alpha.js"), "invalid alpha").unwrap();
         fs::write(root.join("zeta.js"), "invalid zeta").unwrap();
-        let alpha = PluginDefinition::new(
-            EcosystemId::new("com.example.alpha").unwrap(),
-            "alpha.js",
-            "0".repeat(64),
-        )
-        .unwrap();
-        let zeta = PluginDefinition::new(
-            EcosystemId::new("com.example.zeta").unwrap(),
-            "zeta.js",
-            "0".repeat(64),
-        )
-        .unwrap();
+        let alpha =
+            PluginDefinition::new(EcosystemId::new("com.example.alpha").unwrap(), "alpha.js")
+                .unwrap()
+                .with_sha256("0".repeat(64))
+                .unwrap();
+        let zeta = PluginDefinition::new(EcosystemId::new("com.example.zeta").unwrap(), "zeta.js")
+            .unwrap()
+            .with_sha256("0".repeat(64))
+            .unwrap();
 
         assert!(matches!(
             PluginRegistry::load(root.clone(), [zeta, alpha], BoaPluginRuntime::default()),
@@ -761,8 +796,9 @@ mod tests {
         let mismatched = PluginDefinition::new(
             EcosystemId::new("com.example.configured").unwrap(),
             declared.path().to_owned(),
-            declared.sha256(),
         )
+        .unwrap()
+        .with_sha256(declared.sha256().unwrap())
         .unwrap();
         assert!(matches!(
             PluginRegistry::load(root.clone(), [mismatched], BoaPluginRuntime::default()),
@@ -784,27 +820,26 @@ mod tests {
     #[test]
     fn validates_definition_identity_path_and_digest() {
         assert!(matches!(
-            PluginDefinition::new(
-                EcosystemId::new("rust").unwrap(),
-                "plugin.js",
-                "0".repeat(64)
-            ),
+            PluginDefinition::new(EcosystemId::new("rust").unwrap(), "plugin.js"),
             Err(PluginRegistryError::BuiltInEcosystemReserved { .. })
         ));
         assert!(matches!(
             PluginDefinition::new(
                 EcosystemId::new("com.example.plugin").unwrap(),
-                "../plugin.js",
-                "0".repeat(64)
+                "../plugin.js"
             ),
             Err(PluginRegistryError::InvalidPluginPath { .. })
         ));
         assert!(matches!(
-            PluginDefinition::new(
-                EcosystemId::new("com.example.plugin").unwrap(),
-                "plugin.js",
-                "not-a-digest"
-            ),
+            PluginDefinition::new(EcosystemId::new("com.example.plugin").unwrap(), "plugin.js")
+                .unwrap()
+                .with_sha256("not-a-digest"),
+            Err(PluginRegistryError::InvalidDigest { .. })
+        ));
+        assert!(matches!(
+            PluginDefinition::new(EcosystemId::new("com.example.plugin").unwrap(), "plugin.js")
+                .unwrap()
+                .with_sha256("A".repeat(64)),
             Err(PluginRegistryError::InvalidDigest { .. })
         ));
     }
@@ -822,8 +857,9 @@ mod tests {
         let definition = PluginDefinition::new(
             EcosystemId::new("com.example.outside").unwrap(),
             "plugin.js",
-            sha256_hex(source.as_bytes()),
         )
+        .unwrap()
+        .with_sha256(sha256_hex(source.as_bytes()))
         .unwrap();
 
         assert!(matches!(

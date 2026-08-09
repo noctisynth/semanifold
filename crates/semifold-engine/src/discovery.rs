@@ -8,7 +8,11 @@ use std::{
 use semifold_core::{DiscoveredPackage, EcosystemId, PackageId};
 use semifold_resolver::{
     adapter::{AdapterError, EcosystemAdapter},
-    config::{PackageConfig, ReleaseChannel},
+    config::{Config, ConfigValidationError, PackageConfig, ReleaseChannel},
+    plugin::{
+        registry::{PluginRegistry, PluginRegistryError},
+        runtime::BoaPluginRuntime,
+    },
     resolver::{
         ResolverType, cpp::CppResolver, nodejs::NodejsResolver, python::PythonResolver,
         rust::RustResolver,
@@ -19,7 +23,7 @@ use crate::package_path::{PackagePathError, normalize_package_path};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PackageDiscovery {
-    pub resolvers: Vec<ResolverType>,
+    pub resolvers: Vec<EcosystemId>,
     pub packages: Vec<DiscoveredPackage>,
 }
 
@@ -29,15 +33,9 @@ impl PackageDiscovery {
     ) -> Result<BTreeMap<String, PackageConfig>, PackageDiscoveryError> {
         let mut configs = BTreeMap::new();
         for package in &self.packages {
-            let resolver =
-                ResolverRegistry::resolver_type(&package.ecosystem).ok_or_else(|| {
-                    PackageDiscoveryError::ResolverUnavailable {
-                        ecosystem: package.ecosystem.clone(),
-                    }
-                })?;
             let config = PackageConfig {
                 path: PathBuf::from(package.path.as_str()),
-                resolver,
+                resolver: package.ecosystem.clone(),
                 channel: ReleaseChannel::Stable,
                 channel_bump: None,
                 assets: vec![],
@@ -55,7 +53,9 @@ impl PackageDiscovery {
 }
 
 #[derive(Default)]
-pub struct ResolverRegistry;
+pub struct ResolverRegistry {
+    plugins: Option<PluginRegistry>,
+}
 
 impl ResolverRegistry {
     pub fn normalize_selection(resolvers: &[ResolverType]) -> Vec<ResolverType> {
@@ -65,32 +65,68 @@ impl ResolverRegistry {
         resolvers
     }
 
-    pub const fn ecosystem(resolver: ResolverType) -> EcosystemId {
-        match resolver {
-            ResolverType::Rust => EcosystemId::RUST,
-            ResolverType::Nodejs => EcosystemId::NODE,
-            ResolverType::Python => EcosystemId::PYTHON,
-            ResolverType::Cpp => EcosystemId::CPP,
+    pub fn load(project_root: &Path, config: &Config) -> Result<Self, ResolverRegistryError> {
+        let definitions = config.plugin_definitions()?;
+        if definitions.is_empty() {
+            return Ok(Self::default());
         }
+        let project_root = camino::Utf8PathBuf::from_path_buf(project_root.to_path_buf())
+            .map_err(|path| ResolverRegistryError::NonUtf8ProjectRoot { path })?;
+        let plugins = PluginRegistry::load_with_reqwest(
+            project_root,
+            definitions,
+            BoaPluginRuntime::default(),
+        )?;
+        Ok(Self {
+            plugins: Some(plugins),
+        })
     }
 
-    fn resolver_type(ecosystem: &EcosystemId) -> Option<ResolverType> {
-        match ecosystem.as_str() {
-            "rust" => Some(ResolverType::Rust),
-            "nodejs" => Some(ResolverType::Nodejs),
-            "python" => Some(ResolverType::Python),
-            "cpp" => Some(ResolverType::Cpp),
-            _ => None,
-        }
+    pub fn create_adapter(
+        &self,
+        ecosystem: &EcosystemId,
+    ) -> Result<Box<dyn EcosystemAdapter>, ResolverRegistryError> {
+        let adapter: Box<dyn EcosystemAdapter> = match ecosystem.as_str() {
+            "rust" => Box::new(RustResolver),
+            "nodejs" => Box::new(NodejsResolver),
+            "python" => Box::new(PythonResolver),
+            "cpp" => Box::new(CppResolver),
+            _ => {
+                let plugin = self
+                    .plugins
+                    .as_ref()
+                    .and_then(|plugins| plugins.get(ecosystem))
+                    .ok_or_else(|| ResolverRegistryError::AdapterUnavailable {
+                        ecosystem: ecosystem.clone(),
+                    })?;
+                Box::new(plugin.clone())
+            }
+        };
+        Ok(adapter)
     }
+}
 
-    pub fn create_adapter(&self, resolver: ResolverType) -> Box<dyn EcosystemAdapter> {
-        match resolver {
-            ResolverType::Rust => Box::new(RustResolver),
-            ResolverType::Nodejs => Box::new(NodejsResolver),
-            ResolverType::Python => Box::new(PythonResolver),
-            ResolverType::Cpp => Box::new(CppResolver),
-        }
+#[derive(Debug, thiserror::Error)]
+pub enum ResolverRegistryError {
+    #[error("resolver registry project root is not UTF-8: {path:?}")]
+    NonUtf8ProjectRoot { path: PathBuf },
+    #[error(transparent)]
+    Config(Box<ConfigValidationError>),
+    #[error(transparent)]
+    Plugin(Box<PluginRegistryError>),
+    #[error("no adapter is registered for ecosystem {ecosystem}")]
+    AdapterUnavailable { ecosystem: EcosystemId },
+}
+
+impl From<ConfigValidationError> for ResolverRegistryError {
+    fn from(source: ConfigValidationError) -> Self {
+        Self::Config(Box::new(source))
+    }
+}
+
+impl From<PluginRegistryError> for ResolverRegistryError {
+    fn from(source: PluginRegistryError) -> Self {
+        Self::Plugin(Box::new(source))
     }
 }
 
@@ -100,14 +136,26 @@ pub struct PackageDiscoveryService {
 }
 
 impl PackageDiscoveryService {
+    pub fn from_config(
+        project_root: &Path,
+        config: &Config,
+    ) -> Result<Self, PackageDiscoveryError> {
+        Ok(Self {
+            registry: ResolverRegistry::load(project_root, config)
+                .map_err(PackageDiscoveryError::Registry)?,
+        })
+    }
+
     pub fn discover(
         &self,
         project_root: &Path,
-        resolvers: &[ResolverType],
+        ecosystems: &[EcosystemId],
     ) -> Result<PackageDiscovery, PackageDiscoveryError> {
-        let resolvers = ResolverRegistry::normalize_selection(resolvers);
+        let mut resolvers = ecosystems.to_vec();
+        resolvers.sort();
+        resolvers.dedup();
         let mut packages = Vec::new();
-        for resolver_type in &resolvers {
+        for ecosystem in &resolvers {
             let root = camino::Utf8Path::from_path(project_root).ok_or_else(|| {
                 PackageDiscoveryError::InvalidProjectRoot {
                     path: project_root.to_path_buf(),
@@ -115,17 +163,18 @@ impl PackageDiscoveryService {
             })?;
             let mut discovered = self
                 .registry
-                .create_adapter(*resolver_type)
+                .create_adapter(ecosystem)
+                .map_err(PackageDiscoveryError::Registry)?
                 .discover(root)
                 .map_err(|source| PackageDiscoveryError::Adapter {
-                    resolver: *resolver_type,
+                    ecosystem: ecosystem.clone(),
                     source,
                 })?
                 .into_iter()
                 .map(|package| {
                     let path = normalize_package_path(project_root, package.path.as_std_path())
                         .map_err(|source| PackageDiscoveryError::PackagePath {
-                            resolver: *resolver_type,
+                            ecosystem: ecosystem.clone(),
                             package: package.manifest_name.clone(),
                             source,
                         })?;
@@ -150,30 +199,28 @@ impl PackageDiscoveryService {
 #[derive(Debug)]
 pub enum PackageDiscoveryError {
     Adapter {
-        resolver: ResolverType,
+        ecosystem: EcosystemId,
         source: AdapterError,
     },
     InvalidProjectRoot {
         path: PathBuf,
     },
     PackagePath {
-        resolver: ResolverType,
+        ecosystem: EcosystemId,
         package: String,
         source: PackagePathError,
     },
     DuplicatePackageId {
         package: PackageId,
     },
-    ResolverUnavailable {
-        ecosystem: EcosystemId,
-    },
+    Registry(ResolverRegistryError),
 }
 
 impl fmt::Display for PackageDiscoveryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Adapter { resolver, source } => {
-                write!(formatter, "{resolver} package discovery failed: {source}")
+            Self::Adapter { ecosystem, source } => {
+                write!(formatter, "{ecosystem} package discovery failed: {source}")
             }
             Self::InvalidProjectRoot { path } => {
                 write!(
@@ -183,12 +230,12 @@ impl fmt::Display for PackageDiscoveryError {
                 )
             }
             Self::PackagePath {
-                resolver,
+                ecosystem,
                 package,
                 source,
             } => write!(
                 formatter,
-                "{resolver} package discovery returned an invalid path for {package}: {source}"
+                "{ecosystem} package discovery returned an invalid path for {package}: {source}"
             ),
             Self::DuplicatePackageId { package } => {
                 write!(
@@ -196,10 +243,7 @@ impl fmt::Display for PackageDiscoveryError {
                     "package discovery returned duplicate package id: {package}"
                 )
             }
-            Self::ResolverUnavailable { ecosystem } => write!(
-                formatter,
-                "no configured resolver is available for dynamic ecosystem {ecosystem}"
-            ),
+            Self::Registry(source) => source.fmt(formatter),
         }
     }
 }
@@ -209,9 +253,8 @@ impl Error for PackageDiscoveryError {
         match self {
             Self::Adapter { source, .. } => Some(source),
             Self::PackagePath { source, .. } => Some(source),
-            Self::InvalidProjectRoot { .. }
-            | Self::DuplicatePackageId { .. }
-            | Self::ResolverUnavailable { .. } => None,
+            Self::Registry(source) => Some(source),
+            Self::InvalidProjectRoot { .. } | Self::DuplicatePackageId { .. } => None,
         }
     }
 }
@@ -267,18 +310,11 @@ mod tests {
         let discovery = PackageDiscoveryService::default()
             .discover(
                 &root.0,
-                &[
-                    ResolverType::Nodejs,
-                    ResolverType::Rust,
-                    ResolverType::Nodejs,
-                ],
+                &[EcosystemId::NODE, EcosystemId::RUST, EcosystemId::NODE],
             )
             .unwrap();
 
-        assert_eq!(
-            discovery.resolvers,
-            [ResolverType::Rust, ResolverType::Nodejs]
-        );
+        assert_eq!(discovery.resolvers, [EcosystemId::RUST, EcosystemId::NODE]);
         assert_eq!(
             discovery.packages,
             [
@@ -299,7 +335,7 @@ mod tests {
     #[test]
     fn creates_minimal_default_package_configs() {
         let discovery = PackageDiscovery {
-            resolvers: vec![ResolverType::Rust],
+            resolvers: vec![EcosystemId::RUST],
             packages: vec![DiscoveredPackage {
                 id: PackageId::new("app"),
                 ecosystem: EcosystemId::RUST,
@@ -310,7 +346,7 @@ mod tests {
         let configs = discovery.default_package_configs().unwrap();
 
         assert_eq!(configs["app"].path, PathBuf::from("crates/app"));
-        assert_eq!(configs["app"].resolver, ResolverType::Rust);
+        assert_eq!(configs["app"].resolver, EcosystemId::RUST);
         assert!(matches!(configs["app"].channel, ReleaseChannel::Stable));
         assert!(configs["app"].assets.is_empty());
     }
@@ -318,7 +354,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_ids_when_building_config_tables() {
         let discovery = PackageDiscovery {
-            resolvers: vec![ResolverType::Rust, ResolverType::Nodejs],
+            resolvers: vec![EcosystemId::RUST, EcosystemId::NODE],
             packages: vec![
                 DiscoveredPackage {
                     id: PackageId::new("shared"),
@@ -341,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_dynamic_ecosystems_until_the_plugin_registry_is_connected() {
+    fn creates_default_package_configs_for_dynamic_ecosystems() {
         let ecosystem = EcosystemId::new("com.example.engine").unwrap();
         let discovery = PackageDiscovery {
             resolvers: Vec::new(),
@@ -352,11 +388,8 @@ mod tests {
             }],
         };
 
-        assert!(matches!(
-            discovery.default_package_configs(),
-            Err(PackageDiscoveryError::ResolverUnavailable { ecosystem: actual })
-                if actual == ecosystem
-        ));
+        let configs = discovery.default_package_configs().unwrap();
+        assert_eq!(configs["game"].resolver, ecosystem);
     }
 
     #[test]
@@ -375,11 +408,11 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            PackageDiscoveryService::default().discover(&root.0, &[ResolverType::Nodejs]),
+            PackageDiscoveryService::default().discover(&root.0, &[EcosystemId::NODE]),
             Err(PackageDiscoveryError::Adapter {
-                resolver: ResolverType::Nodejs,
+                ecosystem,
                 ..
-            })
+            }) if ecosystem == EcosystemId::NODE
         ));
     }
 }

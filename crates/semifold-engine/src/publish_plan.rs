@@ -7,7 +7,6 @@ use semifold_core::{CiContext, EcosystemId, PackageId, RepositoryContext, Worksp
 use semifold_resolver::{
     config::{Asset, CommandConfig, Config, PreCheckConfig, StdioType},
     error::ResolveError,
-    resolver::ResolverType,
 };
 use semver::Version;
 use serde::Serialize;
@@ -154,7 +153,7 @@ pub async fn plan_publish(
         })?;
         let resolver_config = config.resolver.get(&package_config.resolver).ok_or(
             PublishPlanError::ResolverConfigMissing {
-                resolver: package_config.resolver,
+                resolver: package_config.resolver.clone(),
             },
         )?;
         let package = PublishPackageContext {
@@ -424,7 +423,7 @@ pub enum PublishPlanError {
     #[error("configured publish package is missing: {package}")]
     ConfiguredPackageMissing { package: PackageId },
     #[error("resolver configuration is missing for {resolver}")]
-    ResolverConfigMissing { resolver: ResolverType },
+    ResolverConfigMissing { resolver: EcosystemId },
     #[error("planned package tag is not a valid Git reference: {tag}")]
     InvalidTag { tag: String },
     #[error("publish path is not valid UTF-8: {path:?}")]
@@ -488,7 +487,7 @@ mod tests {
     fn package(path: &str) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Rust,
+            resolver: ResolverType::Rust.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -532,7 +531,8 @@ mod tests {
                 ("app".to_string(), package("app")),
                 ("core".to_string(), package("core")),
             ]),
-            resolver: BTreeMap::from([(ResolverType::Rust, resolver(pre_check))]),
+            plugins: BTreeMap::new(),
+            resolver: BTreeMap::from([(EcosystemId::RUST, resolver(pre_check))]),
         }
     }
 
@@ -566,7 +566,7 @@ mod tests {
         let mut config = config("https://registry.test/{{ package.name }}/{{ package.version }}");
         let Some(PreCheckConfig::Http { retry, .. }) = config
             .resolver
-            .get_mut(&ResolverType::Rust)
+            .get_mut(&EcosystemId::RUST)
             .and_then(|resolver| resolver.pre_check.as_mut())
         else {
             panic!("Rust resolver must use an HTTP pre-check");
@@ -648,7 +648,7 @@ mod tests {
         let mut config = config("https://registry.test/unused");
         config
             .resolver
-            .get_mut(&ResolverType::Rust)
+            .get_mut(&EcosystemId::RUST)
             .expect("Rust resolver exists in test config")
             .pre_check = Some(PreCheckConfig::Command {
             command: "check-{{ package.name }}".to_string(),

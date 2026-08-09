@@ -16,7 +16,6 @@ use crate::{
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::ResolverType,
 };
 
 #[derive(Deserialize)]
@@ -71,7 +70,7 @@ impl RustResolver {
     fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Rust,
+            resolver: EcosystemId::RUST,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -607,7 +606,7 @@ impl RustResolver {
                 root,
                 &PackageConfig {
                     path: ".".into(),
-                    resolver: ResolverType::Rust,
+                    resolver: EcosystemId::RUST,
                     channel: ReleaseChannel::Stable,
                     channel_bump: None,
                     assets: vec![],
@@ -655,7 +654,7 @@ impl RustResolver {
                     root,
                     &PackageConfig {
                         path: rel_path.to_path_buf(),
-                        resolver: ResolverType::Rust,
+                        resolver: EcosystemId::RUST,
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: vec![],
@@ -707,7 +706,7 @@ mod tests {
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Rust,
+            resolver: ResolverType::Rust.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

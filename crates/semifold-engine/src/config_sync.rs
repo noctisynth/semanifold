@@ -8,37 +8,42 @@ use std::{
 use camino::Utf8PathBuf;
 use semifold_core::{
     ChangesetId, ChangesetReference, ConfigSyncPlan, ConfigSyncPlanner, ConfiguredPackage,
-    PackageId,
+    EcosystemId, PackageId,
 };
-use semifold_resolver::{changeset::Changeset, config::Config, resolver::ResolverType};
+use semifold_resolver::{changeset::Changeset, config::Config};
 
 use crate::{
-    discovery::{PackageDiscoveryError, PackageDiscoveryService, ResolverRegistry},
+    discovery::{PackageDiscoveryError, PackageDiscoveryService},
     package_path::{PackagePathError, normalize_package_path},
 };
 
 /// Resolver selection and deletion safety for one config sync invocation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConfigSyncScope {
-    resolvers: Vec<ResolverType>,
+    resolvers: Vec<EcosystemId>,
     pub is_complete: bool,
 }
 
 pub fn config_sync_scope(
     config: &Config,
-    requested: &[ResolverType],
+    requested: &[EcosystemId],
 ) -> Result<ConfigSyncScope, ConfigSyncPlanningError> {
-    let enabled =
-        ResolverRegistry::normalize_selection(&config.resolver.keys().copied().collect::<Vec<_>>());
+    let mut enabled = config.resolver.keys().cloned().collect::<Vec<_>>();
+    enabled.extend(config.plugins.keys().cloned());
+    enabled.sort();
+    enabled.dedup();
     let resolvers = if requested.is_empty() {
         enabled.clone()
     } else {
-        ResolverRegistry::normalize_selection(requested)
+        let mut requested = requested.to_vec();
+        requested.sort();
+        requested.dedup();
+        requested
     };
     for resolver in &resolvers {
-        if !config.resolver.contains_key(resolver) {
+        if !config.resolver.contains_key(resolver) && !config.plugins.contains_key(resolver) {
             return Err(ConfigSyncPlanningError::ResolverNotEnabled {
-                resolver: *resolver,
+                resolver: resolver.clone(),
             });
         }
     }
@@ -61,7 +66,7 @@ pub fn plan_config_sync(
     if prune_missing && !scope.is_complete {
         return Err(ConfigSyncPlanningError::IncompletePrune);
     }
-    let selected = scope.resolvers.iter().copied().collect::<BTreeSet<_>>();
+    let selected = scope.resolvers.iter().cloned().collect::<BTreeSet<_>>();
     let configured = config
         .packages
         .iter()
@@ -75,12 +80,13 @@ pub fn plan_config_sync(
             })?;
             Ok(ConfiguredPackage {
                 id: PackageId::new(id),
-                ecosystem: ResolverRegistry::ecosystem(package.resolver),
+                ecosystem: package.resolver.clone(),
                 path,
             })
         })
         .collect::<Result<Vec<_>, ConfigSyncPlanningError>>()?;
-    let discovery = PackageDiscoveryService::default()
+    let discovery = PackageDiscoveryService::from_config(project_root, config)
+        .map_err(ConfigSyncPlanningError::Discovery)?
         .discover(project_root, &scope.resolvers)
         .map_err(ConfigSyncPlanningError::Discovery)?;
     let changesets = changesets
@@ -107,7 +113,7 @@ pub fn plan_config_sync(
 pub enum ConfigSyncPlanningError {
     IncompletePrune,
     ResolverNotEnabled {
-        resolver: ResolverType,
+        resolver: EcosystemId,
     },
     NonUtf8ConfigPath {
         path: PathBuf,
@@ -204,7 +210,7 @@ mod tests {
     fn package(path: &str, resolver: ResolverType) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver,
+            resolver: resolver.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],
@@ -256,13 +262,14 @@ mod tests {
                     package("packages/missing", ResolverType::Nodejs),
                 ),
             ]),
-            resolver: BTreeMap::from([(ResolverType::Rust, resolver_config())]),
+            plugins: BTreeMap::new(),
+            resolver: BTreeMap::from([(EcosystemId::RUST, resolver_config())]),
         };
         let mut changeset = Changeset::new("pending".to_string(), &root.0);
         changeset.add_package("old-name".to_string(), BumpLevel::Patch, None);
 
-        let scope = config_sync_scope(&config, &[ResolverType::Rust, ResolverType::Rust]).unwrap();
-        assert_eq!(scope.resolvers, [ResolverType::Rust]);
+        let scope = config_sync_scope(&config, &[EcosystemId::RUST, EcosystemId::RUST]).unwrap();
+        assert_eq!(scope.resolvers, [EcosystemId::RUST]);
         assert!(scope.is_complete);
 
         let plan = plan_config_sync(

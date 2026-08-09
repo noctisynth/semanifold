@@ -14,7 +14,6 @@ use crate::{
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::ResolverType,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -151,7 +150,7 @@ impl PythonResolver {
     fn package_config(path: impl Into<std::path::PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Python,
+            resolver: EcosystemId::PYTHON,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -893,7 +892,7 @@ mod tests {
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Python,
+            resolver: ResolverType::Python.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

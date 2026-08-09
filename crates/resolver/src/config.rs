@@ -1,12 +1,20 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
-use semifold_core::PackageId;
+use camino::Utf8PathBuf;
+use semifold_core::{EcosystemId, PackageId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{error::ResolveError, resolver};
+use crate::{
+    error::ResolveError,
+    plugin::{
+        http::PluginHttpOrigin,
+        registry::{PluginDefinition, PluginRegistryError},
+    },
+    resolver,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BranchesConfig {
@@ -107,7 +115,7 @@ pub struct PackageConfig {
     /// Path to the package root directory.
     pub path: PathBuf,
     /// Resolver type to use.
-    pub resolver: resolver::ResolverType,
+    pub resolver: EcosystemId,
     /// Release channel to use. Stable is the default and is omitted when saved.
     #[serde(default, skip_serializing_if = "ReleaseChannel::is_stable")]
     pub channel: ReleaseChannel,
@@ -129,7 +137,7 @@ pub struct PackageConfig {
 #[serde(rename_all = "kebab-case")]
 struct PackageConfigInput {
     path: PathBuf,
-    resolver: resolver::ResolverType,
+    resolver: EcosystemId,
     #[serde(default)]
     channel: Option<ReleaseChannel>,
     #[serde(default)]
@@ -256,6 +264,48 @@ pub struct ResolverConfig {
     pub post_version: Vec<CommandConfig>,
 }
 
+/// Repository-local JavaScript plugin registration.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct PluginConfig {
+    pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub allowed_origins: BTreeSet<PluginHttpOrigin>,
+}
+
+impl PluginConfig {
+    fn definition(
+        &self,
+        ecosystem: &EcosystemId,
+    ) -> Result<PluginDefinition, ConfigValidationError> {
+        let path = Utf8PathBuf::from_path_buf(self.path.clone()).map_err(|path| {
+            ConfigValidationError::NonUtf8PluginPath {
+                ecosystem: ecosystem.clone(),
+                path,
+            }
+        })?;
+        let definition = PluginDefinition::new(ecosystem.clone(), path).map_err(|source| {
+            ConfigValidationError::PluginDefinition {
+                ecosystem: ecosystem.clone(),
+                source,
+            }
+        })?;
+        let definition = if let Some(sha256) = &self.sha256 {
+            definition.with_sha256(sha256).map_err(|source| {
+                ConfigValidationError::PluginDefinition {
+                    ecosystem: ecosystem.clone(),
+                    source,
+                }
+            })?
+        } else {
+            definition
+        };
+        Ok(definition.with_allowed_origins(self.allowed_origins.iter().cloned()))
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     /// Branch configuration.
@@ -267,8 +317,62 @@ pub struct Config {
     pub changelog: ChangelogConfig,
     /// Package configuration.
     pub packages: BTreeMap<String, PackageConfig>,
+    /// Repository-local ecosystem plugin registrations.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub plugins: BTreeMap<EcosystemId, PluginConfig>,
     /// Resolver configuration.
-    pub resolver: BTreeMap<resolver::ResolverType, ResolverConfig>,
+    pub resolver: BTreeMap<EcosystemId, ResolverConfig>,
+}
+
+impl Config {
+    pub fn plugin_definitions(&self) -> Result<Vec<PluginDefinition>, ConfigValidationError> {
+        self.plugins
+            .iter()
+            .map(|(ecosystem, plugin)| plugin.definition(ecosystem))
+            .collect()
+    }
+
+    fn validate(&self) -> Result<(), ConfigValidationError> {
+        self.plugin_definitions()?;
+        for (package, config) in &self.packages {
+            if !config.resolver.is_builtin() && !self.plugins.contains_key(&config.resolver) {
+                return Err(ConfigValidationError::PackagePluginNotRegistered {
+                    package: PackageId::new(package),
+                    ecosystem: config.resolver.clone(),
+                });
+            }
+        }
+        for ecosystem in self.resolver.keys() {
+            if !ecosystem.is_builtin() && !self.plugins.contains_key(ecosystem) {
+                return Err(ConfigValidationError::ResolverPluginNotRegistered {
+                    ecosystem: ecosystem.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigValidationError {
+    #[error("plugin path for {ecosystem} is not UTF-8: {path:?}")]
+    NonUtf8PluginPath {
+        ecosystem: EcosystemId,
+        path: PathBuf,
+    },
+    #[error("invalid plugin definition for {ecosystem}: {source}")]
+    PluginDefinition {
+        ecosystem: EcosystemId,
+        #[source]
+        source: PluginRegistryError,
+    },
+    #[error("package {package} references unregistered plugin ecosystem {ecosystem}")]
+    PackagePluginNotRegistered {
+        package: PackageId,
+        ecosystem: EcosystemId,
+    },
+    #[error("resolver configuration references unregistered plugin ecosystem {ecosystem}")]
+    ResolverPluginNotRegistered { ecosystem: EcosystemId },
 }
 
 fn is_default_changelog_config(config: &ChangelogConfig) -> bool {
@@ -310,10 +414,16 @@ pub fn load_config_from_str(
             path: config_path.to_path_buf(),
         });
     }
-    let config =
+    let config: Config =
         toml_edit::de::from_str(config_content).map_err(|e| ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: e.to_string(),
+        })?;
+    config
+        .validate()
+        .map_err(|source| ResolveError::InvalidConfig {
+            path: config_path.to_path_buf(),
+            reason: source.to_string(),
         })?;
     Ok(config)
 }
@@ -350,8 +460,8 @@ mod tests {
     use semifold_core::PackageId;
 
     use super::{
-        ChangelogConfig, ChannelBump, CommandConfig, PackageConfig, PreCheckConfig, ReleaseChannel,
-        load_config_from_str,
+        ChangelogConfig, ChannelBump, CommandConfig, Config, PackageConfig, PreCheckConfig,
+        ReleaseChannel, load_config_from_str,
     };
     use crate::error::ResolveError;
 
@@ -559,5 +669,118 @@ extra_env = { RELEASE = "1" }
         assert!(rendered.contains("extra-env"));
         assert!(!rendered.contains("dry_run"));
         assert!(!rendered.contains("extra_env"));
+    }
+
+    #[test]
+    fn loads_dynamic_plugin_configuration_with_an_optional_content_digest() {
+        let config: Config = load_config_from_str(
+            Path::new("config.toml"),
+            r#"
+[branches]
+base = "main"
+release = "release"
+
+[tags]
+
+[plugins."com.example.game"]
+path = "plugins/game.js"
+allowed-origins = ["https://API.example.com:443/"]
+
+[packages.game]
+path = "game"
+resolver = "com.example.game"
+
+[resolver."com.example.game"]
+"#,
+        )
+        .unwrap();
+
+        let ecosystem = semifold_core::EcosystemId::new("com.example.game").unwrap();
+        assert_eq!(config.packages["game"].resolver, ecosystem);
+        let definitions = config.plugin_definitions().unwrap();
+        assert_eq!(definitions.len(), 1);
+        assert_eq!(definitions[0].sha256(), None);
+        assert_eq!(definitions[0].path().as_str(), "plugins/game.js");
+        assert_eq!(
+            definitions[0]
+                .allowed_origins()
+                .iter()
+                .map(super::PluginHttpOrigin::as_str)
+                .collect::<Vec<_>>(),
+            ["https://api.example.com"]
+        );
+
+        let rendered = toml_edit::ser::to_string_pretty(&config).unwrap();
+        assert!(rendered.contains("[plugins.\"com.example.game\"]"));
+        assert!(!rendered.contains("sha256"));
+    }
+
+    #[test]
+    fn maps_a_configured_plugin_digest_to_a_strict_content_pin() {
+        let config = load_config_from_str(
+            Path::new("config.toml"),
+            &format!(
+                r#"
+[branches]
+base = "main"
+release = "release"
+[tags]
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "{}"
+[packages]
+[resolver]
+"#,
+                "0".repeat(64)
+            ),
+        )
+        .unwrap();
+
+        let definitions = config.plugin_definitions().unwrap();
+        assert_eq!(definitions[0].sha256(), Some("0".repeat(64).as_str()));
+    }
+
+    #[test]
+    fn rejects_invalid_or_unregistered_dynamic_plugin_configuration() {
+        let unregistered = r#"
+[branches]
+base = "main"
+release = "release"
+[tags]
+[packages.game]
+path = "game"
+resolver = "com.example.game"
+[resolver]
+"#;
+        assert!(matches!(
+            load_config_from_str(Path::new("config.toml"), unregistered),
+            Err(ResolveError::InvalidConfig { reason, .. })
+                if reason.contains("unregistered plugin ecosystem")
+        ));
+
+        let invalid_digest = r#"
+[branches]
+base = "main"
+release = "release"
+[tags]
+[plugins."com.example.game"]
+path = "plugins/game.js"
+sha256 = "invalid"
+[packages]
+[resolver]
+"#;
+        assert!(matches!(
+            load_config_from_str(Path::new("config.toml"), invalid_digest),
+            Err(ResolveError::InvalidConfig { reason, .. }) if reason.contains("SHA-256")
+        ));
+
+        let invalid_origin = invalid_digest.replace(
+            "sha256 = \"invalid\"",
+            "allowed-origins = [\"http://localhost\"]",
+        );
+        assert!(matches!(
+            load_config_from_str(Path::new("config.toml"), &invalid_origin),
+            Err(ResolveError::InvalidConfig { .. })
+        ));
     }
 }

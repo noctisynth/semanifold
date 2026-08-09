@@ -1,7 +1,7 @@
 use std::{fs::OpenOptions, io::Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use semifold_core::{ConfigSyncPlan, ReleasePlan};
+use semifold_core::{ConfigSyncPlan, EcosystemId, ReleasePlan};
 use semifold_resolver::{error::ResolveError, resolver};
 use thiserror::Error;
 
@@ -29,7 +29,7 @@ use crate::{
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ConfigSyncOptions {
-    pub resolvers: Vec<semifold_resolver::resolver::ResolverType>,
+    pub resolvers: Vec<EcosystemId>,
     pub prune_missing: bool,
 }
 
@@ -105,7 +105,8 @@ impl<D> SemifoldService<D> {
         location: &crate::project::ProjectLocation,
         options: InitOptions,
     ) -> Result<InitPlan, AppError> {
-        crate::init::plan_init(location, options).map_err(AppError::InitPlanning)
+        crate::init::plan_init(location, options)
+            .map_err(|source| AppError::InitPlanning(Box::new(source)))
     }
 
     pub fn ensure_clean_worktree(
@@ -183,7 +184,7 @@ impl<D> SemifoldService<D> {
         let changesets =
             resolver::get_changesets(project.changeset_dir.as_std_path(), &project.config)?;
         release::plan_release(project.root.as_std_path(), &project.config, &changesets)
-            .map_err(AppError::ReleasePlan)
+            .map_err(|source| AppError::ReleasePlan(Box::new(source)))
     }
 }
 
@@ -373,7 +374,7 @@ pub enum AppError {
     #[error("failed to load changesets")]
     Changesets(#[from] ResolveError),
     #[error("failed to plan initialization: {0}")]
-    InitPlanning(#[source] InitPlanningError),
+    InitPlanning(#[source] Box<InitPlanningError>),
     #[error("failed to create initialization directory {path}")]
     InitDirectory {
         path: Utf8PathBuf,
@@ -405,7 +406,7 @@ pub enum AppError {
         source: std::io::Error,
     },
     #[error("failed to plan release: {0}")]
-    ReleasePlan(#[source] ReleasePlanningError),
+    ReleasePlan(#[source] Box<ReleasePlanningError>),
     #[error("failed to prepare release: {0}")]
     ReleasePrepare(#[source] ReleasePrepareError),
     #[error("failed to apply release: {0}")]

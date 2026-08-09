@@ -272,7 +272,7 @@ mod tests {
                     (*name).to_string(),
                     PackageConfig {
                         path: PathBuf::from(name),
-                        resolver: ResolverType::Rust,
+                        resolver: ResolverType::Rust.into(),
                         channel: ReleaseChannel::Stable,
                         channel_bump: None,
                         assets: vec![],
@@ -291,6 +291,7 @@ mod tests {
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages,
+            plugins: BTreeMap::new(),
             resolver: BTreeMap::new(),
         }
     }

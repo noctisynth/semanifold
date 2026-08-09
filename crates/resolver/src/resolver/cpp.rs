@@ -16,7 +16,6 @@ use crate::{
     },
     config::{PackageConfig, ReleaseChannel},
     error::ResolveError,
-    resolver::ResolverType,
     utils,
 };
 
@@ -27,7 +26,7 @@ impl CppResolver {
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Cpp,
+            resolver: EcosystemId::CPP,
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: Vec::new(),
@@ -479,7 +478,7 @@ mod tests {
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
-            resolver: ResolverType::Cpp,
+            resolver: ResolverType::Cpp.into(),
             channel: ReleaseChannel::Stable,
             channel_bump: None,
             assets: vec![],

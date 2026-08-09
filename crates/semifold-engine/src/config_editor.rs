@@ -131,11 +131,7 @@ fn insert_discovered_package(
 }
 
 fn resolver_name(ecosystem: &EcosystemId) -> &str {
-    if ecosystem == &EcosystemId::NODE {
-        "nodejs"
-    } else {
-        ecosystem.as_str()
-    }
+    ecosystem.as_str()
 }
 
 #[derive(Debug)]

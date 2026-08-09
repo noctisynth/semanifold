@@ -262,38 +262,52 @@ release_branch_invalid = "Failed to render a valid release branch: %{error}"
 release_prepare_failed = "Failed to prepare release: %{error}"
 
 [cli.mcp]
-create_failed = "Failed to create changeset: %{error}"
-not_initialized = "Semifold not initialized. Run 'smif init' first."
-changeset_dir_not_found = "Changeset directory not found. Run 'smif init' first."
-package_not_found = "Package '%{package}' not found in config"
-invalid_level = "Invalid level '%{level}'. Use: major, minor, patch"
-changeset_created = "Changeset created: %{name}"
 instructions = """Semifold MCP Server
 
 Available tools:
-- get_tags: Get all available tags
-- get_packages: Get all packages in the project
-- create_changeset: Create a new changeset based on the packages affected by this change and the version bump level"""
+- get_changeset: Read one changeset by ID, or list all changesets
+- create_changeset: Create a changeset idempotently
+- update_changeset: Replace a changeset after verifying its revision
+- delete_changeset: Delete a changeset after verifying its revision"""
 
 [cli.mcp.flags]
-current_dir = "Current working directory for MCP server"
+project_root = "Project directory used by the MCP server"
 
 [cli.mcp.tools]
-get_tags = "Get all available tags"
-get_packages = "Get all available packages"
-create_changeset = "Create a new changeset based on the packages affected by this change and the version bump level"
+get_changeset = "Read one changeset by ID, or list all changesets when no ID is provided"
+create_changeset = "Create a changeset idempotently with an explicit bump and optional tag for each package"
+update_changeset = "Replace a changeset only when its SHA-256 revision still matches"
+delete_changeset = "Delete a changeset only when its SHA-256 revision still matches"
 
-[cli.mcp.params]
-name = "Name"
-name_desc = "A unique identifier for this changeset"
-packages = "Packages"
-packages_desc = "Packages that will be bumped in this changeset"
-level = "Level"
-level_desc = "Must be one of: major, minor, or patch"
-summary = "Summary"
-summary_desc = "Brief description of what changed"
-tag = "Tag"
-tag_desc = "Optional tag to categorize this changeset, defaults to first available tag"
+[cli.mcp.errors]
+internal = "The MCP tool encountered an internal error. The server is still running; retry the request or inspect the server logs."
+invalid_arguments = "The MCP tool arguments are invalid: %{error}"
+project_load_failed = "Unable to load the Semifold project: %{error}"
+invalid_revision = "The revision must be a lowercase SHA-256 digest."
+invalid_id = "Changeset ID '%{id}' is invalid."
+id_mismatch = "The replacement changeset ID '%{draft}' does not match target '%{target}'."
+not_found = "Changeset '%{id}' was not found."
+conflict = "Changeset '%{id}' already exists with different content."
+revision_mismatch = "Changeset '%{id}' changed after it was read. Fetch it again before retrying."
+io = "The changeset could not be read or written. Inspect the server logs for details."
+empty_name = "Changeset name cannot be empty."
+empty_summary = "Changeset summary cannot be empty."
+empty_packages = "A changeset must include at least one package."
+package_not_found = "Package '%{package}' is not configured in this project."
+duplicate_package = "Package '%{package}' appears more than once in the changeset."
+unchanged_package = "Package '%{package}' must request a version bump."
+tag_not_found = "Tag '%{tag}' is not configured in this project."
+
+[cli.mcp.diagnostics]
+tool_panicked = "MCP tool %{operation} panicked; the panic was isolated."
+mutation_lock_poisoned = "The MCP mutation lock was poisoned; recovering the protected state."
+schema_failed = "Failed to generate an MCP input schema: %{error}"
+schema_panicked = "MCP input schema generation panicked; using a generic object schema."
+app_error = "Unexpected MCP application error: %{error}"
+io_error = "MCP changeset I/O error: %{error}"
+render_error = "MCP changeset render error: %{error}"
+result_serialize_failed = "Failed to serialize an MCP tool result: %{error}"
+error_serialize_failed = "Failed to serialize an MCP tool error: %{error}"
 
 [cli.config]
 heading = "Semifold configuration"

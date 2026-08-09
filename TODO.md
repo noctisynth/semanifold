@@ -378,6 +378,11 @@
 - [x] MCP 使用与 CLI 相同的应用服务
 - [x] MCP 不再为每次调用重新构建全局 `Context`
 - [x] MCP 不再使用 `set_current_dir()` 修改进程全局状态
+- [x] MCP transport 在严格 `Project` 加载前启动，并由固定范围 `ProjectLocator` 为每次工具调用刷新项目
+- [x] MCP 只声明已实现的 tools capability，并返回实际 server version 与结构化 output/error
+- [x] MCP changeset 支持带 revision 的 get/create/update/delete，create 幂等且不提供 rename
+- [x] MCP 全局 `--dry-run` 验证但不应用 changeset CRUD 写操作
+- [x] MCP 覆盖无效项目、无效输入、冲突、revision 失配、dry-run、panic 隔离和调用后继续服务测试
 - [x] 移除旧 `Context.version_bumps`
 - [x] 移除旧 `Context::create_resolver()`
 - [x] 删除旧 `Context`

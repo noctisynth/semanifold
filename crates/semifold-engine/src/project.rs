@@ -43,6 +43,29 @@ pub struct ProjectLocation {
     pub existing_config: Option<Utf8PathBuf>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectLocator {
+    start: PathBuf,
+    changeset_dir: Option<PathBuf>,
+}
+
+impl ProjectLocator {
+    pub fn new(start: PathBuf, changeset_dir: Option<PathBuf>) -> Self {
+        Self {
+            start,
+            changeset_dir,
+        }
+    }
+
+    pub fn locate(&self) -> Result<ProjectLocation, ProjectLoadError> {
+        ProjectLocation::discover_with_changeset_dir(&self.start, self.changeset_dir.as_deref())
+    }
+
+    pub fn load(&self) -> Result<Project, ProjectLoadError> {
+        self.locate()?.load()
+    }
+}
+
 impl ProjectLocation {
     pub fn discover(start: &Path) -> Result<Self, ProjectLoadError> {
         Self::discover_with_changeset_dir(start, None)

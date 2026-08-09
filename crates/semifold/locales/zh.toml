@@ -262,38 +262,52 @@ release_branch_invalid = "无法渲染有效的发布分支：%{error}"
 release_prepare_failed = "无法准备发布：%{error}"
 
 [cli.mcp]
-create_failed = "创建变更集失败：%{error}"
-not_initialized = "Semifold 未初始化。请先运行 'smif init'。"
-changeset_dir_not_found = "未找到变更集目录。请先运行 'smif init'。"
-package_not_found = "包 '%{package}' 在配置中未找到"
-invalid_level = "级别 '%{level}' 无效。可用值：major, minor, patch"
-changeset_created = "变更集已创建：%{name}"
 instructions = """Semifold MCP 服务器
 
 使用以下工具：
-- get_tags: 获取所有可用的标签
-- get_packages: 获取项目中所有的包
-- create_changeset: 基于本次修改影响到的包和版本级别创建新的变更集"""
+- get_changeset：按 ID 读取单个变更集，或列出全部变更集
+- create_changeset：幂等创建变更集
+- update_changeset：验证修订值后完整替换变更集
+- delete_changeset：验证修订值后删除变更集"""
 
 [cli.mcp.flags]
-current_dir = "MCP 服务器的当前工作目录"
+project_root = "MCP 服务器使用的项目目录"
 
 [cli.mcp.tools]
-get_tags = "获取所有可用的标签"
-get_packages = "获取所有可用的包"
-create_changeset = "基于本次修改影响到的包和版本级别创建新的变更集"
+get_changeset = "按 ID 读取单个变更集；未提供 ID 时列出全部变更集"
+create_changeset = "为每个包显式指定提升级别和可选标签，幂等创建变更集"
+update_changeset = "仅在 SHA-256 修订值仍匹配时完整替换变更集"
+delete_changeset = "仅在 SHA-256 修订值仍匹配时删除变更集"
 
-[cli.mcp.params]
-name = "名称"
-name_desc = "此变更集的唯一标识符"
-packages = "包列表"
-packages_desc = "将在此变更集中被提升的包"
-level = "版本级别"
-level_desc = "必须为以下之一：major、minor 或 patch"
-summary = "变更摘要"
-summary_desc = "更改的简要描述"
-tag = "标签"
-tag_desc = "用于分类此变更集的可选标签，默认为第一个可用标签"
+[cli.mcp.errors]
+internal = "MCP 工具遇到内部错误。服务器仍在运行，请重试请求或检查服务器日志。"
+invalid_arguments = "MCP 工具参数无效：%{error}"
+project_load_failed = "无法加载 Semifold 项目：%{error}"
+invalid_revision = "修订值必须是小写 SHA-256 摘要。"
+invalid_id = "变更集 ID '%{id}' 无效。"
+id_mismatch = "替换内容中的变更集 ID '%{draft}' 与目标 '%{target}' 不一致。"
+not_found = "未找到变更集 '%{id}'。"
+conflict = "变更集 '%{id}' 已存在，但内容不同。"
+revision_mismatch = "变更集 '%{id}' 在读取后已发生变化，请重新获取后再重试。"
+io = "无法读取或写入变更集，请检查服务器日志了解详情。"
+empty_name = "变更集名称不能为空。"
+empty_summary = "变更集摘要不能为空。"
+empty_packages = "变更集必须至少包含一个包。"
+package_not_found = "项目中未配置包 '%{package}'。"
+duplicate_package = "包 '%{package}' 在变更集中重复出现。"
+unchanged_package = "包 '%{package}' 必须请求版本提升。"
+tag_not_found = "项目中未配置标签 '%{tag}'。"
+
+[cli.mcp.diagnostics]
+tool_panicked = "MCP 工具 %{operation} 发生 panic，已隔离该故障。"
+mutation_lock_poisoned = "MCP 变更锁已中毒，正在恢复受保护状态。"
+schema_failed = "无法生成 MCP 输入 schema：%{error}"
+schema_panicked = "MCP 输入 schema 生成发生 panic，将使用通用对象 schema。"
+app_error = "MCP 应用服务发生预期外错误：%{error}"
+io_error = "MCP 变更集 I/O 错误：%{error}"
+render_error = "MCP 变更集渲染错误：%{error}"
+result_serialize_failed = "无法序列化 MCP 工具结果：%{error}"
+error_serialize_failed = "无法序列化 MCP 工具错误：%{error}"
 
 [cli.config]
 heading = "Semifold 配置"

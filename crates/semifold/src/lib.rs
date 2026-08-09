@@ -28,7 +28,7 @@ pub fn run() -> anyhow::Result<()> {
     );
 
     if let Some(Commands::Mcp(mcp)) = &cli.command {
-        utils::run_async(cli::mcp::run_mcp(mcp))?;
+        utils::run_async(cli::mcp::run_mcp(mcp, cli.dry_run))?;
         return Ok(());
     }
 

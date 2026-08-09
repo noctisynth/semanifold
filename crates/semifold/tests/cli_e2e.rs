@@ -2,10 +2,13 @@
 
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use serde_json::Value;
 
 fn temporary_repository(name: &str) -> PathBuf {
     let nonce = SystemTime::now()
@@ -75,6 +78,65 @@ fn run_smif_in_github(root: &Path, arguments: &[&str], output: &Path) -> Output 
         .stdin(Stdio::null())
         .output()
         .unwrap()
+}
+
+#[test]
+fn mcp_survives_invalid_tool_arguments_and_serves_the_next_request() {
+    let root = temporary_project("mcp-invalid-arguments", &config("channel = \"stable\""));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_smif"))
+        .args(["mcp", "--project-root"])
+        .arg(&root)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("MCP fixture process must start");
+    let input = concat!(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"semifold-test\",\"version\":\"1\"}}}\n",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"create_changeset\",\"arguments\":{\"name\":\"broken\"}}}\n",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_changeset\",\"arguments\":{}}}\n"
+    );
+    child
+        .stdin
+        .take()
+        .expect("MCP stdin must be piped")
+        .write_all(input.as_bytes())
+        .expect("MCP requests must be written");
+
+    let output = child
+        .wait_with_output()
+        .expect("MCP fixture process must exit after stdin closes");
+    assert!(output.status.success(), "{output:?}");
+    let responses = String::from_utf8(output.stdout).expect("MCP stdout must be UTF-8");
+    let responses = responses
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<Value>(line).expect("MCP stdout must contain JSON lines")
+        })
+        .collect::<Vec<_>>();
+    let invalid = responses
+        .iter()
+        .find(|response| response["id"] == 2)
+        .expect("invalid tool call must receive a response");
+    let following = responses
+        .iter()
+        .find(|response| response["id"] == 3)
+        .expect("request after invalid input must receive a response");
+
+    assert_eq!(invalid["result"]["isError"], true, "{invalid}");
+    assert_eq!(
+        invalid["result"]["structuredContent"]["code"], "INVALID_ARGUMENTS",
+        "{invalid}"
+    );
+    assert_eq!(following["result"]["isError"], false, "{following}");
+    assert!(
+        following["result"]["structuredContent"]["changesets"].is_array(),
+        "{following}"
+    );
+    fs::remove_dir_all(root).unwrap();
 }
 
 fn config(package: &str) -> String {
@@ -789,6 +851,11 @@ resolver = "rust"
 url = ""
 "#,
     );
+    fs::write(
+        root.join(".changes/feature.md"),
+        "app: patch\n---\n\nExercise the CLI.\n",
+    )
+    .unwrap();
     let config_path = root.join(".changes/config.toml");
     let original = fs::read_to_string(&config_path).unwrap();
 

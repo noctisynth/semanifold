@@ -136,6 +136,20 @@ impl Changeset {
                     reason: format!("Failed to parse package mark: {v:?}"),
                 })?;
                 let tag = mark.next().map(|s| s.to_string());
+                if mark.next().is_some() {
+                    return Err(ResolveError::InvalidChangeset {
+                        path: path.to_path_buf(),
+                        reason: format!("Package mark contains too many separators: {v:?}"),
+                    });
+                }
+                if let Some(tag) = tag.as_ref()
+                    && !config.tags.contains_key(tag)
+                {
+                    return Err(ResolveError::InvalidChangeset {
+                        path: path.to_path_buf(),
+                        reason: format!("Tag {tag} is not defined in config"),
+                    });
+                }
                 let level = match level {
                     "major" => BumpLevel::Major,
                     "minor" => BumpLevel::Minor,
@@ -193,6 +207,16 @@ impl Changeset {
 
         let file_path = changeset_path.join(format!("{}.md", self.name));
 
+        std::fs::write(&file_path, self.render()?)?;
+
+        self.path = Some(file_path);
+
+        Ok(())
+    }
+
+    pub fn render(&self) -> Result<String, ResolveError> {
+        let file_path = self.root_path.join(format!("{}.md", self.name));
+
         let mut fm = String::new();
         let mut emitter = YamlEmitter::new(&mut fm);
         let mut fm_map = Mapping::new();
@@ -205,7 +229,7 @@ impl Changeset {
 
             fm_map.insert(
                 Yaml::value_from_str(&package.name),
-                Yaml::value_from_str(mark.leak()),
+                Yaml::scalar_from_string(mark),
             );
         }
         emitter
@@ -215,12 +239,7 @@ impl Changeset {
                 reason: e.to_string(),
             })?;
 
-        let content = format!("{fm}\n---\n\n{}\n", self.summary);
-        std::fs::write(&file_path, content)?;
-
-        self.path = Some(file_path);
-
-        Ok(())
+        Ok(format!("{fm}\n---\n\n{}\n", self.summary))
     }
 
     pub fn commit(&mut self) -> Result<(), ResolveError> {
@@ -299,7 +318,10 @@ mod tests {
     #[test]
     fn writes_and_reads_a_changeset_with_tags() {
         let root = temp_dir("roundtrip");
-        let config = config_with_packages(&["api", "web"]);
+        let mut config = config_with_packages(&["api", "web"]);
+        config
+            .tags
+            .insert("feat".to_string(), "Features".to_string());
         let mut changeset = Changeset::new("add-api".to_string(), &root);
         changeset.add_package(
             "api".to_string(),
@@ -353,6 +375,22 @@ mod tests {
         let error = Changeset::from_file(&config_with_packages(&["api"]), &path).unwrap_err();
 
         assert!(matches!(error, ResolveError::InvalidChangeset { .. }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_unknown_tags_and_extra_package_mark_separators() {
+        let root = temp_dir("invalid-tags");
+        let config = config_with_packages(&["api"]);
+        for (name, mark) in [("unknown-tag", "patch:missing"), ("extra", "patch:a:b")] {
+            let path = root.join(format!("{name}.md"));
+            fs::write(&path, format!("---\napi: {mark}\n---\n\nSummary.\n")).unwrap();
+
+            assert!(matches!(
+                Changeset::from_file(&config, &path),
+                Err(ResolveError::InvalidChangeset { .. })
+            ));
+        }
         fs::remove_dir_all(root).unwrap();
     }
 

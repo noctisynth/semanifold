@@ -17,10 +17,13 @@ pub mod service;
 pub mod workflow_output;
 pub mod workspace;
 
-pub use changeset_service::{ChangesetCreateError, ChangesetDraft, ChangesetPackageInput};
+pub use changeset_service::{
+    ChangesetCreateError, ChangesetCrudError, ChangesetDraft, ChangesetMutationResult,
+    ChangesetMutationStatus, ChangesetPackageInput, ChangesetRecord,
+};
 pub use config_management::{ChannelUpdate, ConfigMutationError, ConfigMutationPlan};
 pub use init::{InitFile, InitOptions, InitPlan, InitReport, InitWorkflowTemplates};
-pub use project::{Project, ProjectLoadError, ProjectLocation};
+pub use project::{Project, ProjectLoadError, ProjectLocation, ProjectLocator};
 pub use publish_plan::{PublishOptions, PublishPlan};
 pub use publisher::{PublishExecutionError, PublishReport, PublishStatus};
 pub use release_apply::{

@@ -2145,6 +2145,32 @@ impl<D: Dependencies> SemifoldService<D> {
         project: &Project,
         draft: ChangesetDraft,
     ) -> Result<ChangesetId, AppError>;
+    pub fn get_changesets(
+        &self,
+        project: &Project,
+        id: Option<&str>,
+    ) -> Result<Vec<ChangesetRecord>, AppError>;
+    pub fn create_changeset_idempotent(
+        &self,
+        project: &Project,
+        draft: ChangesetDraft,
+        mode: ExecutionMode,
+    ) -> Result<ChangesetMutationResult, AppError>;
+    pub fn update_changeset(
+        &self,
+        project: &Project,
+        id: &str,
+        expected_revision: &FileHash,
+        draft: ChangesetDraft,
+        mode: ExecutionMode,
+    ) -> Result<ChangesetMutationResult, AppError>;
+    pub fn delete_changeset(
+        &self,
+        project: &Project,
+        id: &str,
+        expected_revision: &FileHash,
+        mode: ExecutionMode,
+    ) -> Result<ChangesetMutationResult, AppError>;
     pub fn plan_config_sync(
         &self,
         project: &Project,
@@ -2193,7 +2219,39 @@ CI 编排仍然可以处理 release branch、commit、push 和 Pull Request，�
 
 MCP 服务不应在每个工具调用中重新构建全局 `Context`，也不应依赖 `set_current_dir()` 修改进程全局状态。
 
-MCP handler 应持有已加载的 service 或显式 `ProjectLocator`，然后调用与 CLI 相同的 changeset 和规划接口。
+MCP handler 持有固定仓库范围的 `ProjectLocator` 与无状态 application service，不在 transport 启动前
+严格加载 `Project`。stdio 握手完成后，每次工具调用从 locator 重新加载当前配置与 changeset 目录，
+使旧配置、暂时无效的配置、分支切换或 MCP 生命周期内的配置变更成为该次调用的结构化 tool error，
+而不是服务器启动失败、缓存陈旧或进程退出。`-C` 保持兼容，公开长参数使用不暗示修改进程目录的
+`--project-root`，旧 `--cd` 作为 alias 保留。
+
+首版 MCP 只声明 tools capability，不声明未实现的 resources、prompts 或 logging。server info 版本来自
+实际 Semifold package version，stdio 的 stdout 只承载 MCP frame；日志和启动诊断只能写 stderr。
+全局 `--dry-run` 在 MCP 中表示整个 session 不应用 changeset 写入：所有写工具仍执行定位、解析、输入与
+revision 验证并返回 `planned`，但不得创建、替换或删除文件，不能继续被静默忽略。
+
+MCP 对 changeset 只提供四个结构化 CRUD 工具：
+
+- `get_changeset` 接受可选 `id`；有 id 时读取单条，没有 id 时按 id 稳定排序返回全部；
+- `create_changeset` 接受 name、summary 及逐 package 的 package、bump 与可选 tag；不得使用“第一个 tag”
+  等隐藏默认。目标不存在时创建，同名内容完全相同时幂等返回 `existing`，内容不同时返回
+  `CHANGESET_CONFLICT`；
+- `update_changeset` 以固定 id 完整替换 packages 与 summary，不提供局部 patch 或 rename；调用方必须
+  提供最近一次 get/create 返回的 SHA-256 `revision`；
+- `delete_changeset` 删除固定 id，同样必须提供 `revision`。名称错误时显式 delete 后重新 create，
+  不提供独立 rename 工具。
+
+同一个 MCP server 内的 create/update/delete 串行执行，防止两个并发调用同时通过同一 revision 检查；
+锁中毒必须恢复为可继续服务的状态。create 使用不覆盖已有目标的原子写入，update 使用原子替换，任何
+失败都不得留下被当作 changeset 扫描的临时 `.md` 文件。
+
+get/create/update/delete 的成功结果都返回 JSON `structuredContent`，包含稳定 status、changeset DTO 和
+revision；失败结果使用 `isError = true` 的结构化对象，至少包含稳定 `code`、本地化 `message` 与相关
+id/revision 详情。输入、项目定位、配置解析、文件读取、领域验证、revision 冲突和文件写入失败都属于
+tool-level error，不得作为 JSON-RPC internal error 使调用方丢失信息，也不得让 stdio server 退出。
+handler 边界捕获可 unwind 的意外 panic 并转换为 `INTERNAL_ERROR` tool result；生产实现自身不得使用
+`unwrap()`、无说明 `expect()` 或索引假设。客户端正常关闭 stdio、操作系统终止、OOM 或 panic=abort
+等进程外/不可 unwind 终止不属于可恢复请求边界。
 
 CLI 与 MCP 提交 changeset 时都先将各自的参数或交互结果映射为 `ChangesetDraft`。应用层统一负责
 名称规范化、重复文件检查、package/tag 校验和写入；入口层不得直接构造或提交 resolver

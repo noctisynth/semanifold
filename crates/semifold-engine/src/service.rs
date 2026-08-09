@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{fs::OpenOptions, io::Write};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -48,11 +49,28 @@ pub struct ConfigMutationReport {
 pub trait EngineDependencies {
     fn create_dir_all(&self, path: &Utf8Path) -> Result<(), std::io::Error>;
     fn write_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error>;
+    fn write_new_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error> {
+        if path.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "target file already exists",
+            ));
+        }
+        self.write_atomic(path, content)
+    }
     fn remove_file(&self, path: &Utf8Path) -> Result<(), std::io::Error>;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SystemDependencies;
+
+static NEXT_ATOMIC_WRITE: AtomicU64 = AtomicU64::new(0);
+
+fn temporary_write_path(path: &Utf8Path) -> Utf8PathBuf {
+    let extension = path.extension().unwrap_or("tmp");
+    let sequence = NEXT_ATOMIC_WRITE.fetch_add(1, Ordering::Relaxed);
+    path.with_extension(format!("{extension}.{}.{sequence}.tmp", std::process::id()))
+}
 
 impl EngineDependencies for SystemDependencies {
     fn create_dir_all(&self, path: &Utf8Path) -> Result<(), std::io::Error> {
@@ -60,8 +78,7 @@ impl EngineDependencies for SystemDependencies {
     }
 
     fn write_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error> {
-        let extension = path.extension().unwrap_or("tmp");
-        let temporary = path.with_extension(format!("{extension}.{}.tmp", std::process::id()));
+        let temporary = temporary_write_path(path);
         let result = (|| {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -70,6 +87,25 @@ impl EngineDependencies for SystemDependencies {
             file.write_all(content.as_bytes())?;
             file.sync_all()?;
             std::fs::rename(&temporary, path)
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&temporary);
+        }
+        result
+    }
+
+    fn write_new_atomic(&self, path: &Utf8Path, content: &str) -> Result<(), std::io::Error> {
+        let temporary = temporary_write_path(path);
+        let result = (|| {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+            std::fs::hard_link(&temporary, path)?;
+            let _ = std::fs::remove_file(&temporary);
+            Ok(())
         })();
         if result.is_err() {
             let _ = std::fs::remove_file(&temporary);
@@ -141,6 +177,14 @@ impl<D> SemifoldService<D> {
             .map_err(AppError::ChangesetCreate)
     }
 
+    pub fn get_changesets(
+        &self,
+        project: &Project,
+        id: Option<&str>,
+    ) -> Result<Vec<crate::changeset_service::ChangesetRecord>, AppError> {
+        crate::changeset_service::get_changesets(project, id).map_err(AppError::ChangesetCrud)
+    }
+
     pub fn plan_config_sync(
         &self,
         project: &Project,
@@ -196,6 +240,46 @@ impl<D> SemifoldService<D> {
 }
 
 impl<D: EngineDependencies> SemifoldService<D> {
+    pub fn create_changeset_idempotent(
+        &self,
+        project: &Project,
+        draft: crate::changeset_service::ChangesetDraft,
+        mode: ExecutionMode,
+    ) -> Result<crate::changeset_service::ChangesetMutationResult, AppError> {
+        crate::changeset_service::create_changeset_idempotent(&self.deps, project, draft, mode)
+            .map_err(AppError::ChangesetCrud)
+    }
+
+    pub fn update_changeset(
+        &self,
+        project: &Project,
+        id: &str,
+        expected_revision: &semifold_core::FileHash,
+        draft: crate::changeset_service::ChangesetDraft,
+        mode: ExecutionMode,
+    ) -> Result<crate::changeset_service::ChangesetMutationResult, AppError> {
+        crate::changeset_service::update_changeset(
+            &self.deps,
+            project,
+            id,
+            expected_revision,
+            draft,
+            mode,
+        )
+        .map_err(AppError::ChangesetCrud)
+    }
+
+    pub fn delete_changeset(
+        &self,
+        project: &Project,
+        id: &str,
+        expected_revision: &semifold_core::FileHash,
+        mode: ExecutionMode,
+    ) -> Result<crate::changeset_service::ChangesetMutationResult, AppError> {
+        crate::changeset_service::delete_changeset(&self.deps, project, id, expected_revision, mode)
+            .map_err(AppError::ChangesetCrud)
+    }
+
     pub fn apply_init(&self, plan: &InitPlan) -> Result<InitReport, AppError> {
         for directory in &plan.directories {
             self.deps
@@ -382,6 +466,8 @@ pub enum AppError {
     UnsupportedConfigFormat,
     #[error("failed to create changeset: {0}")]
     ChangesetCreate(#[source] crate::changeset_service::ChangesetCreateError),
+    #[error("failed to manage changeset: {0}")]
+    ChangesetCrud(#[source] crate::changeset_service::ChangesetCrudError),
     #[error("failed to load changesets")]
     Changesets(#[from] ResolveError),
     #[error("failed to plan initialization: {0}")]

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0
+
+### Chores
+
+- [`28ee39d`](https://github.com/noctisynth/semifold/commit/28ee39d4295b91d1afc8614eec0ed6327ca22af7): Promote the remaining prerelease packages to their stable release channel.
+
 ## v0.3.0-rc.2
 
 ### Bug Fixes

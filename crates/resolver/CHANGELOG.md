@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0
+
+### New Features
+
+- [`c64a001`](https://github.com/noctisynth/semifold/commit/c64a0011732bb40044d9486ef708fb03bfc9c650): Add an optional package-level `publish` override that defaults to manifest or plugin discovery and explicitly controls registry pre-check and publish command eligibility.
+
 ## v0.4.0-rc.4
 
 ### Chores

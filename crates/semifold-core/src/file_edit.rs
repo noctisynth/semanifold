@@ -18,7 +18,12 @@ pub struct FileHash(String);
 impl FileHash {
     #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        Self(format!("{:x}", Sha256::digest(bytes)))
+        Self(
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        )
     }
 
     /// Restores a canonical SHA-256 value received across a serialized boundary.

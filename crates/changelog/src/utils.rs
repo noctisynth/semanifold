@@ -92,8 +92,8 @@ pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<Comm
             if tree.get_path(std::path::Path::new(path)).is_ok() {
                 return Some(CommitInfo {
                     oid,
-                    author: commit.author().name().map(ToOwned::to_owned),
-                    message: commit.message()?.to_string(),
+                    author: commit.author().name().ok().map(ToOwned::to_owned),
+                    message: commit.message().ok()?.to_string(),
                 });
             }
         } else {
@@ -110,8 +110,8 @@ pub fn find_first_commit_for_path(repo: &Repository, path: &Path) -> Option<Comm
             if diff.deltas().len() > 0 {
                 return Some(CommitInfo {
                     oid,
-                    author: commit.author().name().map(ToOwned::to_owned),
-                    message: commit.message()?.to_string(),
+                    author: commit.author().name().ok().map(ToOwned::to_owned),
+                    message: commit.message().ok()?.to_string(),
                 });
             }
         }

@@ -12,7 +12,7 @@ use rmcp::{
     ServerHandler, ServiceExt,
     handler::server::common::schema_for_input,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
-    model::{CallToolResult, Content, JsonObject, ServerCapabilities, ServerInfo},
+    model::{CallToolResult, ContentBlock, JsonObject, ServerCapabilities, ServerInfo},
     tool, tool_handler, tool_router,
 };
 use rust_i18n::t;
@@ -628,7 +628,7 @@ fn structured_error(error: McpToolError) -> CallToolResult {
                     error = serialization_error
                 )
             );
-            CallToolResult::error(vec![Content::text(t!("cli.mcp.errors.internal"))])
+            CallToolResult::error(vec![ContentBlock::text(t!("cli.mcp.errors.internal"))])
         }
     }
 }

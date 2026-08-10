@@ -660,7 +660,11 @@ fn hash_existing_file(root: &Utf8Path, path: &Utf8Path) -> Result<FileHash, Stri
         }
         hasher.update(&buffer[..count]);
     }
-    let value = format!("{:x}", hasher.finalize());
+    let value = hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     FileHash::from_sha256(value)
         .map_err(|source| format!("failed to construct the validated hash for {path}: {source}"))
 }
@@ -864,7 +868,10 @@ mod tests {
     }
 
     fn digest(bytes: &[u8]) -> String {
-        format!("{:x}", Sha256::digest(bytes))
+        Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     fn load_plugin(root: &Utf8Path, source: &str) -> LoadedPlugin {

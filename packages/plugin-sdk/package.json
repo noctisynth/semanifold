@@ -46,7 +46,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.4",
+    "@biomejs/biome": "^2.5.7",
     "typescript": "^7.0.2"
   }
 }

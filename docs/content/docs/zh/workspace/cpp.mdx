@@ -1,9 +1,9 @@
 ---
 title: C++ 工作区
-description: 基于 CMake 的静态软件包发现、版本修改、内部链接排序和当前限制。
+description: 基于 CMake 与 qmake 的静态软件包发现、版本修改、内部链接排序和当前限制。
 ---
 
-C++ 内置适配器围绕能够静态分析的 CMake 项目工作。它不运行 CMake，也不尝试解释构建时才出现的目录和 target。
+C++ 内置适配器围绕能够静态分析的 CMake 与 qmake 项目工作。它不运行构建工具，也不尝试解释构建时才出现的值、目录和 target。
 
 ## 根项目要求
 
@@ -14,6 +14,23 @@ project(my_library VERSION 1.4.0 LANGUAGES CXX)
 ```
 
 缺少 `VERSION` 的根项目不能作为当前 C++ 工作区入口。`project` 名称是清单名称，用于同一 C++ 工作区内的软件包匹配。
+
+没有带版本的 CMake 项目时，软件包根目录也可以通过一个 `.pro` 或 `.pri` 文件声明静态 qmake 版本：
+
+```qmake
+TARGET = my_application
+VERSION = "1.4.0"
+```
+
+也支持拆分的三变量形式：
+
+```qmake
+VERSION_MAJOR = 1
+VERSION_MINOR = 4
+VERSION_PATCH = 0
+```
+
+存在 `TARGET` 时以其作为 manifest name，否则使用版本文件的文件名。两个构建系统同时存在时，带版本的 CMake 项目优先。
 
 ## 子项目发现
 
@@ -50,6 +67,8 @@ target_link_libraries(my_library PRIVATE support_library)
 
 Semifold 修改对应 `CMakeLists.txt` 的 `project(... VERSION ...)`。如果软件包目录存在 `vcpkg.json`，还会同步其根级 `version` 字段，避免两个公开版本来源漂移。
 
+对于 qmake，Semifold 修改选中的 `VERSION` 或全部三个分量赋值，并保留引号、注释和其他无关内容。只能有一个 `.pro` 或 `.pri` 文件提供版本；出现多个候选、同一文件同时使用两种形式、动态表达式或缺失版本时，会返回诊断而不是任意猜测。
+
 CMake 适配器当前只接受稳定数字版本，因此不支持 `alpha`、`beta`、`rc` 等命名发布通道。为 C++ 软件包设置命名 `channel` 会让版本规划失败；需要预发布语义时，应先评估自定义插件和发布流程是否能完整表达目标格式。
 
 ## 发布
@@ -63,6 +82,8 @@ CMake 描述构建图，不规定统一的软件包仓库，因此内置发现�
 以下情况通常超出内置静态规则：
 
 - 版本不在 `project(... VERSION ...)`；
+- qmake 版本来源有歧义或使用自定义变量；
+- qmake workspace 成员来自 `TEMPLATE = subdirs`、`SUBDIRS` 或动态 `include()` 逻辑；
 - workspace 成员由自定义元数据或运行时脚本生成；
 - 内部依赖来自无法静态展开的 CMake 逻辑；
 - 需要非数字或自定义预发布版本格式。

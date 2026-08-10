@@ -1147,7 +1147,7 @@ Adapter 不可以：
 - 访问 registry 或 GitHub；
 - 处理 dry-run。
 
-#### C++ workspace 与内部依赖（首版）
+#### C++ workspace、qmake 与内部依赖（首版）
 
 阶段 0 为 CMake 项目采用可静态分析的最小规则，作为后续 `WorkspaceGraph` 的 fixture 基线：
 
@@ -1160,6 +1160,14 @@ Adapter 不可以：
   排序并去重，指向项目根外的路径必须报错，不得读取或发现外部项目；
 - 当成员项目的 `CMakeLists.txt` 以自身 `project` 名称作为第一个参数调用 `target_link_libraries(...)`，且后续参数中出现同一工作区内另一个 `project` 名称时，建立该内部依赖边；`PUBLIC`、`PRIVATE` 与 `INTERFACE` 在阶段 0 均只影响排序，不改变版本传播；
 - 未匹配到上述静态形式的 CMake target 关系不推导为内部依赖，用户可在后续的可选 `depends-on` 配置中显式声明。
+
+同一个 `cpp` ecosystem 也支持静态 qmake package，不新增独立 ecosystem ID：
+
+- package 根目录没有带版本的 CMake `project(...)` 时，扫描根目录的 `.pro` 与 `.pri` 文件；带版本的 CMake 与 qmake 文件共存时保持 CMake 优先；
+- 接受 `VERSION = x.y.z`（可带单引号或双引号）以及完整的 `VERSION_MAJOR`、`VERSION_MINOR`、`VERSION_PATCH` 三变量形式；值必须能静态解析为 SemVer；
+- 只有一个文件声明版本时才自动选定；多个文件或同一文件同时声明两种形式时返回包含候选文件和变量的错误，不在 adapter 内读取 stdin 或要求人工确认；
+- manifest name 优先使用静态 `TARGET = name`，缺失时使用版本文件名；版本修改保留文件中其他内容并继续以 `FileEdit` 返回；
+- 首版不执行 qmake、不展开条件、函数或变量引用，不解析 `TEMPLATE = subdirs`、`SUBDIRS`、`include()` 形成的 workspace，也不从 qmake 链接配置推导内部依赖。复杂或歧义项目使用显式 package 边或自定义 plugin，后续若增加手动 manifest selection，选择必须持久化到配置并由 CLI/application 层收集。
 
 该规则只用于发现和依赖排序；版本写入、发布传播和跨生态依赖仍由后续 `WorkspaceGraph` 与 `ReleasePlanner` 定义。
 

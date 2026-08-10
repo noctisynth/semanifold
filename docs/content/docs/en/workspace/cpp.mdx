@@ -1,9 +1,9 @@
 ---
 title: C++ workspaces
-description: Static CMake package discovery, version edits, internal link ordering, and current limits.
+description: Static CMake and qmake package discovery, version edits, internal link ordering, and current limits.
 ---
 
-The built-in C++ adapter targets CMake projects that can be analyzed statically. It does not run CMake or try to interpret directories and targets that exist only at build time.
+The built-in C++ adapter targets CMake and qmake projects that can be analyzed statically. It does not run either build tool or try to interpret values that exist only at build time.
 
 ## Root project requirement
 
@@ -14,6 +14,23 @@ project(my_library VERSION 1.4.0 LANGUAGES CXX)
 ```
 
 A root project without `VERSION` cannot serve as the current C++ workspace entry point. The `project` name is the manifest name used for matching packages within the C++ workspace.
+
+When no versioned CMake project exists, the package root may instead contain one `.pro` or `.pri` file with a static qmake version:
+
+```qmake
+TARGET = my_application
+VERSION = "1.4.0"
+```
+
+The component form is also supported:
+
+```qmake
+VERSION_MAJOR = 1
+VERSION_MINOR = 4
+VERSION_PATCH = 0
+```
+
+`TARGET` becomes the manifest name when present; otherwise Semifold uses the version file stem. A versioned CMake project takes precedence when both build systems are present.
 
 ## Subproject discovery
 
@@ -50,6 +67,8 @@ The adapter does not guess relationships from variables, alias targets, generato
 
 Semifold edits `project(... VERSION ...)` in the corresponding `CMakeLists.txt`. When the package directory also contains `vcpkg.json`, it synchronizes the root `version` field so the two public version sources do not drift.
 
+For qmake, Semifold edits the selected `VERSION` assignment or all three component assignments while preserving quotes, comments, and unrelated content. Exactly one `.pro` or `.pri` file may provide a version. Multiple candidates, both version forms in one file, dynamic expressions, or missing versions fail with a diagnostic instead of selecting a value arbitrarily.
+
 The current CMake adapter accepts stable numeric versions only. Named channels such as `alpha`, `beta`, and `rc` are unsupported. Setting a named `channel` for a C++ package fails version planning; for custom prerelease formats, first evaluate whether a plugin and custom publish workflow can represent the complete format.
 
 ## Publishing
@@ -63,6 +82,8 @@ Use `smif publish --dry-run` to inspect preflight and command behavior. Commands
 The following cases are generally outside the built-in static rules:
 
 - the version is not in `project(... VERSION ...)`;
+- qmake version selection is ambiguous or requires a custom variable;
+- qmake workspace members come from `TEMPLATE = subdirs`, `SUBDIRS`, or dynamic `include()` logic;
 - workspace members come from custom metadata or runtime scripts;
 - internal dependencies use CMake logic that cannot be expanded statically;
 - versions require non-numeric or custom prerelease formats.

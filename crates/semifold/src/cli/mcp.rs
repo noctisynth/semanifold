@@ -757,6 +757,10 @@ mod tests {
             .expect("MCP project error must contain a message");
         assert!(message.starts_with("Invalid config"), "{message}");
         assert!(message.contains("missing field `type`"), "{message}");
+        assert!(
+            message.contains("\n✘ The configuration may use"),
+            "{message}"
+        );
         assert!(message.contains("smif config migrate"), "{message}");
         fs::remove_dir_all(root).expect("MCP fixture must be removed");
     }

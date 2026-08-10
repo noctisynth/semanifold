@@ -906,6 +906,7 @@ fn malformed_toml_preserves_the_parser_diagnostic_before_the_migration_hint() {
     assert!(output.contains("TOML parse error at line"), "{output}");
     assert!(output.contains("=chore = \"Chores\""), "{output}");
     assert!(output.contains("unexpected key or value"), "{output}");
+    assert!(output.contains("\n✘ "), "{output}");
     assert!(output.contains("smif config migrate"), "{output}");
     fs::remove_dir_all(root).unwrap();
 }

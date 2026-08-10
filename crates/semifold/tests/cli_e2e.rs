@@ -885,6 +885,32 @@ url = ""
 }
 
 #[test]
+fn malformed_toml_preserves_the_parser_diagnostic_before_the_migration_hint() {
+    let root = temporary_repository("malformed-config");
+    fs::create_dir_all(root.join(".changes")).unwrap();
+    fs::write(
+        root.join(".changes/config.toml"),
+        "[branches]\nbase = \"main\"\nrelease = \"release\"\n\n[tags]\n=chore = \"Chores\"\n",
+    )
+    .unwrap();
+
+    let status = run_smif(&root, &["status"]);
+
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(output.contains("ERROR Invalid config"), "{output}");
+    assert!(output.contains("TOML parse error at line"), "{output}");
+    assert!(output.contains("=chore = \"Chores\""), "{output}");
+    assert!(output.contains("unexpected key or value"), "{output}");
+    assert!(output.contains("smif config migrate"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn unsupported_json_config_does_not_recommend_toml_migration() {
     let root = temporary_repository("unsupported-json-config");
     fs::create_dir_all(root.join(".changes")).unwrap();

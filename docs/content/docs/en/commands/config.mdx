@@ -32,7 +32,7 @@ smif config migrate
 
 Semifold reads and migrates v0.2.x configuration before strict project loading. It can replace legacy `version-mode`, normalize known snake_case keys, and add the required typed `pre-check` discriminator while preserving unrelated TOML and comments. `--check` returns a non-zero status when a migration is needed and never writes the file.
 
-When another command cannot load TOML configuration under the current contract, it suggests trying `smif config migrate`. If migration also fails, the problem is outside the supported legacy-field conversions and must be corrected from its parse or validation error. This command does not migrate JSON configuration or repair file permissions.
+When another command cannot load TOML configuration under the current contract, it displays the underlying parse or validation error in full before suggesting `smif config migrate`. If migration also fails, the problem is outside the supported legacy-field conversions and must be corrected from that error. This command does not migrate JSON configuration or repair file permissions.
 
 ## Set or clear a release channel
 

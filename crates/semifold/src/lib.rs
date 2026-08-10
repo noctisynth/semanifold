@@ -4,6 +4,7 @@ use clap::Parser;
 use log::LevelFilter;
 use rust_i18n::t;
 use semifold_engine::{ProjectLoadError, ProjectLocation};
+use std::process::ExitCode;
 
 pub mod cli;
 pub mod logger;
@@ -12,6 +13,20 @@ pub mod utils;
 use cli::{Cli, Commands};
 
 rust_i18n::i18n!("locales", fallback = "en");
+
+pub fn run_cli() -> ExitCode {
+    if let Some(locale) = sys_locale::get_locale() {
+        rust_i18n::set_locale(&locale);
+    }
+
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            cli::terminal::Terminal::detect().error(&error.to_string());
+            ExitCode::FAILURE
+        }
+    }
+}
 
 pub fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -73,10 +88,19 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 fn project_load_error_message(error: &ProjectLoadError) -> String {
-    append_config_migration_hint(
-        t!("cli.project_load_failed", error = error).into_owned(),
-        error,
-    )
+    let fallback = t!("cli.project_load_failed", error = error).into_owned();
+    project_load_error_message_with_fallback(error, fallback)
+}
+
+pub(crate) fn project_load_error_message_with_fallback(
+    error: &ProjectLoadError,
+    fallback: String,
+) -> String {
+    let message = match error {
+        ProjectLoadError::ConfigInvalid { source, .. } => source.to_string(),
+        _ => fallback,
+    };
+    append_config_migration_hint(message, error)
 }
 
 pub(crate) fn append_config_migration_hint(

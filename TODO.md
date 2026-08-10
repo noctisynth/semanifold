@@ -101,6 +101,7 @@
 - [x] `config channel set` 在 Node.js package 的 `npm publish` 缺少显式 `--tag` 时提示目标 package 与 channel，不自动改写命令
 - [x] `config migrate` 在严格 `Project` 加载前直接从原始 TOML 规划、验证并原子应用迁移
 - [x] 严格加载 TOML 配置失败时追加本地化的 `smif config migrate` 恢复建议，并排除迁移无法处理的错误
+- [x] 顶层命令错误改由 `Terminal` 输出，并为配置加载错误保留完整底层 TOML 诊断
 - [x] 新增 `smif config sync`
 - [x] 新增 `smif config sync --check`
 - [x] 新增 `smif config sync --prune`
@@ -157,6 +158,7 @@
 - [x] `config migrate --check` 检测到旧字段时返回非零且不写文件
 - [x] 连续执行两次 `config migrate` 时第二次无 diff
 - [x] 配置加载迁移建议覆盖可迁移旧契约，并确认 JSON、不存在和 I/O 错误不会得到误导提示
+- [x] malformed TOML 的 CLI 回归测试覆盖错误标签、行列源码诊断和迁移建议
 - [x] channel set、clear 与 `--all` 保留目标 table 的其他字段，并且重复执行无 diff
 - [x] channel `--check` 检测到状态不匹配时返回非零且不写文件
 - [x] 新增 package 只产生最小 TOML diff

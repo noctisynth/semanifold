@@ -6,6 +6,7 @@ use std::{
 
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use rust_i18n::t;
 use unicode_width::UnicodeWidthStr;
 
 static ACTIVE_PROGRESS: OnceLock<Mutex<Option<ProgressBar>>> = OnceLock::new();
@@ -115,6 +116,11 @@ impl Terminal {
             self.symbol(StepOutcome::Skipped).yellow(),
             message.yellow()
         );
+    }
+
+    pub(crate) fn error(&self, message: &str) {
+        let rendered = format!("{} {message}", t!("cli.common.error_label")).red();
+        let _ = writeln!(ProgressAwareStderr, "{rendered}");
     }
 
     pub(crate) fn recovery(&self, title: &str, message: &str) {

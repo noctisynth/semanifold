@@ -767,6 +767,11 @@ CLI 的人类可读输出必须形成统一的 presentation 层，不再由各�
 再由 `Terminal` 渲染标题、阶段、步骤、表格、成功摘要、警告、失败状态和恢复建议。i18n、颜色、
 Unicode 与动态终端状态只存在于 CLI。
 
+命令返回到进程入口的最终错误同样属于 presentation，而不是日志事件：两个 binary 入口必须复用
+同一个 CLI 执行函数，由 `Terminal` 向 stderr 输出本地化错误标签和错误内容，再返回失败退出码；
+不得调用 `log::error!` 伪装用户可操作错误。错误包装不能丢失底层诊断；配置加载失败必须保留
+`ResolveError` 的完整展示，包括 TOML 行列、源码片段和解析原因，再在其后追加独立的恢复建议。
+
 `indicatif` 仅作为 `Terminal` 内部的动态进度适配器：未知长度操作使用 spinner；只有存在可观察的
 逐项执行回调时，已知 package、file edit 或 asset 数量才使用有界进度，不能为瞬时静态渲染伪造
 进度；`MultiProgress` 只在确有多个同时活动的任务时使用。静态表格、
@@ -1754,8 +1759,8 @@ TOML 生成迁移计划，并对迁移后的内容执行严格 `Config` 反序�
 `ProjectLocation::load()` 解析旧配置或执行 workspace discovery。除 `init`、`mcp` 及该迁移入口
 外，其余项目命令仍先严格加载完整 `Project`。迁移应用继续使用原子写回。
 
-普通 CLI 命令在严格加载 TOML 配置时收到 `ResolveError::InvalidConfig`，必须在保留原始加载错误的
-同时追加本地化恢复建议，引导用户先尝试运行 `smif config migrate`。该建议只表示配置可能使用旧契约，
+普通 CLI 命令在严格加载 TOML 配置时收到 `ResolveError::InvalidConfig`，必须完整展示该底层错误并
+追加本地化恢复建议，引导用户先尝试运行 `smif config migrate`。该建议只表示配置可能使用旧契约，
 不能宣称迁移一定能够修复任意 TOML 语法或手工配置错误。配置文件缺失、读取 I/O 失败、项目路径错误
 以及不受支持的 JSON 配置不得显示该建议，因为 `config migrate` 无法解决这些问题。迁移命令自身继续
 直接报告迁移规划或验证错误，不递归附加相同建议。
@@ -2436,6 +2441,7 @@ fixtures/rust/
 - `config migrate` 将 legacy `version-mode` 转换为 `channel`，保留无关字段与注释；
 - `config migrate --check` 在存在迁移项时不写文件并返回非零；
 - 普通命令因 TOML 配置无法按当前契约加载时提示运行 `smif config migrate`，JSON、不存在和 I/O 错误不提示；
+- 顶层 CLI 错误由 `Terminal` 而不是 logger 输出，并保留无效 TOML 的行列、源码片段和解析原因；
 - 同时存在 `channel` 与 `version-mode` 时迁移拒绝写入。
 - `config channel set` 与 `clear` 仅修改指定 package 的 `channel` 字段，并保留 table 的其他内容；
 - `config channel --check` 在目标 channel 不匹配时不写入并返回非零；

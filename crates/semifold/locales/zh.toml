@@ -6,6 +6,7 @@ dirty_repo = "Git 仓库不干净。请先提交或暂存您的更改，或使�
 
 [cli.common]
 dry_run_banner = "模拟运行 — 不会修改 Semifold 文件或 Forge 资源"
+error_label = "ERROR"
 interactive_input_unavailable = "无法交互询问%{prompt}；请提供参数 %{arguments}"
 
 [cli.commands]

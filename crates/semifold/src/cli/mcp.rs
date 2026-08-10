@@ -496,9 +496,9 @@ fn project_error(error: ProjectLoadError) -> McpToolError {
             "PROJECT_INVALID"
         }
     };
-    let message = crate::append_config_migration_hint(
-        t!("cli.mcp.errors.project_load_failed", error = error).into_owned(),
+    let message = crate::project_load_error_message_with_fallback(
         &error,
+        t!("cli.mcp.errors.project_load_failed", error = error).into_owned(),
     );
     McpToolError::new(code, message)
 }
@@ -752,12 +752,12 @@ mod tests {
 
         assert_eq!(result.is_error, Some(true));
         assert_eq!(structured(&result)["code"], "PROJECT_INVALID");
-        assert!(
-            structured(&result)["message"]
-                .as_str()
-                .is_some_and(|message| message.contains("smif config migrate")),
-            "{result:?}"
-        );
+        let message = structured(&result)["message"]
+            .as_str()
+            .expect("MCP project error must contain a message");
+        assert!(message.starts_with("Invalid config"), "{message}");
+        assert!(message.contains("missing field `type`"), "{message}");
+        assert!(message.contains("smif config migrate"), "{message}");
         fs::remove_dir_all(root).expect("MCP fixture must be removed");
     }
 

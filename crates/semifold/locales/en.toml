@@ -6,6 +6,7 @@ dirty_repo = "Git repository is dirty. Please commit or stash your changes first
 
 [cli.common]
 dry_run_banner = "DRY RUN — no Semifold files or Forge resources will be changed"
+error_label = "ERROR"
 interactive_input_unavailable = "Cannot prompt for %{prompt}; provide %{arguments}"
 
 [cli.commands]

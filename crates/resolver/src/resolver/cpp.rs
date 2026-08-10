@@ -19,10 +19,299 @@ use crate::{
     utils,
 };
 
-/// C++ resolver for CMake-based projects
+/// C++ resolver for statically analyzable CMake and qmake projects.
 pub struct CppResolver;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum CppManifest {
+    Cmake {
+        path: PathBuf,
+    },
+    Qmake {
+        path: PathBuf,
+        variable: QmakeVersionVariable,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum QmakeVersionVariable {
+    Direct,
+    Components {
+        major: String,
+        minor: String,
+        patch: String,
+    },
+}
+
+impl QmakeVersionVariable {
+    fn display_name(&self) -> String {
+        match self {
+            Self::Direct => "VERSION".to_string(),
+            Self::Components {
+                major,
+                minor,
+                patch,
+            } => format!("{major}, {minor}, {patch}"),
+        }
+    }
+}
+
 impl CppResolver {
+    fn qmake_files(package_path: &Path) -> Result<Vec<PathBuf>, ResolveError> {
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(package_path)? {
+            let path = entry?.path();
+            if path.is_file()
+                && matches!(
+                    path.extension().and_then(|extension| extension.to_str()),
+                    Some("pro") | Some("pri")
+                )
+            {
+                files.push(path);
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
+    fn qmake_assignment(content: &str, variable: &str) -> Option<String> {
+        Self::qmake_assignments(content, variable)
+            .into_iter()
+            .next()
+    }
+
+    fn qmake_assignments(content: &str, variable: &str) -> Vec<String> {
+        let pattern = format!(
+            r#"(?m)^\s*{}\s*=\s*["']?([^\s"'#]+)"#,
+            regex::escape(variable)
+        );
+        let Ok(regex) = Regex::new(&pattern) else {
+            return Vec::new();
+        };
+        regex
+            .captures_iter(content)
+            .filter_map(|captures| captures.get(1))
+            .map(|value| value.as_str().to_string())
+            .collect()
+    }
+
+    fn unique_qmake_assignment(
+        content: &str,
+        variable: &str,
+        path: &Path,
+    ) -> Result<Option<String>, ResolveError> {
+        let values = Self::qmake_assignments(content, variable);
+        match values.as_slice() {
+            [] => Ok(None),
+            [value] => Ok(Some(value.clone())),
+            _ => Err(ResolveError::ParseError {
+                path: path.to_path_buf(),
+                reason: format!("qmake variable {variable} has multiple assignments"),
+            }),
+        }
+    }
+
+    fn qmake_version_candidate(
+        path: &Path,
+    ) -> Result<Option<(QmakeVersionVariable, semver::Version)>, ResolveError> {
+        let content = std::fs::read_to_string(path)?;
+        let direct = Self::unique_qmake_assignment(&content, "VERSION", path)?
+            .map(|value| {
+                semver::Version::parse(&value)
+                    .map(|version| (QmakeVersionVariable::Direct, version))
+                    .map_err(|error| ResolveError::ParseError {
+                        path: path.to_path_buf(),
+                        reason: format!("invalid qmake VERSION `{value}`: {error}"),
+                    })
+            })
+            .transpose()?;
+        let component_variables = ["VERSION_MAJOR", "VERSION_MINOR", "VERSION_PATCH"];
+        let mut component_values = Vec::new();
+        for variable in component_variables {
+            if let Some(value) = Self::unique_qmake_assignment(&content, variable, path)? {
+                component_values.push(value.parse::<u64>().map_err(|error| {
+                    ResolveError::ParseError {
+                        path: path.to_path_buf(),
+                        reason: format!("invalid qmake {variable} `{value}`: {error}"),
+                    }
+                })?);
+            }
+        }
+        let components = match component_values.as_slice() {
+            [] => None,
+            [major, minor, patch] => Some((
+                QmakeVersionVariable::Components {
+                    major: "VERSION_MAJOR".to_string(),
+                    minor: "VERSION_MINOR".to_string(),
+                    patch: "VERSION_PATCH".to_string(),
+                },
+                semver::Version::new(*major, *minor, *patch),
+            )),
+            _ => {
+                return Err(ResolveError::ParseError {
+                    path: path.to_path_buf(),
+                    reason: "qmake component version requires VERSION_MAJOR, VERSION_MINOR, and VERSION_PATCH"
+                        .to_string(),
+                });
+            }
+        };
+        match (direct, components) {
+            (Some(_), Some(_)) => Err(ResolveError::ParseError {
+                path: path.to_path_buf(),
+                reason: "qmake defines both VERSION and VERSION_MAJOR/MINOR/PATCH".to_string(),
+            }),
+            (candidate, None) | (None, candidate) => Ok(candidate),
+        }
+    }
+
+    fn resolve_manifest(package_path: &Path) -> Result<CppManifest, ResolveError> {
+        let cmake_path = package_path.join("CMakeLists.txt");
+        if cmake_path.is_file() {
+            let content = std::fs::read_to_string(&cmake_path)?;
+            if Regex::new(r"(?i)project\s*\([^)]*VERSION\s+")
+                .map_err(|error| ResolveError::ParseError {
+                    path: cmake_path.clone(),
+                    reason: error.to_string(),
+                })?
+                .is_match(&content)
+            {
+                return Ok(CppManifest::Cmake { path: cmake_path });
+            }
+        }
+
+        let mut candidates = Vec::new();
+        for path in Self::qmake_files(package_path)? {
+            if let Some((variable, version)) = Self::qmake_version_candidate(&path)? {
+                candidates.push((path, variable, version));
+            }
+        }
+        match candidates.as_slice() {
+            [(path, variable, _)] => Ok(CppManifest::Qmake {
+                path: path.clone(),
+                variable: variable.clone(),
+            }),
+            [] => Err(ResolveError::ParseError {
+                path: package_path.to_path_buf(),
+                reason:
+                    "neither a versioned CMake project nor a qmake VERSION assignment was found"
+                        .to_string(),
+            }),
+            candidates => Err(ResolveError::ParseError {
+                path: package_path.to_path_buf(),
+                reason: format!(
+                    "multiple qmake version candidates found: {}",
+                    candidates
+                        .iter()
+                        .map(|(path, variable, _)| format!(
+                            "{} ({})",
+                            path.display(),
+                            variable.display_name()
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            }),
+        }
+    }
+
+    fn qmake_package_name(
+        package_path: &Path,
+        version_path: &Path,
+    ) -> Result<String, ResolveError> {
+        let mut targets = Vec::new();
+        for path in Self::qmake_files(package_path)? {
+            if path.extension().and_then(|extension| extension.to_str()) != Some("pro") {
+                continue;
+            }
+            let content = std::fs::read_to_string(path)?;
+            if let Some(target) = Self::qmake_assignment(&content, "TARGET") {
+                targets.push(target);
+            }
+        }
+        targets.sort();
+        targets.dedup();
+        match targets.as_slice() {
+            [target] => Ok(target.clone()),
+            [] => version_path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_string)
+                .ok_or_else(|| ResolveError::ParseError {
+                    path: version_path.to_path_buf(),
+                    reason: "qmake TARGET and file name are unavailable".to_string(),
+                }),
+            _ => Err(ResolveError::ParseError {
+                path: package_path.to_path_buf(),
+                reason: format!(
+                    "multiple qmake TARGET candidates found: {}",
+                    targets.join(", ")
+                ),
+            }),
+        }
+    }
+
+    fn replace_qmake_assignment(
+        content: &str,
+        variable: &str,
+        value: &str,
+        path: &Path,
+    ) -> Result<String, ResolveError> {
+        let pattern = format!(
+            r#"(?m)^(\s*{}\s*=\s*["']?)([^\s"'#]+)"#,
+            regex::escape(variable)
+        );
+        let regex = Regex::new(&pattern).map_err(|error| ResolveError::ParseError {
+            path: path.to_path_buf(),
+            reason: error.to_string(),
+        })?;
+        Ok(regex
+            .replace(content, |captures: &regex::Captures| {
+                format!("{}{value}", &captures[1])
+            })
+            .into_owned())
+    }
+
+    fn replace_qmake_version(
+        content: &str,
+        variable: &QmakeVersionVariable,
+        version: &str,
+        path: &Path,
+    ) -> Result<String, ResolveError> {
+        let replacement = match variable {
+            QmakeVersionVariable::Direct => {
+                Self::replace_qmake_assignment(content, "VERSION", version, path)?
+            }
+            QmakeVersionVariable::Components {
+                major,
+                minor,
+                patch,
+            } => {
+                let parsed = semver::Version::parse(version).map_err(|error| {
+                    ResolveError::InvalidVersion {
+                        version: version.to_string(),
+                        reason: error.to_string(),
+                    }
+                })?;
+                let mut updated = content.to_string();
+                for (variable, value) in [
+                    (major.as_str(), parsed.major.to_string()),
+                    (minor.as_str(), parsed.minor.to_string()),
+                    (patch.as_str(), parsed.patch.to_string()),
+                ] {
+                    updated = Self::replace_qmake_assignment(&updated, variable, &value, path)?;
+                }
+                updated
+            }
+        };
+        if replacement == content {
+            return Err(ResolveError::ParseError {
+                path: path.to_path_buf(),
+                reason: "qmake version assignment could not be rewritten".to_string(),
+            });
+        }
+        Ok(replacement)
+    }
+
     fn package_config(path: impl Into<PathBuf>) -> PackageConfig {
         PackageConfig {
             path: path.into(),
@@ -77,24 +366,48 @@ impl CppResolver {
             }
         })?;
         let package_path = root.join(package.path.as_std_path());
-        let cmake_path = package_path.join("CMakeLists.txt");
-        let cmake = std::fs::read_to_string(&cmake_path)?;
-        let re = Regex::new(
-            r"(?i)(project\s*\([^)]*VERSION\s+)([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
-        )
-        .map_err(|error| ResolveError::ParseError {
-            path: cmake_path.clone(),
-            reason: error.to_string(),
-        })?;
-        let cmake_updated = re.replace(&cmake, |caps: &regex::Captures| {
-            format!("{}{}", &caps[1], version)
-        });
+        let manifest = Self::resolve_manifest(&package_path)?;
+        let (manifest_path, content, new_content) = match manifest {
+            CppManifest::Cmake { path } => {
+                let content = std::fs::read_to_string(&path)?;
+                let re = Regex::new(
+                    r"(?i)(project\s*\([^)]*VERSION\s+)([\d.]+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?)",
+                )
+                .map_err(|error| ResolveError::ParseError {
+                    path: path.clone(),
+                    reason: error.to_string(),
+                })?;
+                let updated = re
+                    .replace(&content, |caps: &regex::Captures| {
+                        format!("{}{}", &caps[1], version)
+                    })
+                    .into_owned();
+                (path, content, updated)
+            }
+            CppManifest::Qmake { path, variable } => {
+                let content = std::fs::read_to_string(&path)?;
+                let updated = Self::replace_qmake_version(&content, &variable, &version, &path)?;
+                (path, content, updated)
+            }
+        };
+        let relative_manifest = manifest_path
+            .strip_prefix(root)
+            .map(Path::to_path_buf)
+            .map_err(|_| ResolveError::InvalidConfig {
+                path: manifest_path.clone(),
+                reason: "C++ manifest is outside the project root".to_string(),
+            })?;
         let mut edits = vec![FileEdit {
-            path: package.path.join("CMakeLists.txt"),
+            path: camino::Utf8PathBuf::from_path_buf(relative_manifest).map_err(|path| {
+                ResolveError::InvalidConfig {
+                    path,
+                    reason: "C++ manifest path is not valid UTF-8".to_string(),
+                }
+            })?,
             expected: FileEditExpectation::Existing {
-                hash: FileHash::from_bytes(cmake.as_bytes()),
+                hash: FileHash::from_bytes(content.as_bytes()),
             },
-            new_content: cmake_updated.into_owned(),
+            new_content,
             source: EditSource::PackageVersion {
                 package: package.id.clone(),
             },
@@ -173,7 +486,7 @@ impl CppResolver {
             .map(|member| {
                 member
                     .strip_prefix(&canonical_root)
-                    .map(Path::to_path_buf)
+                    .map(|path| PathBuf::from(path.to_string_lossy().replace('\\', "/")))
                     .map_err(|_| ResolveError::InvalidConfig {
                         path: member,
                         reason: "C++ workspace member is outside the project root".to_string(),
@@ -232,6 +545,13 @@ impl CppResolver {
         root: &Path,
         pkg_config: &PackageConfig,
     ) -> Result<Vec<ManifestDependency>, ResolveError> {
+        let package_path = root.join(&pkg_config.path);
+        if matches!(
+            Self::resolve_manifest(&package_path)?,
+            CppManifest::Qmake { .. }
+        ) {
+            return Ok(Vec::new());
+        }
         Ok(self
             .internal_dependencies(root, pkg_config)?
             .into_iter()
@@ -402,18 +722,28 @@ impl CppResolver {
         pkg_config: &PackageConfig,
     ) -> Result<ParsedPackage, ResolveError> {
         let package_path = root.join(&pkg_config.path);
-        let cmake_path = package_path.join("CMakeLists.txt");
-
-        if !cmake_path.exists() {
-            return Err(ResolveError::FileOrDirNotFound {
-                path: cmake_path.clone(),
-            });
-        }
-
-        // Read file once and extract both name and version
-        let content = std::fs::read_to_string(&cmake_path)?;
-        let name = self.extract_name_from_content(&content, &cmake_path)?;
-        let version = self.extract_version_from_content(&content, &cmake_path)?;
+        let manifest = Self::resolve_manifest(&package_path)?;
+        let (name, version) = match manifest {
+            CppManifest::Cmake { path } => {
+                let content = std::fs::read_to_string(&path)?;
+                (
+                    self.extract_name_from_content(&content, &path)?,
+                    self.extract_version_from_content(&content, &path)?,
+                )
+            }
+            CppManifest::Qmake { path, variable: _ } => {
+                let (_, version) = Self::qmake_version_candidate(&path)?.ok_or_else(|| {
+                    ResolveError::ParseError {
+                        path: path.clone(),
+                        reason: "qmake version candidate disappeared during inspection".to_string(),
+                    }
+                })?;
+                (
+                    Self::qmake_package_name(&package_path, &path)?,
+                    version.to_string(),
+                )
+            }
+        };
 
         Ok(ParsedPackage {
             name,
@@ -426,19 +756,23 @@ impl CppResolver {
 
     fn discover_packages(&self, root: &Path) -> Result<Vec<ParsedPackage>, ResolveError> {
         let cmake_path = root.join("CMakeLists.txt");
-        if !cmake_path.exists() {
+        let has_qmake_files = !Self::qmake_files(root)?.is_empty();
+        if !cmake_path.exists() && !has_qmake_files {
             log::warn!(
-                "Cannot resolve package in {}, CMakeLists.txt not found.",
+                "Cannot resolve C++ package in {}; no CMakeLists.txt, .pro, or .pri file found.",
                 root.display()
             );
             return Ok(vec![]);
         }
 
+        let root_manifest = Self::resolve_manifest(root)?;
         let root_package = self.parse_package(root, &Self::package_config("."))?;
 
         let mut packages = vec![root_package];
-        for member in self.workspace_members(root)? {
-            packages.push(self.parse_package(root, &Self::package_config(member))?);
+        if matches!(root_manifest, CppManifest::Cmake { .. }) {
+            for member in self.workspace_members(root)? {
+                packages.push(self.parse_package(root, &Self::package_config(member))?);
+            }
         }
 
         Ok(packages)
@@ -653,6 +987,156 @@ mod tests {
                 .unwrap()
                 .contains("VERSION 1.0.0")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_and_plans_a_quoted_qmake_version() {
+        let root = temp_dir("qmake-direct");
+        fs::write(
+            root.join("demo.pro"),
+            "TEMPLATE = app\nTARGET = demo-app\nVERSION = \"1.2.3\" # release\n",
+        )
+        .unwrap();
+
+        let inspection = CppResolver
+            .inspect(&PackageLocation {
+                id: PackageId::new("demo"),
+                project_root: camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap(),
+                path: ".".into(),
+            })
+            .unwrap();
+        assert_eq!(inspection.manifest_name, "demo-app");
+        assert_eq!(inspection.version, semver::Version::new(1, 2, 3));
+
+        let snapshot = PackageSnapshot {
+            id: inspection.id,
+            manifest_name: inspection.manifest_name,
+            version: inspection.version,
+            version_source: inspection.version_source,
+            ecosystem: inspection.ecosystem,
+            path: inspection.path,
+            publishable: inspection.publishable,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([(snapshot.id.clone(), semver::Version::new(1, 2, 4))]);
+        let edits = CppResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&snapshot),
+                released_packages: std::slice::from_ref(&snapshot.id),
+                versions: &versions,
+            })
+            .unwrap();
+
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].path, "demo.pro");
+        assert!(
+            edits[0]
+                .new_content
+                .contains("VERSION = \"1.2.4\" # release")
+        );
+        assert!(
+            fs::read_to_string(root.join("demo.pro"))
+                .unwrap()
+                .contains("1.2.3")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_and_rewrites_qmake_component_variables_in_pri() {
+        let root = temp_dir("qmake-components");
+        fs::write(
+            root.join("demo.pro"),
+            "TEMPLATE = app\nTARGET = demo-components\ninclude(version.pri)\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("version.pri"),
+            "VERSION_MAJOR = \"2\"\nVERSION_MINOR = '4'\nVERSION_PATCH = 6\n",
+        )
+        .unwrap();
+
+        let package = CppResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
+        assert_eq!(package.name, "demo-components");
+        assert_eq!(package.version, semver::Version::new(2, 4, 6));
+
+        let snapshot = PackageSnapshot {
+            id: PackageId::new("version"),
+            manifest_name: "version".to_string(),
+            version: package.version,
+            version_source: VersionSource::PackageManifest,
+            ecosystem: EcosystemId::CPP,
+            path: ".".into(),
+            publishable: true,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([(snapshot.id.clone(), semver::Version::new(3, 0, 1))]);
+        let edits = CppResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&snapshot),
+                released_packages: std::slice::from_ref(&snapshot.id),
+                versions: &versions,
+            })
+            .unwrap();
+
+        assert!(edits[0].new_content.contains("VERSION_MAJOR = \"3\""));
+        assert!(edits[0].new_content.contains("VERSION_MINOR = '0'"));
+        assert!(edits[0].new_content.contains("VERSION_PATCH = 1"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_an_invalid_static_qmake_version() {
+        let root = temp_dir("qmake-invalid-version");
+        fs::write(root.join("app.pro"), "TARGET = app\nVERSION = 1.2\n").unwrap();
+
+        let error = CppResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap_err();
+        assert!(error.to_string().contains("invalid qmake VERSION `1.2`"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_ambiguous_qmake_version_candidates() {
+        let root = temp_dir("qmake-ambiguous");
+        fs::write(root.join("app.pro"), "VERSION = 1.0.0\n").unwrap();
+        fs::write(root.join("shared.pri"), "VERSION = 2.0.0\n").unwrap();
+
+        let error = CppResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap_err();
+        assert!(matches!(error, ResolveError::ParseError { .. }));
+        assert!(
+            error
+                .to_string()
+                .contains("multiple qmake version candidates")
+        );
+        assert!(error.to_string().contains("app.pro"));
+        assert!(error.to_string().contains("shared.pri"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn versioned_cmake_takes_precedence_over_qmake() {
+        let root = temp_dir("cmake-qmake-precedence");
+        write_cmake_project(&root, ".", "cmake-app", "1.0.0");
+        fs::write(
+            root.join("qmake-app.pro"),
+            "TARGET = qmake-app\nVERSION = 2.0.0\n",
+        )
+        .unwrap();
+
+        let package = CppResolver
+            .parse_package(&root, &package_config("."))
+            .unwrap();
+        assert_eq!(package.name, "cmake-app");
+        assert_eq!(package.version, semver::Version::new(1, 0, 0));
         fs::remove_dir_all(root).unwrap();
     }
 

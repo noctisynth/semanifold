@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.0
+
+### New Features
+
+- [`61697f3`](https://github.com/noctisynth/semifold/commit/61697f3ffb25614e8633b041cfd1b96effa6632c): Make `smif init` assign ecosystem-prefixed IDs to packages that share a manifest name across ecosystems, with deterministic numeric suffixes when needed.
+- [`d8d7bc1`](https://github.com/noctisynth/semifold/commit/d8d7bc110712743ab35b83fa861ddcc1a66812d1): Suggest `smif config migrate` when a TOML configuration cannot be loaded under the current contract, while keeping unrelated project and format errors focused on their actual cause.
+
 ## v1.1.0-rc.0
 
 ### New Features

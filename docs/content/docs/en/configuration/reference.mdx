@@ -22,6 +22,23 @@ release = 'release/v{{ release.plan.packages["semifold"].next_version }}'
 
 The template uses strict variable checks. Rendering fails instead of inventing an ambiguous branch when the referenced package is not in this release or the plan has no common version.
 
+## `[release]`
+
+Optional strict MiniJinja templates customize the commit created on the release branch and the title of its pull request:
+
+```toml
+[release]
+commit-message = "chore(release): {{ release.plan.fingerprint }}"
+pull-request-title = 'chore(release): {{ release.plan.packages["semifold"].next_version }}'
+```
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `commit-message` | strict MiniJinja template string | `chore(release): bump versions` | Complete Git commit message; multiline output is allowed. |
+| `pull-request-title` | strict MiniJinja template string | `chore(release): bump versions` | GitHub pull request title; output must be one non-empty line. |
+
+Both templates expose only the same `release.*` context as `branches.release`. Omit the fields or the whole section to retain the defaults. `smif init` and `smif config sync` do not write this optional section automatically. Invalid templates fail before version files or changesets are modified.
+
 ## `[tags]`
 
 A map from changeset tag to changelog heading:

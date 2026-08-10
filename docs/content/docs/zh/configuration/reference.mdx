@@ -22,6 +22,23 @@ release = 'release/v{{ release.plan.packages["semifold"].next_version }}'
 
 模板使用严格变量检查。引用的软件包不在本次发布集合，或计划中的软件包没有共同版本时，渲染会失败而不是生成含糊的分支名。
 
+## `[release]`
+
+可选的严格 MiniJinja 模板可以定制发布分支上的提交消息及其 Pull Request 标题：
+
+```toml
+[release]
+commit-message = "chore(release): {{ release.plan.fingerprint }}"
+pull-request-title = 'chore(release): {{ release.plan.packages["semifold"].next_version }}'
+```
+
+| 字段 | 类型 | 默认值 | 含义 |
+| --- | --- | --- | --- |
+| `commit-message` | 严格 MiniJinja 模板字符串 | `chore(release): bump versions` | 完整的 Git 提交消息；允许渲染为多行。 |
+| `pull-request-title` | 严格 MiniJinja 模板字符串 | `chore(release): bump versions` | GitHub Pull Request 标题；渲染结果必须是非空单行文本。 |
+
+两个模板只暴露与 `branches.release` 相同的 `release.*` 上下文。省略字段或整个分区即可保留默认行为；`smif init` 和 `smif config sync` 不会自动写入这个可选分区。无效模板会在修改版本文件或消费变更集之前失败。
+
 ## `[tags]`
 
 变更集标签到变更日志标题的映射：

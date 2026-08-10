@@ -13,6 +13,11 @@
 base = "main"
 release = "release"
 
+# 可选；省略时保留内置消息。
+[release]
+commit-message = "chore(release): {{ release.plan.fingerprint }}"
+pull-request-title = "Release {{ release.plan.common_version }}"
+
 [tags]
 chore = "Chores"
 feat = "New Features"
@@ -54,6 +59,17 @@ publish = []
 |------|------|--------|------|
 | `base` | string | `"main"` | 发布的基础分支 |
 | `release` | string | `"release"` | Release 分支名称 |
+
+---
+
+## `[release]` 部分
+
+可选地配置发布自动化使用的严格 MiniJinja 模板。两个字段暴露与发布分支模板相同的 `release.*` 上下文，省略时均默认使用 `chore(release): bump versions`。`smif init` 和 `smif config sync` 不会自动加入这个分区。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `commit-message` | string | `"chore(release): bump versions"` | 发布分支的提交消息；允许多行输出 |
+| `pull-request-title` | string | `"chore(release): bump versions"` | 发布 Pull Request 标题；输出必须是非空单行文本 |
 
 ---
 

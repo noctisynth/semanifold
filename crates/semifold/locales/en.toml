@@ -261,6 +261,8 @@ no_changesets_publish = "No changesets found, will publish the current version."
 no_existing_pr = "No existing PR found, create a new one."
 existing_pr_found = "Existing PR #%{number} found, skip creating a new one."
 release_branch_invalid = "Failed to render a valid release branch: %{error}"
+commit_message_invalid = "Failed to render a valid release commit message: %{error}"
+pull_request_title_invalid = "Failed to render a valid release pull request title: %{error}"
 release_prepare_failed = "Failed to prepare release: %{error}"
 
 [cli.mcp]

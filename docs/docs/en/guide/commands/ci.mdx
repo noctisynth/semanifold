@@ -98,13 +98,13 @@ user.email = "github-actions[bot]@users.noreply.github.com"
 ### Release Branch
 
 - Branch name: configured release branch (default: `release`)
-- Commit message: `chore(release): bump versions`
+- Commit message: configurable with `[release].commit-message`; defaults to `chore(release): bump versions`
 - Force-pushes to ensure consistency
 
 ### Pull Request
 
 - Creates PR from release branch to base branch
-- PR title: `chore(release): bump versions`
+- PR title: configurable with `[release].pull-request-title`; defaults to `chore(release): bump versions`
 - PR body: Contains changelogs for all affected packages
 
 ## Examples

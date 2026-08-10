@@ -1220,6 +1220,7 @@ args = {arguments}
                     base: "main".to_string(),
                     release: "release".to_string(),
                 },
+                release: Default::default(),
                 tags: Default::default(),
                 changelog: Default::default(),
                 packages: Default::default(),

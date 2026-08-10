@@ -24,6 +24,15 @@ pub struct BranchesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct ReleaseConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_request_title: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct ChangelogConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
@@ -321,6 +330,9 @@ impl PluginConfig {
 pub struct Config {
     /// Branch configuration.
     pub branches: BranchesConfig,
+    /// Optional release commit and pull request templates.
+    #[serde(default, skip_serializing_if = "is_default_release_config")]
+    pub release: ReleaseConfig,
     /// Tag configuration.
     pub tags: BTreeMap<String, String>,
     /// Changelog template configuration.
@@ -388,6 +400,10 @@ pub enum ConfigValidationError {
 
 fn is_default_changelog_config(config: &ChangelogConfig) -> bool {
     config.template.is_none() && config.changeset_template.is_none()
+}
+
+fn is_default_release_config(config: &ReleaseConfig) -> bool {
+    config.commit_message.is_none() && config.pull_request_title.is_none()
 }
 
 pub fn get_config_path(changeset_path: &Path) -> Result<PathBuf, ResolveError> {
@@ -472,7 +488,7 @@ mod tests {
 
     use super::{
         ChangelogConfig, ChannelBump, CommandConfig, Config, PackageConfig, PreCheckConfig,
-        ReleaseChannel, load_config_from_str,
+        ReleaseChannel, ReleaseConfig, load_config_from_str,
     };
     use crate::error::ResolveError;
 
@@ -497,6 +513,31 @@ changeset-template = "Change {{ changeset.summary }}"
         let rendered = toml_edit::ser::to_string(&config).unwrap();
         assert!(rendered.contains("changeset-template"));
         assert!(!rendered.contains("changeset_template"));
+    }
+
+    #[test]
+    fn release_templates_round_trip_with_kebab_case_fields() {
+        let config: ReleaseConfig = toml_edit::de::from_str(
+            r#"
+commit-message = "release {{ release.plan.fingerprint }}"
+pull-request-title = "Release {{ release.plan.common_version }}"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.commit_message.as_deref(),
+            Some("release {{ release.plan.fingerprint }}")
+        );
+        assert_eq!(
+            config.pull_request_title.as_deref(),
+            Some("Release {{ release.plan.common_version }}")
+        );
+
+        let rendered = toml_edit::ser::to_string(&config).unwrap();
+        assert!(rendered.contains("commit-message"));
+        assert!(rendered.contains("pull-request-title"));
+        assert!(!rendered.contains("commit_message"));
+        assert!(!rendered.contains("pull_request_title"));
     }
 
     #[test]

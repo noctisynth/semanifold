@@ -672,12 +672,25 @@ pub struct RenderedReleasePullRequest {
 }
 ```
 
-首版 release PR 不新增配置项或用户模板。纯 renderer 保持现有兼容输出：标题为
-`chore(release): bump versions`，正文以 `# Releases` 开始，并按 `PackageId` 稳定排序追加
-各 package changelog。`branch` 是已经由同一个 `ReleaseContext` 渲染并校验的 release
-branch，供后续 Forge 边界创建或更新 PR；renderer 不从 package 集合中推断主 package。
-未来如需用户可配置的 PR 模板，必须作为独立设计定义作用域、兼容规则与校验，不得将
-changelog 塞回 `ReleaseContext` 或恢复全局万能模板 map。
+release commit message 与 release PR title 可以通过仓库级可选配置定制：
+
+```toml
+[release]
+commit-message = "chore(release): {{ release.plan.fingerprint }}"
+pull-request-title = "chore(release): {{ release.plan.common_version }}"
+```
+
+两个字段都只接收严格 MiniJinja 模板，并只暴露与 `branches.release` 相同的 `release.*`
+作用域；不得把项目路径、原始配置、changelog、token 或任意环境变量加入模板上下文。
+模板在 version 文件副作用发生前完成渲染与校验：commit message 渲染结果必须非空，PR title
+还必须是非空单行文本。字段或整个 `[release]` 分区缺省时分别使用兼容默认值
+`chore(release): bump versions`；`init`、`config sync` 与其他配置保存路径不得为了表达默认值
+自动写入该分区。
+
+PR 正文不开放用户模板，继续由纯 renderer 以 `# Releases` 开始，并按 `PackageId` 稳定排序
+追加各 package changelog。`ReleasePullRequestContext.branch` 是已经由同一个 `ReleaseContext`
+渲染并校验的 release branch，供后续 Forge 边界创建或更新 PR；renderer 不从 package 集合中
+推断主 package，也不将 changelog 塞回 `ReleaseContext` 或恢复全局万能模板 map。
 
 当前没有已证明的项目级模板字段，因此首版不引入 `ProjectContext`。应用层的
 `Project` 仍负责 root、changeset directory、config path 和强类型配置的加载；这些
@@ -925,9 +938,9 @@ commit 和 pull request 与其来源 changeset 保持在同一个 `ChangesetCont
 产生的条目使用独立 `DependencyUpdateContext`。远程 PR 查询失败时收集层记录诊断并设置
 `pull_request = None`，纯 formatter 不感知查询失败原因。
 
-- release branch 模板只暴露 `release.*`；固定 release PR renderer 接收显式
-  `ReleasePullRequestContext`，其中 `release` 与 branch 模板引用同一个 workspace
-  `ReleaseContext`，changelog 是 version 规划后的应用层产物。
+- release branch、release commit message 与 release PR title 模板只暴露 `release.*`；release PR
+  body renderer 接收显式 `ReleasePullRequestContext`，其中 `release` 与三个模板引用同一个
+  workspace `ReleaseContext`，changelog 是 version 规划后的应用层产物。
 - version 与 changelog 中的包级视图同时暴露 `release.*` 与 `package.*`；
   `package.next_version` 和 `package.tag` 始终是该次版本计划的 package 事实。
 - publish 的 pre-check、prepublish、publish、asset 和 GitHub Release 使用独立
@@ -2545,8 +2558,8 @@ adapter 暴露旧 `ResolvedPackage`。
   `PublishContext` 和按场景构造的只读模板视图；
 - 从已验证 `ReleasePlan` 确定性派生 `common_version` 与 plan fingerprint；
 - 将 `branches.release` 作为严格 MiniJinja 模板渲染并校验，保持现有字面量配置兼容；
-- 以同一个 `ReleaseContext` 构造一次性 `ReleasePullRequestContext`，并通过固定兼容 renderer
-  生成稳定排序的 release PR 标题与正文；
+- 以同一个 `ReleaseContext` 严格渲染可选的 release commit message 与 release PR title，再构造
+  一次性 `ReleasePullRequestContext`，通过固定 renderer 生成稳定排序的 release PR 正文；
 - 引入 `PublishPlan`；
 - 抽出 `CommandRunner` 和 `RegistryClient`；
 - 将重复 publish 实现替换为统一 publisher；

@@ -170,6 +170,7 @@ fn init_accepts_complete_arguments_with_stdin_closed() {
     assert!(config.contains("release = \"release\""), "{config}");
     assert!(config.contains("[[resolver.rust.publish]]"), "{config}");
     assert!(config.contains("[tags]"), "{config}");
+    assert!(!config.contains("[release]"), "{config}");
     assert!(!root.join(".github/workflows/semifold-ci.yaml").exists());
     fs::remove_dir_all(root).unwrap();
 }
@@ -283,6 +284,41 @@ fn ci_version_branch_writes_the_version_workflow_output() {
     assert!(output.contains("\"schema-version\":1"), "{output}");
     assert!(output.contains("\"dry-run\":true"), "{output}");
     assert!(output.contains("\"next-version\":\"1.0.1\""), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ci_rejects_invalid_release_message_templates_before_applying_version_edits() {
+    let custom_config = config("channel = \"stable\"").replace(
+        "[tags]",
+        concat!(
+            "[release]\n",
+            "commit-message = \"release {{ release.plan.fingerprint }}\"\n",
+            "pull-request-title = \"{{ release.unknown }}\"\n\n",
+            "[tags]"
+        ),
+    );
+    let root = temporary_project("ci-invalid-release-title", &custom_config);
+    let github_output = root.join("github-output");
+
+    let ci = run_smif_in_github(&root, &["ci"], &github_output);
+
+    assert!(!ci.status.success(), "{ci:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&ci.stdout),
+        String::from_utf8_lossy(&ci.stderr)
+    );
+    assert!(
+        output.contains("failed to render release message template"),
+        "{output}"
+    );
+    assert!(
+        fs::read_to_string(root.join("Cargo.toml"))
+            .unwrap()
+            .contains("version = \"1.0.0\"")
+    );
+    assert!(root.join(".changes/feature.md").exists());
     fs::remove_dir_all(root).unwrap();
 }
 

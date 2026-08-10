@@ -34,7 +34,42 @@ pub struct RenderedReleasePullRequest {
     pub body: String,
 }
 
+pub const DEFAULT_RELEASE_COMMIT_MESSAGE: &str = "chore(release): bump versions";
+pub const DEFAULT_RELEASE_PULL_REQUEST_TITLE: &str = "chore(release): bump versions";
+
+pub fn render_release_commit_message(
+    template: Option<&str>,
+    release: &ReleaseContext,
+) -> Result<String, ReleaseMessageRenderError> {
+    let message = render_release_message_template(
+        template.unwrap_or(DEFAULT_RELEASE_COMMIT_MESSAGE),
+        release,
+    )?;
+    if message.trim().is_empty() {
+        return Err(ReleaseMessageRenderError::EmptyCommitMessage);
+    }
+    Ok(message)
+}
+
+pub fn render_release_pull_request_title(
+    template: Option<&str>,
+    release: &ReleaseContext,
+) -> Result<String, ReleaseMessageRenderError> {
+    let title = render_release_message_template(
+        template.unwrap_or(DEFAULT_RELEASE_PULL_REQUEST_TITLE),
+        release,
+    )?;
+    if title.trim().is_empty() {
+        return Err(ReleaseMessageRenderError::EmptyPullRequestTitle);
+    }
+    if title.contains('\n') || title.contains('\r') {
+        return Err(ReleaseMessageRenderError::MultilinePullRequestTitle);
+    }
+    Ok(title)
+}
+
 pub fn render_release_pull_request(
+    title: String,
     context: &ReleasePullRequestContext<'_>,
 ) -> RenderedReleasePullRequest {
     let changelogs = context
@@ -52,9 +87,21 @@ pub fn render_release_pull_request(
         .join("\n\n");
 
     RenderedReleasePullRequest {
-        title: "chore(release): bump versions".to_string(),
+        title,
         body: format!("# Releases\n\n{changelogs}"),
     }
+}
+
+fn render_release_message_template(
+    template: &str,
+    release: &ReleaseContext,
+) -> Result<String, ReleaseMessageRenderError> {
+    let mut release_value = serde_json::to_value(release)?;
+    remove_missing_common_version(&mut release_value, release);
+
+    let mut environment = Environment::new();
+    environment.set_undefined_behavior(UndefinedBehavior::Strict);
+    Ok(environment.render_str(template, context!(release => release_value))?)
 }
 
 pub fn render_release_branch(
@@ -62,14 +109,7 @@ pub fn render_release_branch(
     release: &ReleaseContext,
 ) -> Result<String, ReleaseBranchRenderError> {
     let mut release_value = serde_json::to_value(release)?;
-    if release.plan.common_version.is_none()
-        && let Some(plan) = release_value
-            .as_object_mut()
-            .and_then(|release| release.get_mut("plan"))
-            .and_then(serde_json::Value::as_object_mut)
-    {
-        plan.remove("common_version");
-    }
+    remove_missing_common_version(&mut release_value, release);
 
     let mut environment = Environment::new();
     environment.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -79,6 +119,17 @@ pub fn render_release_branch(
         return Err(ReleaseBranchRenderError::InvalidGitBranch { branch });
     }
     Ok(branch)
+}
+
+fn remove_missing_common_version(value: &mut serde_json::Value, release: &ReleaseContext) {
+    if release.plan.common_version.is_none()
+        && let Some(plan) = value
+            .as_object_mut()
+            .and_then(|release| release.get_mut("plan"))
+            .and_then(serde_json::Value::as_object_mut)
+    {
+        plan.remove("common_version");
+    }
 }
 
 /// Builds the immutable release plan from the current migration-layer inputs.
@@ -212,6 +263,20 @@ pub enum ReleaseBranchRenderError {
     Template(#[from] minijinja::Error),
     #[error("rendered release branch is not a valid Git branch: {branch}")]
     InvalidGitBranch { branch: String },
+}
+
+#[derive(Debug, Error)]
+pub enum ReleaseMessageRenderError {
+    #[error("failed to serialize release message context")]
+    Serialize(#[from] serde_json::Error),
+    #[error("failed to render release message template")]
+    Template(#[from] minijinja::Error),
+    #[error("rendered release commit message must not be empty")]
+    EmptyCommitMessage,
+    #[error("rendered release pull request title must not be empty")]
+    EmptyPullRequestTitle,
+    #[error("rendered release pull request title must be a single line")]
+    MultilinePullRequestTitle,
 }
 
 #[derive(Debug, Error)]
@@ -411,6 +476,61 @@ mod tests {
     }
 
     #[test]
+    fn release_messages_preserve_defaults_and_support_release_plan_templates() {
+        let context = context(vec![planned_package("core", semver::Version::new(1, 1, 0))]);
+
+        assert_eq!(
+            render_release_commit_message(None, &context).unwrap(),
+            DEFAULT_RELEASE_COMMIT_MESSAGE
+        );
+        assert_eq!(
+            render_release_pull_request_title(None, &context).unwrap(),
+            DEFAULT_RELEASE_PULL_REQUEST_TITLE
+        );
+        assert_eq!(
+            render_release_commit_message(Some("release {{ release.plan.fingerprint }}"), &context)
+                .unwrap(),
+            format!("release {}", context.plan.fingerprint)
+        );
+        assert_eq!(
+            render_release_pull_request_title(
+                Some("Release {{ release.plan.common_version }}"),
+                &context
+            )
+            .unwrap(),
+            "Release 1.1.0"
+        );
+    }
+
+    #[test]
+    fn release_messages_reject_invalid_or_unsafe_rendered_values() {
+        let context = context(vec![
+            planned_package("core", semver::Version::new(1, 1, 0)),
+            planned_package("cli", semver::Version::new(2, 0, 0)),
+        ]);
+
+        assert!(matches!(
+            render_release_commit_message(Some("{{ release.unknown }}"), &context),
+            Err(ReleaseMessageRenderError::Template(_))
+        ));
+        assert!(matches!(
+            render_release_commit_message(Some("  "), &context),
+            Err(ReleaseMessageRenderError::EmptyCommitMessage)
+        ));
+        assert!(matches!(
+            render_release_pull_request_title(
+                Some("Release {{ release.plan.common_version }}"),
+                &context
+            ),
+            Err(ReleaseMessageRenderError::Template(_))
+        ));
+        assert!(matches!(
+            render_release_pull_request_title(Some("Release\nplan"), &context),
+            Err(ReleaseMessageRenderError::MultilinePullRequestTitle)
+        ));
+    }
+
+    #[test]
     fn release_pull_request_uses_the_workspace_context_and_stable_package_order() {
         let release = context(vec![
             planned_package("zeta", semver::Version::new(1, 1, 0)),
@@ -428,12 +548,16 @@ mod tests {
         assert!(std::ptr::eq(context.release, &release));
         assert_eq!(context.branch, "release/stable");
         assert_eq!(
-            render_release_pull_request(&context),
+            render_release_pull_request(DEFAULT_RELEASE_PULL_REQUEST_TITLE.to_string(), &context),
             RenderedReleasePullRequest {
                 title: "chore(release): bump versions".to_string(),
                 body: "# Releases\n\n## alpha\n\nalpha changes\n\n## zeta\n\nzeta changes"
                     .to_string(),
             }
+        );
+        assert_eq!(
+            render_release_pull_request("Custom release".to_string(), &context).title,
+            "Custom release"
         );
     }
 
@@ -455,6 +579,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -526,6 +651,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -580,6 +706,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -637,6 +764,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -688,6 +816,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -735,6 +864,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([
@@ -798,6 +928,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([("native-example".to_string(), python_package("."))]),
@@ -839,6 +970,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([("example".to_string(), package)]),

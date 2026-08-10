@@ -98,13 +98,13 @@ user.email = "github-actions[bot]@users.noreply.github.com"
 ### Release 分支
 
 - 分支名称：配置的 release 分支（默认：`release`）
-- 提交信息：`chore(release): bump versions`
+- 提交信息：可通过 `[release].commit-message` 配置；默认使用 `chore(release): bump versions`
 - 强制推送以确保一致性
 
 ### Pull Request
 
 - 从 release 分支到基础分支创建 PR
-- PR 标题：`chore(release): bump versions`
+- PR 标题：可通过 `[release].pull-request-title` 配置；默认使用 `chore(release): bump versions`
 - PR 正文：包含所有受影响包的变更日志
 
 ## 本地测试（不推荐）

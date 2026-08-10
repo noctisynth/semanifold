@@ -13,6 +13,11 @@ The `config.toml` file is created by `smif init` and stored in the changeset dir
 base = "main"
 release = "release"
 
+# Optional; omit to keep the built-in messages.
+[release]
+commit-message = "chore(release): {{ release.plan.fingerprint }}"
+pull-request-title = "Release {{ release.plan.common_version }}"
+
 [tags]
 chore = "Chores"
 feat = "New Features"
@@ -54,6 +59,17 @@ Configures Git branch names for the release workflow.
 |-------|------|---------|-------------|
 | `base` | string | `"main"` | Base branch for releases |
 | `release` | string | `"release"` | Release branch name |
+
+---
+
+## `[release]` Section
+
+Optionally configures strict MiniJinja templates for release automation. Both fields expose the same `release.*` context as the release branch template and default to `chore(release): bump versions` when omitted. `smif init` and `smif config sync` do not add this section automatically.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `commit-message` | string | `"chore(release): bump versions"` | Release branch commit message; multiline output is allowed |
+| `pull-request-title` | string | `"chore(release): bump versions"` | Release pull request title; output must be one non-empty line |
 
 ---
 

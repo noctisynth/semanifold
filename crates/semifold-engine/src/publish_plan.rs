@@ -526,6 +526,7 @@ mod tests {
                 base: "main".to_string(),
                 release: "release".to_string(),
             },
+            release: Default::default(),
             tags: BTreeMap::new(),
             changelog: Default::default(),
             packages: BTreeMap::from([

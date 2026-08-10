@@ -68,6 +68,7 @@ pub fn plan_init(
             base: options.base_branch.clone(),
             release: options.release_branch,
         },
+        release: Default::default(),
         tags: options.tags,
         changelog: semifold_changelog::default_changelog_config(),
         packages,

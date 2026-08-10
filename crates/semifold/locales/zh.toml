@@ -261,6 +261,8 @@ no_changesets_publish = "未找到变更集，将发布当前版本。"
 no_existing_pr = "未找到现有 PR，创建新的 PR。"
 existing_pr_found = "找到现有 PR #%{number}，跳过创建新 PR。"
 release_branch_invalid = "无法渲染有效的发布分支：%{error}"
+commit_message_invalid = "无法渲染有效的发布提交消息：%{error}"
+pull_request_title_invalid = "无法渲染有效的发布 Pull Request 标题：%{error}"
 release_prepare_failed = "无法准备发布：%{error}"
 
 [cli.mcp]

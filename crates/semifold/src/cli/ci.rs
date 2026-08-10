@@ -185,3 +185,14 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     terminal.summary(StepOutcome::Success, &t!("cli.ci.complete"));
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn libgit2_supports_https_transport() {
+        assert!(
+            git2::Version::get().https(),
+            "the CI release push requires libgit2 HTTPS support"
+        );
+    }
+}

@@ -61,12 +61,13 @@ impl CppResolver {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(package_path)? {
             let path = entry?.path();
-            if path.is_file()
-                && matches!(
-                    path.extension().and_then(|extension| extension.to_str()),
-                    Some("pro") | Some("pri")
-                )
-            {
+            let is_qmake = path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("pro") || extension.eq_ignore_ascii_case("pri")
+                });
+            if path.is_file() && is_qmake {
                 files.push(path);
             }
         }
@@ -74,24 +75,24 @@ impl CppResolver {
         Ok(files)
     }
 
-    fn qmake_assignment(content: &str, variable: &str) -> Option<String> {
-        Self::qmake_assignments(content, variable)
-            .into_iter()
-            .next()
-    }
-
     fn qmake_assignments(content: &str, variable: &str) -> Vec<String> {
-        let pattern = format!(
-            r#"(?m)^\s*{}\s*=\s*["']?([^\s"'#]+)"#,
-            regex::escape(variable)
-        );
-        let Ok(regex) = Regex::new(&pattern) else {
-            return Vec::new();
-        };
-        regex
-            .captures_iter(content)
-            .filter_map(|captures| captures.get(1))
-            .map(|value| value.as_str().to_string())
+        content
+            .lines()
+            .filter_map(|line| {
+                let code = line.split_once('#').map_or(line, |(code, _)| code);
+                let (name, value) = code.split_once('=')?;
+                if name.trim() != variable {
+                    return None;
+                }
+                let value = value.trim();
+                let value = match value.as_bytes() {
+                    [b'"', .., b'"'] | [b'\'', .., b'\''] if value.len() >= 2 => {
+                        &value[1..value.len() - 1]
+                    }
+                    _ => value,
+                };
+                Some(value.to_string())
+            })
             .collect()
     }
 
@@ -192,9 +193,8 @@ impl CppResolver {
             }),
             [] => Err(ResolveError::ParseError {
                 path: package_path.to_path_buf(),
-                reason:
-                    "neither a versioned CMake project nor a qmake VERSION assignment was found"
-                        .to_string(),
+                reason: "neither a versioned CMake project nor a qmake version assignment (VERSION or VERSION_MAJOR/MINOR/PATCH) was found"
+                    .to_string(),
             }),
             candidates => Err(ResolveError::ParseError {
                 path: package_path.to_path_buf(),
@@ -220,16 +220,26 @@ impl CppResolver {
     ) -> Result<String, ResolveError> {
         let mut targets = Vec::new();
         for path in Self::qmake_files(package_path)? {
-            if path.extension().and_then(|extension| extension.to_str()) != Some("pro") {
+            if !path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("pro"))
+            {
                 continue;
             }
-            let content = std::fs::read_to_string(path)?;
-            if let Some(target) = Self::qmake_assignment(&content, "TARGET") {
+            let content = std::fs::read_to_string(&path)?;
+            if let Some(target) = Self::unique_qmake_assignment(&content, "TARGET", &path)? {
+                if !target.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+                }) {
+                    return Err(ResolveError::ParseError {
+                        path: path.clone(),
+                        reason: format!("qmake TARGET `{target}` is not a static identifier"),
+                    });
+                }
                 targets.push(target);
             }
         }
-        targets.sort();
-        targets.dedup();
         match targets.as_slice() {
             [target] => Ok(target.clone()),
             [] => version_path
@@ -257,7 +267,7 @@ impl CppResolver {
         path: &Path,
     ) -> Result<String, ResolveError> {
         let pattern = format!(
-            r#"(?m)^(\s*{}\s*=\s*["']?)([^\s"'#]+)"#,
+            r"(?m)^(\s*{}\s*=\s*)([^#\r\n]*)(#.*)?$",
             regex::escape(variable)
         );
         let regex = Regex::new(&pattern).map_err(|error| ResolveError::ParseError {
@@ -266,7 +276,15 @@ impl CppResolver {
         })?;
         Ok(regex
             .replace(content, |captures: &regex::Captures| {
-                format!("{}{value}", &captures[1])
+                let raw_value = captures[2].trim_end();
+                let trailing = &captures[2][raw_value.len()..];
+                let quote = match raw_value.as_bytes() {
+                    [b'"', .., b'"'] => "\"",
+                    [b'\'', .., b'\''] => "'",
+                    _ => "",
+                };
+                let comment = captures.get(3).map_or("", |comment| comment.as_str());
+                format!("{}{quote}{value}{quote}{trailing}{comment}", &captures[1])
             })
             .into_owned())
     }
@@ -1100,6 +1118,74 @@ mod tests {
             .unwrap_err();
         assert!(error.to_string().contains("invalid qmake VERSION `1.2`"));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_duplicate_and_dynamic_qmake_targets() {
+        let duplicate_root = temp_dir("qmake-duplicate-target");
+        fs::write(
+            duplicate_root.join("app.pro"),
+            "TARGET = first\nTARGET = second\nVERSION = 1.2.3\n",
+        )
+        .unwrap();
+        let duplicate_error = CppResolver
+            .parse_package(&duplicate_root, &package_config("."))
+            .unwrap_err();
+        assert!(
+            duplicate_error
+                .to_string()
+                .contains("qmake variable TARGET has multiple assignments")
+        );
+        fs::remove_dir_all(duplicate_root).unwrap();
+
+        let duplicate_files_root = temp_dir("qmake-duplicate-target-files");
+        fs::write(
+            duplicate_files_root.join("app.pro"),
+            "TARGET = shared\nVERSION = 1.2.3\n",
+        )
+        .unwrap();
+        fs::write(duplicate_files_root.join("tool.pro"), "TARGET = shared\n").unwrap();
+        let duplicate_files_error = CppResolver
+            .parse_package(&duplicate_files_root, &package_config("."))
+            .unwrap_err();
+        assert!(
+            duplicate_files_error
+                .to_string()
+                .contains("multiple qmake TARGET candidates found: shared, shared")
+        );
+        fs::remove_dir_all(duplicate_files_root).unwrap();
+
+        let dynamic_root = temp_dir("qmake-dynamic-target");
+        fs::write(
+            dynamic_root.join("app.pro"),
+            "TARGET = app $$TARGET_SUFFIX\nVERSION = 1.2.3\n",
+        )
+        .unwrap();
+        let dynamic_error = CppResolver
+            .parse_package(&dynamic_root, &package_config("."))
+            .unwrap_err();
+        assert!(
+            dynamic_error
+                .to_string()
+                .contains("qmake TARGET `app $$TARGET_SUFFIX` is not a static identifier")
+        );
+        fs::remove_dir_all(dynamic_root).unwrap();
+
+        let dynamic_version_root = temp_dir("qmake-dynamic-version");
+        fs::write(
+            dynamic_version_root.join("app.pro"),
+            "TARGET = app\nVERSION = 1.2.3 $$VERSION_SUFFIX\n",
+        )
+        .unwrap();
+        let dynamic_version_error = CppResolver
+            .parse_package(&dynamic_version_root, &package_config("."))
+            .unwrap_err();
+        assert!(
+            dynamic_version_error
+                .to_string()
+                .contains("invalid qmake VERSION `1.2.3 $$VERSION_SUFFIX`")
+        );
+        fs::remove_dir_all(dynamic_version_root).unwrap();
     }
 
     #[test]

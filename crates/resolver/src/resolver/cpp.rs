@@ -57,6 +57,15 @@ impl QmakeVersionVariable {
 }
 
 impl CppResolver {
+    fn project_relative_path(parent: &camino::Utf8Path, child: &str) -> camino::Utf8PathBuf {
+        let parent = parent.as_str().trim_matches('/');
+        if parent.is_empty() || parent == "." {
+            camino::Utf8PathBuf::from(child)
+        } else {
+            camino::Utf8PathBuf::from(format!("{parent}/{child}"))
+        }
+    }
+
     fn qmake_files(package_path: &Path) -> Result<Vec<PathBuf>, ResolveError> {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(package_path)? {
@@ -415,13 +424,17 @@ impl CppResolver {
                 path: manifest_path.clone(),
                 reason: "C++ manifest is outside the project root".to_string(),
             })?;
-        let mut edits = vec![FileEdit {
-            path: camino::Utf8PathBuf::from_path_buf(relative_manifest).map_err(|path| {
+        let relative_manifest =
+            camino::Utf8PathBuf::from_path_buf(relative_manifest).map_err(|path| {
                 ResolveError::InvalidConfig {
                     path,
                     reason: "C++ manifest path is not valid UTF-8".to_string(),
                 }
-            })?,
+            })?;
+        let relative_manifest =
+            camino::Utf8PathBuf::from(relative_manifest.as_str().replace('\\', "/"));
+        let mut edits = vec![FileEdit {
+            path: relative_manifest,
             expected: FileEditExpectation::Existing {
                 hash: FileHash::from_bytes(content.as_bytes()),
             },
@@ -439,7 +452,7 @@ impl CppResolver {
                     reason: "vcpkg.json version field could not be replaced".to_string(),
                 })?;
             edits.push(FileEdit {
-                path: package.path.join("vcpkg.json"),
+                path: Self::project_relative_path(&package.path, "vcpkg.json"),
                 expected: FileEditExpectation::Existing {
                     hash: FileHash::from_bytes(content.as_bytes()),
                 },

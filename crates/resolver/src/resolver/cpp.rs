@@ -1076,6 +1076,54 @@ mod tests {
     }
 
     #[test]
+    fn plans_nested_qmake_edits_with_portable_paths() {
+        let root = temp_dir("qmake-nested-paths");
+        fs::create_dir_all(root.join("library")).unwrap();
+        fs::write(
+            root.join("library/demo.pro"),
+            "TEMPLATE = app\nTARGET = demo-app\nVERSION = 1.2.3\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("library/vcpkg.json"),
+            "{\"version\": \"1.2.3\"}\n",
+        )
+        .unwrap();
+
+        let inspection = CppResolver
+            .inspect(&PackageLocation {
+                id: PackageId::new("demo"),
+                project_root: camino::Utf8PathBuf::from_path_buf(root.clone()).unwrap(),
+                path: "library".into(),
+            })
+            .unwrap();
+        let snapshot = PackageSnapshot {
+            id: inspection.id,
+            manifest_name: inspection.manifest_name,
+            version: inspection.version,
+            version_source: inspection.version_source,
+            ecosystem: inspection.ecosystem,
+            path: inspection.path,
+            publishable: inspection.publishable,
+            dependencies: vec![],
+        };
+        let versions = VersionMap::from([(snapshot.id.clone(), semver::Version::new(1, 2, 4))]);
+        let edits = CppResolver
+            .plan_edits(EcosystemPlanInput {
+                project_root: camino::Utf8Path::from_path(&root).unwrap(),
+                workspace_packages: std::slice::from_ref(&snapshot),
+                released_packages: std::slice::from_ref(&snapshot.id),
+                versions: &versions,
+            })
+            .unwrap();
+
+        assert_eq!(edits.len(), 2);
+        assert!(edits.iter().any(|edit| edit.path == "library/demo.pro"));
+        assert!(edits.iter().any(|edit| edit.path == "library/vcpkg.json"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn resolves_and_rewrites_qmake_component_variables_in_pri() {
         let root = temp_dir("qmake-components");
         fs::write(

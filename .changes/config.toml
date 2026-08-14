@@ -13,6 +13,12 @@ refactor = "Refactors"
 path = "docs"
 resolver = "nodejs"
 
+[packages."@semifold/cli"]
+path = "packages/cli"
+resolver = "nodejs"
+github-release = false
+depends-on = ["semifold"]
+
 [packages."@semifold/plugin-sdk"]
 path = "packages/plugin-sdk"
 resolver = "nodejs"
@@ -21,6 +27,12 @@ resolver = "nodejs"
 path = "crates/semifold"
 resolver = "rust"
 assets = ["artifacts/*"]
+
+[packages.semifold-napi]
+path = "crates/semifold-napi"
+resolver = "rust"
+publish = false
+github-release = false
 
 [packages.semifold-changelog]
 path = "crates/changelog"
@@ -60,6 +72,10 @@ dry-run = true
 type = "http"
 url = "https://registry.npmjs.org/{{ package.name }}/{{ package.version }}"
 retry = [2, 5, 15, 30]
+
+[[resolver.nodejs.post-version]]
+command = "npm"
+args = ["run", "--if-present", "semifold:post-version"]
 
 [[resolver.nodejs.publish]]
 command = "npm"

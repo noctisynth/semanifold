@@ -1,5 +1,8 @@
 /target
 /artifacts
+/packages/cli/artifacts
+/packages/cli/npm
+/packages/cli/*.node
 /packages/*/dist
 node_modules
 .DS_Store

@@ -12,6 +12,7 @@
     "docs:check": "bun run --filter @semifold/docs check",
     "docs:dev": "bun run --filter @semifold/docs dev",
     "docs:preview": "bun run --filter @semifold/docs preview",
+    "cli:check": "bun run --filter @semifold/cli check",
     "lint:fix": "bun run biome check docs --fix"
   },
   "author": {

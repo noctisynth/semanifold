@@ -1,0 +1,26 @@
+[package]
+name = "semifold-napi"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3.12.1", features = ["napi8"] }
+napi-derive = "3.6.3"
+semifold = { version = "0.3.0", path = "../semifold" }
+
+[lints]
+workspace = true
+
+[build-dependencies]
+napi-build = "2.4.1"

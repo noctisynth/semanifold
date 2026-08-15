@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.1
+
+### Bug Fixes
+
+- [`d4773da`](https://github.com/noctisynth/semifold/commit/d4773da93ff46737a771485f9a097f714bbc3f19): Restore HTTPS transport support for pushing the generated release branch after the git2 dependency upgrade.
+
+### Chores
+
+- [`05a2e7c`](https://github.com/noctisynth/semifold/commit/05a2e7c6b85697cbd091f74698d88a87f8678f01): Upgrade Rust and JavaScript dependencies to their latest compatible versions, including the required API migrations for Git, HTTP, hashing, localization, MCP, and configuration handling.
+
+### New Features
+
+- [`3454415`](https://github.com/noctisynth/semifold/commit/34544159c278e1c9096e1e002ab6966f978300e6): Allow release commit messages and pull request titles to use optional strict release context templates while preserving the existing defaults.
+- [`1b2317a`](https://github.com/noctisynth/semifold/commit/1b2317add403852d475ba95c4a0c0ebe438cdcd8): Publish Semifold as an npm-installed Node.js CLI backed by napi-rs generated native packages for supported macOS, Linux glibc, and Windows targets.
+
 ## v0.3.0
 
 ### New Features

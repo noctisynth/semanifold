@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1
+
+### Chores
+
+- [`05a2e7c`](https://github.com/noctisynth/semifold/commit/05a2e7c6b85697cbd091f74698d88a87f8678f01): Upgrade Rust and JavaScript dependencies to their latest compatible versions, including the required API migrations for Git, HTTP, hashing, localization, MCP, and configuration handling.
+
 ## v0.1.0
 
 ### Chores

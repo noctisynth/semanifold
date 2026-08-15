@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.1
+
+### Chores
+
+- [`05a2e7c`](https://github.com/noctisynth/semifold/commit/05a2e7c6b85697cbd091f74698d88a87f8678f01): Upgrade Rust and JavaScript dependencies to their latest compatible versions, including the required API migrations for Git, HTTP, hashing, localization, MCP, and configuration handling.
+
+### New Features
+
+- [`3454415`](https://github.com/noctisynth/semifold/commit/34544159c278e1c9096e1e002ab6966f978300e6): Allow release commit messages and pull request titles to use optional strict release context templates while preserving the existing defaults.
+
 ## v0.4.0
 
 ### New Features

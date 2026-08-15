@@ -16,7 +16,6 @@ resolver = "nodejs"
 [packages."@semifold/cli"]
 path = "packages/cli"
 resolver = "nodejs"
-github-release = false
 depends-on = ["semifold"]
 
 [packages."@semifold/plugin-sdk"]

@@ -24,25 +24,37 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_name: semifold-linux-x86_64
+            napi_source: libsemifold_napi.so
+            napi_artifact_name: semifold.linux-x64-gnu.node
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             artifact_name: semifold-linux-arm64
+            napi_source: libsemifold_napi.so
+            napi_artifact_name: semifold.linux-arm64-gnu.node
           # macOS
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact_name: semifold-macos-x86_64
+            napi_source: libsemifold_napi.dylib
+            napi_artifact_name: semifold.darwin-x64.node
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact_name: semifold-macos-arm64
+            napi_source: libsemifold_napi.dylib
+            napi_artifact_name: semifold.darwin-arm64.node
           # Windows
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             arch: x64
             artifact_name: semifold-windows-x86_64.exe
+            napi_source: semifold_napi.dll
+            napi_artifact_name: semifold.win32-x64-msvc.node
           - target: aarch64-pc-windows-msvc
             os: windows-latest
             arch: arm64
             artifact_name: semifold-windows-arm64.exe
+            napi_source: semifold_napi.dll
+            napi_artifact_name: semifold.win32-arm64-msvc.node
 
     steps:
       - name: Checkout repository
@@ -75,11 +87,19 @@ jobs:
 
       - name: Rename binary
         run: mv target/${{ matrix.target }}/release/semifold${{ matrix.os == 'windows-latest' && '.exe' || '' }} target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+      - name: Rename N-API binding
+        run: mv target/${{ matrix.target }}/release/${{ matrix.napi_source }} target/${{ matrix.target }}/release/${{ matrix.napi_artifact_name }}
       - name: Upload build artifact
         uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact_name }}
           path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          retention-days: 7
+      - name: Upload N-API artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: napi-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.napi_artifact_name }}
           retention-days: 7
 
   release:
@@ -109,15 +129,30 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Install SDK dependencies
-        run: bun install --frozen-lockfile --filter @semifold/plugin-sdk
+      - name: Configure npm provenance
+        run: npm config set provenance true
+      - name: Install workspace dependencies
+        run: bun install --frozen-lockfile
       - name: Download build artifacts
         uses: actions/download-artifact@v6
         with:
+          pattern: semifold-*
           path: artifacts/
           merge-multiple: true
+      - name: Download N-API artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: napi-*
+          path: packages/cli/artifacts/
+          merge-multiple: true
       - name: List artifacts
-        run: ls -R artifacts/
+        run: ls -R artifacts/ packages/cli/artifacts/
+      - name: Assemble and verify npm CLI packages
+        run: |
+          bun run --filter @semifold/cli create-npm-dirs
+          bun run --filter @semifold/cli artifacts
+          bun run --filter @semifold/cli check:artifacts
+          bun run --filter @semifold/cli check:packs
       - name: Semifold CI
         id: semifold
         run: cargo run --bin semifold ci --debug

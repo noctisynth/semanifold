@@ -1,0 +1,67 @@
+{
+  "name": "@semifold/cli",
+  "version": "0.3.1",
+  "description": "Semifold command-line interface for cross-language monorepo releases",
+  "author": {
+    "name": "苏向夜",
+    "email": "fu050409@163.com"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noctisynth/semifold.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/noctisynth/semifold/issues"
+  },
+  "homepage": "https://semifold.noctisynth.org",
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": [
+    "bin",
+    "index.js",
+    "index.d.ts",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "bin": {
+    "semifold": "bin/semifold.js",
+    "smif": "bin/semifold.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release --manifest-path ../../crates/semifold-napi/Cargo.toml --output-dir .",
+    "build:debug": "napi build --platform --manifest-path ../../crates/semifold-napi/Cargo.toml --output-dir .",
+    "check": "biome check bin scripts test package.json && node --test test/*.test.mjs && node scripts/check-versions.mjs && napi create-npm-dirs --dry-run",
+    "check:artifacts": "node scripts/check-artifacts.mjs",
+    "check:packs": "node scripts/check-packs.mjs",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "prepublishOnly": "napi prepublish -t npm --no-gh-release",
+    "semifold:post-version": "napi build --platform --manifest-path ../../crates/semifold-napi/Cargo.toml --output-dir .",
+    "test:native": "node test/native-smoke.mjs"
+  },
+  "napi": {
+    "binaryName": "semifold",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-pc-windows-msvc",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.8.6"
+  }
+}

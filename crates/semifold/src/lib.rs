@@ -4,7 +4,7 @@ use clap::Parser;
 use log::LevelFilter;
 use rust_i18n::t;
 use semifold_engine::{ProjectLoadError, ProjectLocation};
-use std::process::ExitCode;
+use std::{ffi::OsString, process::ExitCode};
 
 pub mod cli;
 pub mod logger;
@@ -15,22 +15,32 @@ use cli::{Cli, Commands};
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub fn run_cli() -> ExitCode {
+    ExitCode::from(run_cli_with_args(std::env::args_os()))
+}
+
+pub fn run_cli_with_args<I, T>(args: I) -> u8
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
     if let Some(locale) = sys_locale::get_locale() {
         rust_i18n::set_locale(&locale);
     }
 
-    match run() {
-        Ok(()) => ExitCode::SUCCESS,
+    match run_with_cli(Cli::parse_from(args)) {
+        Ok(()) => 0,
         Err(error) => {
             cli::terminal::Terminal::detect().error(&error.to_string());
-            ExitCode::FAILURE
+            1
         }
     }
 }
 
 pub fn run() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    run_with_cli(Cli::parse())
+}
 
+fn run_with_cli(cli: Cli) -> anyhow::Result<()> {
     if cli.debug {
         logger::setup_logger(LevelFilter::Debug)?;
     } else {

@@ -1363,7 +1363,7 @@ SemVer 的规范文本。插件操作失败时，`AdapterError` 必须保留完�
 
 ## 8. Crate 和模块边界
 
-建议使用四层结构，避免过度拆分：
+建议使用四层结构，并为 Node.js 分发增加一个不承载领域逻辑的 N-API 适配 crate：
 
 ```text
 crates/
@@ -1389,6 +1389,9 @@ crates/
 │   ├── executor.rs
 │   ├── publisher.rs
 │   └── ports.rs
+│
+├── semifold-napi/
+│   └── lib.rs
 │
 └── semifold/
     ├── cli/
@@ -1439,6 +1442,17 @@ crates/
 - MCP transport 和工具参数映射。
 
 CLI 命令不再直接读写 manifest 或实现版本计算。
+
+### 8.5 `semifold-napi`
+
+`semifold-napi` 是 `semifold` CLI 的薄 Node-API 分发适配层，不提供新的领域 API。它只把 Node.js
+传入的参数序列映射为与独立二进制相同的 CLI 执行入口，并返回进程退出码。当前工作目录、环境变量、
+stdin、stdout、stderr、TTY 检测和信号仍属于调用它的 Node.js 进程，不得复制终端渲染、配置加载、
+应用服务或本地化逻辑。
+
+binding 使用稳定的 N-API 8 ABI。同步调用会占用 Node.js 主线程，但 `@semifold/cli` 是一次只执行一个
+命令的专用 CLI 进程，该行为与原生二进制一致；不得为了异步 JavaScript API 把交互提示、MCP stdio
+transport 或进程级副作用迁移到 worker。独立 Rust 二进制继续存在，N-API 只是新增的分发入口。
 
 ## 9. 项目加载与 `Context` 拆分
 
@@ -2365,6 +2379,49 @@ workflow DTO 不得包含 registry header、环境变量值、命令配置、tok
 具体 output key、JSON schema、是否需要显式 CLI 开关、dry-run 是否写 planned output、publish
 失败时 output 写入失败与原始发布失败的优先级，以及 schema 的兼容周期，在实现前单独确定。
 
+### 14.5 Node.js N-API CLI 分发
+
+npm 的公开安装入口为 `@semifold/cli`，同时声明 `smif` 与 `semifold` 两个 bin。JavaScript bin 只把
+`process.argv.slice(2)` 传入 native binding，并把返回值设置为进程退出码；参数解析、帮助、版本、
+业务输出和错误仍由 Rust CLI 统一负责。
+
+`@semifold/cli` 是仓库中唯一维护、进入 Bun workspace、Semifold package 配置和 changeset 的 npm
+交付单元。它的 `package.json` 通过 napi-rs v3 的 `napi.binaryName` 与 `napi.targets` 声明以下六个
+构建 target：
+
+- `aarch64-apple-darwin`；
+- `x86_64-apple-darwin`；
+- `aarch64-unknown-linux-gnu`；
+- `x86_64-unknown-linux-gnu`；
+- `aarch64-pc-windows-msvc`；
+- `x86_64-pc-windows-msvc`。
+
+主包不得捆绑所有平台产物，也不得在 postinstall 中从 GitHub 下载可执行文件。napi-rs 生成的 loader
+通过精确版本的 optional dependencies 选择对应平台包；平台包必须声明 npm `os`、`cpu` 与适用时的
+`libc` 约束，并只包含对应 native binding、package metadata 与 npm 自动包含的 README。首版 Linux
+与现有原生发布矩阵一致，只支持 glibc；不宣称 musl 支持。主包要求 Node.js 20 或更高版本，发布仍
+使用 Node.js 24 与 npm provenance。
+
+napi-rs 平台包不是仓库源码 package：不得提交 `npm/` 目录，不得把这些临时 package 加入 Bun
+workspace、`.changes/config.toml` 或 changeset。发布 CI 使用 `napi create-npm-dirs` 从根包配置临时
+生成它们，下载六平台构建产物后由 `napi artifacts` 组装。根包的 `prepublishOnly` 使用
+`napi prepublish -t npm --no-gh-release`，由 napi-rs 把所有平台包同步到根包版本、写入精确版本的
+`optionalDependencies` 并先发布平台包；外层 `npm publish` 随后发布 `@semifold/cli`。禁用 napi-rs
+的 GitHub Release 副作用，由 Semifold 继续统一管理 Forge release。
+
+`@semifold/cli` 通过 `depends-on = ["semifold"]` 建立与 Rust CLI 的拓扑关系，并在发布前校验两者
+版本一致。napi-rs 生成的 loader 包含生成时的根包版本，因此 Node.js resolver 的通用 post-version
+hook 只调用各 package 可选的 `semifold:post-version` script；`@semifold/cli` 用该 script 在 manifest
+版本写入后重新生成并提交 loader 与类型声明，其他 Node.js package 没有该 script 时保持无操作。
+当前锁定的 napi-rs CLI 会在 prepublish 阶段拒绝缺失 target artifact，但 CI 仍必须在进入任何 npm
+publish 生命周期前显式验证临时平台目录完整、每个目录恰好包含预期 `.node`，并通过
+`npm pack --dry-run --ignore-scripts` 检查根包和平台包内容；任一缺失、重复或命名不匹配必须提前
+使任务失败，不能把完整性门禁隐式委托给依赖工具的当前行为。
+
+JavaScript bootstrap 使用 napi-rs 生成的 loader，不维护第二份 target 选择和 native package 加载
+实现。正常 CLI 文案继续由 Rust 与 `rust-i18n` 管理；binding 尚未加载时的环境诊断由生成的 loader
+负责。
+
 ## 15. 错误模型
 
 `anyhow` 适合 CLI 最外层补充上下文，但 core、ecosystems 和 engine 内应返回分层错误：
@@ -2470,6 +2527,16 @@ fixtures/rust/
 - `config channel --all` 显式应用至每个已配置 package，重复执行无 diff。
 - `config channel set --bump` 仅为实际切换 channel 的目标 package 写入一次性策略，并覆盖 preserve/patch/minor/major 的首次进入通道版本。
 - `version` 仅在成功完成后清理已使用的 `channel-bump`；dry-run 和各失败路径保留它。
+
+### 16.6 N-API 与 npm 分发测试
+
+- Rust binding 测试锁定参数转发和退出码映射，不复制 CLI 领域行为；
+- napi-rs config dry-run 能从根包的六个 target 生成对应临时平台 package；仓库不提交生成的 `npm/` 目录；
+- 当前 host 通过 `napi build --platform` 构建真实 `.node` 后，使用生成 loader 执行 `smif --version`，输出版本必须与 Rust package 一致；
+- `napi artifacts` 组装后，显式 artifact gate 在缺失、重复、未知文件或目标目录不匹配时失败；
+- `npm pack --dry-run --ignore-scripts` 证明主包包含两个 bin 与生成 loader，临时平台包只包含对应 native binding 与必要 metadata；
+- release plan 中只有 Rust CLI 与主包作为持久发布单元，版本一致且拓扑顺序为 Rust CLI、主包；
+- CI 为六个 target 生成可加载的 N-API 产物，使用 napi-rs 官方 create/artifacts/prepublish 流程发布，并保持既有独立二进制 artifact 不变。
 
 ## 17. 迁移计划
 
@@ -2615,6 +2682,8 @@ adapter 暴露旧 `ResolvedPackage`。
     时保持 `$HOME/.local/bin`，并允许安装目录与可选版本独立组合。
 18. Semifold 自身生产代码不存在可识别的主动 panic、未经验证的索引或切片路径；
     `clippy::unwrap_used`、`clippy::expect_used` 与 `clippy::indexing_slicing` 在非测试 target 上通过。
+19. `npm install --global @semifold/cli` 在六个支持 target 上安装唯一匹配的 N-API 平台包，并提供与
+    原生二进制行为一致的 `smif` 与 `semifold` 命令。
 
 ## 19. 开放决策
 

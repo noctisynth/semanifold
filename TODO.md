@@ -526,6 +526,27 @@
 - [x] 同一插件输入与 capability 响应记录重复运行产生稳定结果，越界路径、非法 edit、预算超限和协议不兼容均返回结构化错误
 - [x] ecosystem 插件不改变 publish/pre-check/Forge 的既有应用层职责边界
 
+## 阶段 8：N-API 与 npm CLI 分发
+
+### Rust 与 Node-API 边界
+
+- [x] 新增薄 `semifold-napi` crate，以 N-API 8 导出同步 CLI 参数入口和退出码
+- [x] 让独立二进制与 N-API binding 复用显式参数驱动的 CLI runner
+- [x] 保持 cwd、环境变量、stdio、TTY、MCP transport 与本地化全部由既有 Rust CLI 处理
+
+### npm package 与平台产物
+
+- [x] 新增公开 `@semifold/cli` wrapper，提供 `smif` 与 `semifold` 两个 bin
+- [x] 在根包配置 napi-rs v3 的 binary name 与 macOS、Linux glibc、Windows x64/arm64 targets
+- [x] 使用 napi-rs 生成 loader，并在 CI 临时生成、组装和发布 optional platform packages
+- [x] 只将主包接入 workspace、跨生态依赖图和 changeset，不提交或配置临时平台包
+
+### CI、测试与文档
+
+- [x] 在六 target 构建中同时生成独立二进制与 `.node` binding，并在发布前运行 `napi create-npm-dirs` 与 `napi artifacts`
+- [x] 覆盖 napi config、真实 generated-loader smoke、pack 内容和缺失 artifact 失败路径
+- [x] 将中英文安装文档中的 npm 命令切换为已验证的 `@semifold/cli`
+
 ## 最终验收
 
 - [x] `cargo fmt --all --check` 通过
@@ -550,6 +571,7 @@
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 - [x] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
 - [x] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning
+- [ ] `npm install --global @semifold/cli` 在六个支持平台上提供与原生二进制一致的命令行为
 
 ## 实施前需要确认的决策
 

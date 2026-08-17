@@ -5,7 +5,7 @@ description: Install the latest published Semifold CLI and verify that the smif 
 
 The published command is available as both `smif` and `semifold`. This documentation uses the shorter `smif` form.
 
-Unless you need to reproduce an older environment, install the latest release. Each default command below resolves the current `latest` version.
+Unless you need to reproduce an older environment, install the latest release. The installation scripts query GitHub Releases and select the newest published stable binary release whose tag matches `semifold-vX.Y.Z`. They do not use the repository-wide `latest` pointer, which may refer to another package in the Semifold monorepo.
 
 ## Recommended: installation script
 
@@ -50,6 +50,31 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
 
   </Tab>
 </Tabs>
+
+## Install a specific version
+
+Pass a version only when you need to reproduce a particular environment. Both `0.3.1` and `v0.3.1` resolve to the `semifold-v0.3.1` GitHub Release:
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | \
+  sh -s -- 0.3.1
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
+  -Version 0.3.1
+```
+
+  </Tab>
+</Tabs>
+
+Prerelease versions are never selected by the default installation. Pass the complete prerelease version explicitly when one is required.
 
 ## Package-manager alternatives
 

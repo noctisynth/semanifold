@@ -564,7 +564,8 @@
 - [x] changelog 默认模板保持现有输出，自定义模板可控制 release block 和单条 changeset 的渲染格式
 - [x] publish 能读取 marker 包围的自定义 changelog，并对无 marker 的旧格式保持兼容
 - [x] 现有 CLI 主要用法保持稳定；所有 TOML 配置字段使用 kebab-case，snake_case 不兼容
-- [x] 官网 Unix 与 Windows 安装脚本支持可选具体版本参数，并保持无参数安装 latest
+- [x] 官网 Unix 与 Windows 安装脚本动态解析最新稳定的 `semifold-vX.Y.Z` Release，兼容
+  `X.Y.Z` / `vX.Y.Z` 显式版本，且不依赖仓库级 `/releases/latest` 或固定 fallback 版本
 - [x] 官网 Unix 与 Windows 安装脚本支持独立指定安装目录，并保持默认目录兼容
 - [x] `version` 与 `publish` 可以向 GitHub Actions 后续流程提供版本化、无敏感信息的结构化输出
 - [x] 特定领域项目可以通过受控脚本插件接入 ecosystem discovery、inspection 与 edit planning

@@ -24,6 +24,10 @@ jobs:
           bun-version: canary
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
+      - name: Test installation scripts
+        run: |
+          bun run --filter @semifold/docs test:install
+          pwsh -NoProfile -File docs/scripts/install.ps1.tests.ps1
       - name: Check plugin SDK
         run: bun run --filter @semifold/plugin-sdk check
       - name: Test plugin SDK

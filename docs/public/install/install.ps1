@@ -7,8 +7,46 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($Version -and $Version -notmatch '^[0-9A-Za-z.+-]+$') {
-    throw "Invalid version: $Version"
+function Normalize-Version {
+    param([string]$Value)
+
+    $normalized = $Value -replace '^v', ''
+    if ($normalized -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+        throw "Invalid version: $Value"
+    }
+    return $normalized
+}
+
+if ($Version) {
+    $resolvedVersion = Normalize-Version $Version
+} else {
+    Write-Host "[*] Resolving the latest stable Semifold release ..."
+    $page = 1
+    $resolvedVersion = $null
+    do {
+        try {
+            $response = Invoke-WebRequest `
+                -Uri "https://github.com/noctisynth/semifold/releases?page=$page"
+        } catch {
+            throw "Failed to query Semifold releases: $($_.Exception.Message)"
+        }
+
+        $releaseMatch = [regex]::Match(
+            $response.Content,
+            '/noctisynth/semifold/releases/tag/semifold-v(?<version>[0-9]+\.[0-9]+\.[0-9]+)"'
+        )
+        if ($releaseMatch.Success) {
+            $resolvedVersion = $releaseMatch.Groups['version'].Value
+            break
+        }
+
+        $hasNextPage = $response.Content -match 'rel="next"'
+        $page++
+    } while ($hasNextPage)
+
+    if (-not $resolvedVersion) {
+        throw "No stable Semifold binary release was found"
+    }
 }
 
 $arch = if ([Environment]::Is64BitOperatingSystem) { "x86_64" } else { "arm64" }
@@ -17,12 +55,11 @@ $name = "semifold-windows-$arch.exe"
 $bin = $InstallDir
 New-Item -ItemType Directory -Force -Path $bin | Out-Null
 
-$releasePath = if ($Version) { "download/semifold-$Version" } else { "latest/download" }
+$releasePath = "download/semifold-v$resolvedVersion"
 $downloadUrl = "https://github.com/noctisynth/semifold/releases/$releasePath/$name"
-$versionDescription = if ($Version) { " version $Version" } else { "" }
 $destination = "$bin\semifold.exe"
 $temporaryFile = "$destination.tmp.$PID"
-Write-Host "[*] Downloading $name$versionDescription ..."
+Write-Host "[*] Downloading $name version $resolvedVersion ..."
 try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $temporaryFile
     Move-Item -Force -Path $temporaryFile -Destination $destination

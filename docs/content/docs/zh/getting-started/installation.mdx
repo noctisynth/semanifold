@@ -5,7 +5,7 @@ description: 安装最新发布的 Semifold 命令行工具，并确认 smif 命
 
 安装后可以使用 `smif` 和 `semifold` 两个等价的命令名称。本文档统一使用较短的 `smif`。
 
-除非需要复现旧环境，否则建议始终安装最新版本。下面的默认命令都会获取当前的 `latest` 版本。
+除非需要复现旧环境，否则建议始终安装最新版本。安装脚本会查询 GitHub Releases，并选择标签符合 `semifold-vX.Y.Z` 的最新已发布稳定二进制 Release。脚本不会使用仓库级 `latest` 指针，因为它可能指向 Semifold monorepo 中的其他软件包。
 
 ## 推荐方式：安装脚本
 
@@ -50,6 +50,31 @@ curl -L https://semifold.noctisynth.org/install/install.sh | \
 
   </Tab>
 </Tabs>
+
+## 安装指定版本
+
+只有需要复现特定环境时才需要传入版本。`0.3.1` 和 `v0.3.1` 都会解析到 GitHub Release `semifold-v0.3.1`：
+
+<Tabs items={['macOS / Linux', 'Windows PowerShell']}>
+  <Tab>
+
+```bash
+curl -L https://semifold.noctisynth.org/install/install.sh | \
+  sh -s -- 0.3.1
+```
+
+  </Tab>
+  <Tab>
+
+```powershell
+& ([scriptblock]::Create((irm https://semifold.noctisynth.org/install/install.ps1))) `
+  -Version 0.3.1
+```
+
+  </Tab>
+</Tabs>
+
+默认安装不会选择预发布版本；如确实需要，请显式传入完整的预发布版本号。
 
 ## 通过软件包管理器安装
 

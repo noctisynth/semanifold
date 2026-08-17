@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "build": "next build --webpack",
-    "check": "bun run typecheck && bun run ./scripts/check-locales.mjs && bun run build && bun run ./scripts/check-static-output.mjs",
+    "check": "bun run typecheck && bun run test:install && bun run ./scripts/check-locales.mjs && bun run build && bun run ./scripts/check-static-output.mjs",
     "dev": "next dev",
     "generate": "bun run ./scripts/generate-source.mjs",
     "preview": "serve out --listen 4173",
+    "test:install": "node --test scripts/install.test.mjs",
     "typecheck": "bun run generate && tsc --noEmit"
   },
   "devDependencies": {

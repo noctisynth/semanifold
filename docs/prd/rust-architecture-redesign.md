@@ -2668,10 +2668,13 @@ adapter 暴露旧 `ResolvedPackage`。
 14. 对同一工作区连续执行两次同步，第二次不产生文件修改。
 15. release branch、release PR 与模板变量消费同一个 workspace 级 `ReleaseContext`，不依赖隐式主项目。
 16. MiniJinja 模板严格校验未定义变量和渲染结果；workspace 级不暴露隐式 `release.version` 或 `release.tag`。
-17. 官网 Unix 与 Windows 安装脚本接受可选的具体版本参数；未传参数时安装 latest，传入
-    `X.Y.Z` 时从 GitHub Release 标签 `semifold-X.Y.Z` 下载对应平台资产。下载失败必须终止
-    安装，不能将 GitHub 错误响应写为可执行文件。两个脚本还必须接受可选安装目录；未指定
-    时保持 `$HOME/.local/bin`，并允许安装目录与可选版本独立组合。
+17. 官网 Unix 与 Windows 安装脚本接受可选的具体版本参数。未传参数时必须动态查询 GitHub
+    Releases，并选择最新发布、标签严格匹配 `semifold-vX.Y.Z` 的稳定 Semifold 二进制 Release；
+    不得使用仓库级 `/releases/latest`，因为同一仓库中其他 package 的 Release 也可能成为 latest。
+    传入 `X.Y.Z` 或 `vX.Y.Z` 时统一从 GitHub Release 标签 `semifold-vX.Y.Z` 下载对应平台资产，
+    预发布版本只能通过完整版本显式安装。版本解析、Release 查询或下载失败必须终止安装，不能
+    回退到固定版本，也不能将 GitHub 错误响应写为可执行文件。两个脚本还必须接受可选安装目录；
+    未指定时保持 `$HOME/.local/bin`，并允许安装目录与可选版本独立组合。
 18. Semifold 自身生产代码不存在可识别的主动 panic、未经验证的索引或切片路径；
     `clippy::unwrap_used`、`clippy::expect_used` 与 `clippy::indexing_slicing` 在非测试 target 上通过。
 19. `npm install --global @semifold/cli` 在六个支持 target 上安装唯一匹配的 N-API 平台包，并提供与

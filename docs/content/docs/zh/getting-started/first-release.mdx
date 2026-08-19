@@ -48,6 +48,15 @@ smif init
 
 如果仓库已经初始化，只是后来增加或删除了软件包，请使用 `smif config sync`，不要再次运行 `init --force`。
 
+### 配置 GitHub Actions 权限
+
+运行生成的工作流前，请打开仓库的 **Settings → Actions → General → Workflow permissions**，然后：
+
+1. 选择 **Read and write permissions**，让发布工作流能够推送准备好的版本提交。
+2. 勾选 **Allow GitHub Actions to create and approve pull requests**，让工作流能够创建或更新发布 Pull Request。
+
+保存设置后再继续。如果组织或企业策略禁止启用这些仓库级选项，请联系管理员在上级策略中开放相应能力。参见 GitHub 的[仓库 Actions 设置文档](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#setting-the-permissions-of-the-github_token-for-your-repository)。
+
 ## 2. 完成一项用户可见的改动
 
 修改一个公开 API，或者完成其他使用者能感知的行为变化。第一次练习尽量保持改动小而明确，便于判断版本影响。

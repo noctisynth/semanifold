@@ -718,6 +718,13 @@ publish 部分失败和 output writer 失败继续使用同一优先级，`ci` �
 `needs.<job>.outputs.publish` 消费；未运行分支对应的 job output 是空字符串。项目仓库中实际使用的
 workflow 与内置模板必须遵循同一映射契约。
 
+启用 `smif init` 生成的 GitHub Actions workflow 前，仓库必须在 **Settings → Actions → General →
+Workflow permissions** 中选择 **Read and write permissions**，并勾选 **Allow GitHub Actions to
+create and approve pull requests**。前者允许发布工作流推送版本提交，后者允许其创建或更新发布
+Pull Request；组织或企业策略覆盖仓库设置时，管理员还必须在上级策略中允许这些能力。公开文档必须
+在首次发布指南生成 GitHub Actions workflow 后、首次运行 workflow 前同步记录此前置条件；`init`
+命令参考只描述命令输入与产物，不承载仓库托管平台的后续配置步骤。
+
 version output 从 `prepare_release` 构造的同一个 `ReleaseContext` 以及由该 context 渲染、校验的
 release branch 派生，不得在 changeset 消费后重新规划：
 
@@ -833,6 +840,15 @@ changeset，并处理全部分页。comment 必须单独列出这些 changeset�
 base 已有的 changeset 错误归因给当前 PR；全量 `ReleasePlan` 仍是版本表的事实来源。
 comment 中标识计划计算位置的完整 commit SHA 必须以裸文本输出，不使用反引号包裹，使 GitHub
 能够自动将其渲染为缩写且可点击的 commit 链接。
+
+GitHub PR comment 的创建或更新失败保持非致命：已经生成的 `ReleasePlan` 与终端预览仍然有效，
+`status` 不因评论副作用失败而返回非零。CLI warning 不得只显示 GitHub 客户端的顶层错误类别；当
+Octocrab 返回结构化 GitHub API 错误时，必须展示失败的 create/update 操作、HTTP 状态以及 GitHub
+返回的 message，并在存在时保留 documentation URL。403 响应还必须提供检查 workflow token 权限
+和 fork PR 限制的可操作提示，但不能将所有 403 都断言为 fork 所致。其他客户端错误必须展示完整的
+错误 source chain，同时继续遵守敏感信息不得进入终端输出的约束。只有单条错误事实时 warning 保持
+单行；包含 API 错误、权限提示或文档链接时，首行只表达失败操作，后续事实使用缩进且带
+`Error`、`Hint`、`Documentation` 语义标签的层级结构，不得将多条事实逐行顶格输出。
 
 #### CLI 参数与交互契约
 

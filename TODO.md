@@ -457,6 +457,9 @@
 - [x] `status` 展示计划 fingerprint、bump、原因和明确完成摘要
 - [x] 优化 `status` GitHub PR comment，并为空计划解释合入后的未发布版本发布行为
 - [x] 让 `status` comment 的计划 commit SHA 使用 GitHub 可自动链接的裸文本
+- [x] 让 `status` comment 写入失败 warning 展示操作、GitHub API 状态、message、文档链接与 403 权限提示，同时保持非致命
+- [x] 让多事实 comment warning 使用带语义标签的缩进层级，单事实客户端错误保持单行
+- [x] 在中英文首次发布指南记录 GitHub Actions workflow 的 read/write 与 PR 创建权限前置设置
 - [x] 通过 GitHub PR Files API 检测并展示当前分支引入或变更的 changeset
 - [x] `version` 展示 plan/prepare/validate/apply/post-version/changeset 消费阶段与最终版本表
 - [x] `publish` 展示 preflight、命令、Forge、asset 与 succeeded/skipped/failed/not-started 摘要

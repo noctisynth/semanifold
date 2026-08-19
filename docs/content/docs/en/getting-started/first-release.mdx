@@ -48,6 +48,15 @@ Open `.changes/config.toml`. Under `[packages]`, confirm that each discovered pa
 
 If this repository was already initialized and packages later changed, use `smif config sync` instead of running `init --force` again.
 
+### Configure GitHub Actions permissions
+
+Before running the generated workflows, open the repository's **Settings → Actions → General → Workflow permissions**, then:
+
+1. Select **Read and write permissions** so the release workflow can push prepared version commits.
+2. Enable **Allow GitHub Actions to create and approve pull requests** so it can create or update the release pull request.
+
+Save the settings before continuing. Organization or enterprise policy can prevent these repository-level options from being enabled; in that case, ask an administrator to allow them at the higher level. See GitHub's [repository Actions settings documentation](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#setting-the-permissions-of-the-github_token-for-your-repository).
+
 ## 2. Make one user-visible change
 
 Change a public API or another behavior that users will notice. Keep the change small enough that its version impact is easy to judge.

@@ -7,7 +7,7 @@ use inquire::{Confirm, MultiSelect, Select, Text};
 use rust_i18n::t;
 use semifold_core::{BumpLevel, PackageId};
 use semifold_engine::{
-    AppError, ChangesetCreateError, ChangesetDraft, ChangesetPackageInput, Project,
+    AppError, ChangesetCreateError, ChangesetDraft, ChangesetPackageInput, ExecutionMode, Project,
     SemifoldService, SystemDependencies,
 };
 
@@ -88,9 +88,12 @@ pub(crate) struct Commit {
     pub no_tag: bool,
 }
 
-pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
+pub(crate) fn run(commit: &Commit, project: &Project, dry_run: bool) -> anyhow::Result<()> {
     let terminal = Terminal::detect();
     terminal.heading(&t!("cli.commit.heading"));
+    if dry_run {
+        terminal.dry_run(&t!("cli.common.dry_run_banner"));
+    }
     let config = &project.config;
 
     let name = if let Some(name) = &commit.name {
@@ -245,12 +248,17 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
         commit.summary.join("\n\n")
     };
     SemifoldService::new(SystemDependencies)
-        .create_changeset(
+        .create_changeset_with_mode(
             project,
             ChangesetDraft {
                 name: name.clone(),
                 packages: package_inputs,
                 summary,
+            },
+            if dry_run {
+                ExecutionMode::DryRun
+            } else {
+                ExecutionMode::Apply
             },
         )
         .map_err(|error| match error {
@@ -264,7 +272,11 @@ pub(crate) fn run(commit: &Commit, project: &Project) -> anyhow::Result<()> {
         })?;
     terminal.summary(
         StepOutcome::Success,
-        &t!("cli.commit.complete", name = name),
+        &if dry_run {
+            t!("cli.commit.dry_run_complete", name = name).into_owned()
+        } else {
+            t!("cli.commit.complete", name = name).into_owned()
+        },
     );
 
     Ok(())

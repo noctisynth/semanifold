@@ -63,7 +63,7 @@ fn run_with_cli(cli: Cli) -> anyhow::Result<()> {
         ProjectLocation::discover_with_changeset_dir(&current_dir, changeset_dir.as_deref())
             .map_err(|error| anyhow::anyhow!(project_load_error_message(&error)))?;
     if let Some(Commands::Init(init)) = &cli.command {
-        cli::init::run(init, &location)?;
+        cli::init::run(init, &location, cli.dry_run)?;
         return Ok(());
     }
     if let Some(Commands::Config(config)) = &cli.command
@@ -81,7 +81,7 @@ fn run_with_cli(cli: Cli) -> anyhow::Result<()> {
     );
 
     match &cli.command {
-        Some(Commands::Commit(commit)) => cli::commit::run(commit, &project)?,
+        Some(Commands::Commit(commit)) => cli::commit::run(commit, &project, cli.dry_run)?,
         Some(Commands::Config(config)) => cli::config::run(config, &project, cli.dry_run)?,
         Some(Commands::Version(version)) => {
             utils::run_async(cli::version::run(version, &project, cli.dry_run))?
@@ -90,7 +90,9 @@ fn run_with_cli(cli: Cli) -> anyhow::Result<()> {
             utils::run_async(cli::publish::run(publish, &project, cli.dry_run))?
         }
         Some(Commands::CI(ci)) => utils::run_async(cli::ci::run(ci, &project, cli.dry_run))?,
-        Some(Commands::Status(status)) => utils::run_async(cli::status::run(status, &project))?,
+        Some(Commands::Status(status)) => {
+            utils::run_async(cli::status::run(status, &project, cli.dry_run))?
+        }
         Some(Commands::Init(_) | Commands::Mcp(_)) | None => {}
     }
 

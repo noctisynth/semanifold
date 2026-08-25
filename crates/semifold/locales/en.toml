@@ -5,7 +5,7 @@ not_initialized = "Semifold is not initialized. Please run `semifold init` first
 dirty_repo = "Git repository is dirty. Please commit or stash your changes first, or use `--allow-dirty` option."
 
 [cli.common]
-dry_run_banner = "DRY RUN — no Semifold files or Forge resources will be changed"
+dry_run_banner = "DRY RUN — no Semifold-managed files, registry or Forge resources, or pull-request comments will be changed"
 error_label = "ERROR"
 interactive_input_unavailable = "Cannot prompt for %{prompt}; provide %{arguments}"
 
@@ -26,6 +26,7 @@ debug = "Enable debug mode"
 [cli.commit]
 heading = "Semifold changeset"
 complete = "Created changeset %{name}"
+dry_run_complete = "Dry run completed; changeset %{name} was validated but not created"
 create_failed = "Failed to create changeset: %{error}"
 warn_incomplete_select = "Not all selected packages are bumped, continue?"
 query_name = "What is the name of the commit?"
@@ -54,6 +55,7 @@ no_tag = "Create the changeset without a changelog tag"
 [cli.init]
 heading = "Semifold initialization"
 complete = "Initialization completed; wrote %{files} file(s)"
+dry_run_complete = "Dry run completed; planned %{files} initialization file(s) without writing them"
 asset_missing = "Embedded initialization asset %{name} is unavailable"
 already_initialized = "Semifold is already initialized. Use `smif config sync` for workspace package changes; use `init --force` only to re-initialize."
 not_repo_root = "Current directory is not the root of the repository."
@@ -83,6 +85,7 @@ allow_non_root = "Use the discovered repository root when invoked from a subdire
 
 [cli.status]
 heading = "Semifold release plan"
+dry_run_complete = "Dry run completed; no pull-request comment was created or updated"
 planning = "Planning workspace release"
 planning_failed = "Release planning failed"
 planned = "Planned %{count} package(s)"

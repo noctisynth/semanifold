@@ -176,6 +176,38 @@ fn init_accepts_complete_arguments_with_stdin_closed() {
 }
 
 #[test]
+fn dry_run_init_plans_without_writing_files() {
+    let root = temporary_repository("dry-run-init");
+
+    let init = run_smif(
+        &root,
+        &[
+            "--dry-run",
+            "init",
+            "--resolvers",
+            "rust",
+            "--default-tags",
+            "--base-branch",
+            "main",
+            "--release-branch",
+            "release",
+            "--github-actions",
+        ],
+    );
+
+    assert!(init.status.success(), "{init:?}");
+    assert!(!root.join(".changes/config.toml").exists());
+    assert!(!root.join(".github/workflows/semifold-ci.yaml").exists());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(output.contains('3'), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
     let root = temporary_repository("init-missing-arguments");
 
@@ -431,6 +463,37 @@ fn commit_accepts_complete_arguments_with_stdin_closed() {
 }
 
 #[test]
+fn dry_run_commit_validates_without_creating_a_changeset() {
+    let root = temporary_project("dry-run-commit", &config("channel = \"stable\""));
+
+    let commit = run_smif(
+        &root,
+        &[
+            "--dry-run",
+            "commit",
+            "--name",
+            "planned-change",
+            "--package",
+            "app=minor",
+            "--tag",
+            "chore",
+            "--summary",
+            "Validate without writing.",
+        ],
+    );
+
+    assert!(commit.status.success(), "{commit:?}");
+    assert!(!root.join(".changes/planned-change.md").exists());
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&commit.stdout),
+        String::from_utf8_lossy(&commit.stderr)
+    );
+    assert!(output.contains("planned-change"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn commit_level_applies_to_packages_without_an_inline_level() {
     let root = temporary_project("commit-default-level", &config("channel = \"stable\""));
 
@@ -548,12 +611,13 @@ fn status_and_dry_run_version_leave_the_workspace_unchanged() {
     let manifest_before = fs::read_to_string(&manifest).unwrap();
     let changeset_before = fs::read_to_string(&changeset).unwrap();
 
-    let status = run_smif(&root, &["status"]);
+    let status = run_smif(&root, &["--dry-run", "status"]);
     assert!(status.status.success(), "{status:?}");
     let stdout = String::from_utf8(status.stdout).unwrap();
     assert!(stdout.contains("app"));
     assert!(stdout.contains("1.0.0"));
     assert!(stdout.contains("1.0.1"));
+    assert!(stdout.contains("Pull Request"));
 
     let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
     assert!(version.status.success(), "{version:?}");

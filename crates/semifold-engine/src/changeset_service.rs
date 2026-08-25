@@ -128,11 +128,22 @@ pub fn create_changeset(
     project: &Project,
     draft: ChangesetDraft,
 ) -> Result<ChangesetId, ChangesetCreateError> {
+    create_changeset_with_mode(project, draft, ExecutionMode::Apply)
+}
+
+pub fn create_changeset_with_mode(
+    project: &Project,
+    draft: ChangesetDraft,
+    mode: ExecutionMode,
+) -> Result<ChangesetId, ChangesetCreateError> {
     let prepared = prepare_changeset(project, draft)?;
     if prepared.record.path.exists() {
         return Err(ChangesetCreateError::AlreadyExists {
             name: prepared.record.id.to_string(),
         });
+    }
+    if matches!(mode, ExecutionMode::DryRun) {
+        return Ok(prepared.record.id);
     }
     let mut changeset = changeset_from_record(&prepared.record, &project.changeset_dir);
     changeset.commit().map_err(ChangesetCreateError::Write)?;
@@ -573,6 +584,19 @@ mod tests {
             ChangesetCreateError::PackageNotFound { .. }
         ));
         assert!(!project.changeset_dir.join("unknown-package.md").exists());
+        fs::remove_dir_all(&project.root).expect("changeset fixture must be removed");
+    }
+
+    #[test]
+    fn dry_run_validates_and_renders_without_writing() {
+        let project = project();
+
+        let id =
+            create_changeset_with_mode(&project, draft("dry-run-change"), ExecutionMode::DryRun)
+                .expect("valid dry-run changeset must be rendered");
+
+        assert_eq!(id.as_str(), "dry-run-change");
+        assert!(!project.changeset_dir.join("dry-run-change.md").exists());
         fs::remove_dir_all(&project.root).expect("changeset fixture must be removed");
     }
 

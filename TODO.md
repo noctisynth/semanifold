@@ -469,6 +469,8 @@
 
 ### 其余入口与测试
 
+- [x] 减少中文 CLI 文案中的分号，优先改用短句、逗号或句号
+- [x] 让全局 `--dry-run` 覆盖 `init`、`commit` 与 `status --comment`，统一禁止文件和 PR comment 写入
 - [x] 统一 config、init、commit 和 CI 的标题、warning 与最终成功反馈
 - [x] 建立“交互仅为参数缺省回退”的 CLI 约定，并让 init/commit 可通过完整参数在关闭 stdin 时运行
 - [x] 将 init 的 workflow 选择参数统一为 `--github-actions` / `--no-github-actions`，并移除旧名称

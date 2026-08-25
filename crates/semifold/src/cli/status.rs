@@ -58,9 +58,12 @@ pub(crate) struct Status {
     pub comment: bool,
 }
 
-pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()> {
+pub(crate) async fn run(status: &Status, project: &Project, dry_run: bool) -> anyhow::Result<()> {
     let terminal = Terminal::detect();
     terminal.heading(&t!("cli.status.heading"));
+    if dry_run {
+        terminal.dry_run(&t!("cli.common.dry_run_banner"));
+    }
     let is_ci = env::var("GITHUB_ACTIONS").is_ok();
     let config = &project.config;
     log::debug!("GitHub CI environment: {}", is_ci);
@@ -151,6 +154,9 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
     }
 
     if !is_ci {
+        if dry_run {
+            terminal.summary(StepOutcome::Success, &t!("cli.status.dry_run_complete"));
+        }
         return Ok(());
     }
 
@@ -215,21 +221,30 @@ pub(crate) async fn run(status: &Status, project: &Project) -> anyhow::Result<()
             branch_changesets,
         ));
 
-        if let Err(error) = write_status_comment(
-            &octocrab,
-            owner,
-            repo_name,
-            pr_number,
-            existing,
-            comment_body,
-        )
-        .await
+        if should_write_status_comment(status.comment, is_matched, dry_run)
+            && let Err(error) = write_status_comment(
+                &octocrab,
+                owner,
+                repo_name,
+                pr_number,
+                existing,
+                comment_body,
+            )
+            .await
         {
             terminal.warning(&render_comment_write_error(&error));
         }
     }
 
+    if dry_run {
+        terminal.summary(StepOutcome::Success, &t!("cli.status.dry_run_complete"));
+    }
+
     Ok(())
+}
+
+fn should_write_status_comment(requested: bool, matched: bool, dry_run: bool) -> bool {
+    requested && matched && !dry_run
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -598,6 +613,14 @@ mod tests {
             message: "Resource not accessible by integration".to_string(),
             documentation_url: Some("https://docs.github.com/rest/issues/comments".to_string()),
         }
+    }
+
+    #[test]
+    fn dry_run_never_writes_status_comments() {
+        assert!(!should_write_status_comment(true, true, true));
+        assert!(should_write_status_comment(true, true, false));
+        assert!(!should_write_status_comment(false, true, false));
+        assert!(!should_write_status_comment(true, false, false));
     }
 
     #[test]

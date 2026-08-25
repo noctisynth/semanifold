@@ -821,7 +821,18 @@ Unicode 与动态终端状态只存在于 CLI。
 - 面向交互终端的结果表必须在完成列宽计算后应用一致的语义颜色，避免 ANSI 控制序列破坏对齐；
   package 标识使用强调色，版本使用版本色，succeeded、skipped、failed 与 not-started 分别使用
   成功、提醒、失败与弱化色。非 TTY、`NO_COLOR` 与 `TERM=dumb` 下仍退化为内容完全相同的纯文本；
+- 中文 CLI 文案优先使用短句、逗号或句号，避免用分号串联状态、结果、提示或恢复操作；只有保留
+  用户输入、外部错误或协议原文时才不改写其中的分号；
 - `--debug` 不得打印完整配置、GitHub event、header、环境变量、token、命令环境或其他敏感值。
+
+全局 `--dry-run` 是所有命令共享的副作用边界，而不只是部分 release 命令自行解释的展示参数。
+启用后，CLI 仍完成当前命令的参数解析、领域规划、输入校验、模板渲染和必要的只读查询，但不得
+创建、更新或删除 Semifold 管理的文件，不得修改 registry 或 Forge 资源，也不得创建或更新
+GitHub PR comment。`init` 只生成并报告 `InitPlan`，不调用 `apply_init()`；`commit` 必须完整校验并
+渲染候选 changeset，但不创建文件；`status --comment` 可以准备评论展示所需的只读事实，但不得
+调用评论写入接口。配置中显式声明 `dry-run = true` 的外部命令是唯一例外，它表示用户授权该命令
+在全局 dry-run 中执行；该许可不扩大 Semifold 自身文件、registry、Forge 或 PR comment 的写入范围。
+纯只读命令在 dry-run 下保持相同领域结果，但仍需在开头和结尾明确报告未应用副作用。
 
 首个切片改造 `status`、`version` 与 `publish`：status 展示 changeset/package 数量、fingerprint、
 版本、bump 和原因；version 展示准备、验证、应用、post-version 与 changeset 消费事实；publish
@@ -2227,6 +2238,12 @@ impl<D: Dependencies> SemifoldService<D> {
         &self,
         project: &Project,
         draft: ChangesetDraft,
+    ) -> Result<ChangesetId, AppError>;
+    pub fn create_changeset_with_mode(
+        &self,
+        project: &Project,
+        draft: ChangesetDraft,
+        mode: ExecutionMode,
     ) -> Result<ChangesetId, AppError>;
     pub fn get_changesets(
         &self,

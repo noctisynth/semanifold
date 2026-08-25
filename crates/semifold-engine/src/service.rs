@@ -177,6 +177,16 @@ impl<D> SemifoldService<D> {
             .map_err(AppError::ChangesetCreate)
     }
 
+    pub fn create_changeset_with_mode(
+        &self,
+        project: &Project,
+        draft: crate::changeset_service::ChangesetDraft,
+        mode: ExecutionMode,
+    ) -> Result<semifold_core::ChangesetId, AppError> {
+        crate::changeset_service::create_changeset_with_mode(project, draft, mode)
+            .map_err(AppError::ChangesetCreate)
+    }
+
     pub fn get_changesets(
         &self,
         project: &Project,

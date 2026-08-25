@@ -43,9 +43,12 @@ pub(crate) struct Init {
     pub allow_non_root: bool,
 }
 
-pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()> {
+pub(crate) fn run(init: &Init, location: &ProjectLocation, dry_run: bool) -> anyhow::Result<()> {
     let terminal = Terminal::detect();
     terminal.heading(&t!("cli.init.heading"));
+    if dry_run {
+        terminal.dry_run(&t!("cli.common.dry_run_banner"));
+    }
     if location.existing_config.is_some() && !init.force {
         terminal.summary(StepOutcome::Skipped, &t!("cli.init.already_initialized"));
         return Ok(());
@@ -177,11 +180,18 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation) -> anyhow::Result<()>
             workflows,
         },
     )?;
-    let report = service.apply_init(&plan)?;
-    terminal.summary(
-        StepOutcome::Success,
-        &t!("cli.init.complete", files = report.files.len()),
-    );
+    if dry_run {
+        terminal.summary(
+            StepOutcome::Success,
+            &t!("cli.init.dry_run_complete", files = plan.files.len()),
+        );
+    } else {
+        let report = service.apply_init(&plan)?;
+        terminal.summary(
+            StepOutcome::Success,
+            &t!("cli.init.complete", files = report.files.len()),
+        );
+    }
 
     Ok(())
 }

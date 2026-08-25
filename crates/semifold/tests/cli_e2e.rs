@@ -617,7 +617,15 @@ fn status_and_dry_run_version_leave_the_workspace_unchanged() {
     assert!(stdout.contains("app"));
     assert!(stdout.contains("1.0.0"));
     assert!(stdout.contains("1.0.1"));
-    assert!(stdout.contains("Pull Request"));
+    assert!(
+        semifold::_rust_i18n_available_locales()
+            .iter()
+            .map(|locale| {
+                semifold::_rust_i18n_translate(locale.as_ref(), "cli.common.dry_run_banner")
+            })
+            .any(|banner| stdout.contains(banner.as_ref())),
+        "{stdout}"
+    );
 
     let version = run_smif(&root, &["--dry-run", "version", "--allow-dirty"]);
     assert!(version.status.success(), "{version:?}");

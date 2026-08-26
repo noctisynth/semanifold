@@ -202,6 +202,9 @@
 - [x] Python 只规划 `pyproject.toml`、`setup.cfg` 和 Python 源码版本文件，不写入 `Cargo.toml`
 - [x] Python 动态版本可继续读取 `Cargo.toml`，但跨生态派生关系留待显式 `version-source`
 - [x] C++ 将 `CMakeLists.txt` 与可选 `vcpkg.json` 表示为 `FileEdit`
+- [x] C++ adapter 支持静态 qmake `.pro`/`.pri` 单包版本发现与 `FileEdit`
+- [ ] 为歧义 qmake 项目增加可持久化的 package 级 manifest file/variable selection，并由 CLI/application 层收集用户确认
+- [ ] 支持可静态展开的 qmake `TEMPLATE = subdirs` workspace 与 `include()` 文件范围
 - [x] Python/C++ 不再通过 `Resolver::bump()` 直接写入版本文件
 
 ### Changelog

@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.1
+
+### Bug Fixes
+
+- [`c47ccd5`](https://github.com/noctisynth/semifold/commit/c47ccd5786ab38391efc8ca09cd3ab8cd4477960): Reject release branches that match the base branch during configuration loading, initialization, and rendered release execution before Semifold can force-update the base branch.
+- [`c5ff0ce`](https://github.com/noctisynth/semifold/commit/c5ff0ce5d66d596e1b37d77cdd912ec4ed453ecc): Show structured operation, GitHub API status, message, documentation, and permission details when `status` cannot write its pull request comment, and document the repository workflow permissions required by generated GitHub Actions.
+- [`cb3d88f`](https://github.com/noctisynth/semifold/commit/cb3d88f3d40b7ee0c9dd2eb3edcf5dafccad0d4b): Resolve installation-script defaults from the latest stable `semifold-vX.Y.Z` binary Release instead of the repository-wide latest Release, and normalize explicit versions with or without a leading `v`.
+
 ## v1.1.0
 
 ### New Features

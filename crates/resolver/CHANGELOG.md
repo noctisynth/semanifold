@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.2
+
+### Bug Fixes
+
+- [`c47ccd5`](https://github.com/noctisynth/semifold/commit/c47ccd5786ab38391efc8ca09cd3ab8cd4477960): Reject release branches that match the base branch during configuration loading, initialization, and rendered release execution before Semifold can force-update the base branch.
+
 ## v0.4.1
 
 ### Chores

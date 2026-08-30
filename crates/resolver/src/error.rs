@@ -6,6 +6,8 @@ pub enum ResolveError {
     InvalidChangeset { path: PathBuf, reason: String },
     #[error("Invalid config {path}: {reason}")]
     InvalidConfig { path: PathBuf, reason: String },
+    #[error("Release branch {branch} matches the base branch in {path}")]
+    ReleaseBranchMatchesBase { path: PathBuf, branch: String },
     #[error("Unsupported config format: {path}")]
     UnsupportedConfigFormat { path: PathBuf },
     #[error("Invalid changelog {path}: {reason}")]

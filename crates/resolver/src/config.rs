@@ -22,6 +22,20 @@ pub struct BranchesConfig {
     pub release: String,
 }
 
+impl BranchesConfig {
+    pub fn validate_release_branch(
+        &self,
+        release_branch: &str,
+    ) -> Result<(), ConfigValidationError> {
+        if release_branch == self.base {
+            return Err(ConfigValidationError::ReleaseBranchMatchesBase {
+                branch: release_branch.to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ReleaseConfig {
@@ -356,6 +370,8 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), ConfigValidationError> {
+        self.branches
+            .validate_release_branch(&self.branches.release)?;
         self.plugin_definitions()?;
         for (package, config) in &self.packages {
             if !config.resolver.is_builtin() && !self.plugins.contains_key(&config.resolver) {
@@ -378,6 +394,8 @@ impl Config {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigValidationError {
+    #[error("release branch {branch} matches the base branch")]
+    ReleaseBranchMatchesBase { branch: String },
     #[error("plugin path for {ecosystem} is not UTF-8: {path:?}")]
     NonUtf8PluginPath {
         ecosystem: EcosystemId,
@@ -446,12 +464,18 @@ pub fn load_config_from_str(
             path: config_path.to_path_buf(),
             reason: e.to_string(),
         })?;
-    config
-        .validate()
-        .map_err(|source| ResolveError::InvalidConfig {
+    config.validate().map_err(|source| match source {
+        ConfigValidationError::ReleaseBranchMatchesBase { branch } => {
+            ResolveError::ReleaseBranchMatchesBase {
+                path: config_path.to_path_buf(),
+                branch,
+            }
+        }
+        source => ResolveError::InvalidConfig {
             path: config_path.to_path_buf(),
             reason: source.to_string(),
-        })?;
+        },
+    })?;
     Ok(config)
 }
 
@@ -545,6 +569,24 @@ pull-request-title = "Release {{ release.plan.common_version }}"
         assert!(matches!(
             load_config_from_str(Path::new("config.json"), "{}"),
             Err(ResolveError::UnsupportedConfigFormat { .. })
+        ));
+    }
+
+    #[test]
+    fn release_branch_must_differ_from_base_branch() {
+        let config = r#"
+[branches]
+base = "main"
+release = "main"
+
+[tags]
+[packages]
+[resolver]
+"#;
+
+        assert!(matches!(
+            load_config_from_str(Path::new("config.toml"), config),
+            Err(ResolveError::ReleaseBranchMatchesBase { branch, .. }) if branch == "main"
         ));
     }
 

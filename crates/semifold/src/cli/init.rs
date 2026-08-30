@@ -133,6 +133,12 @@ pub(crate) fn run(init: &Init, location: &ProjectLocation, dry_run: bool) -> any
             .with_default("release")
             .prompt()?
     };
+    if release_branch == base_branch {
+        anyhow::bail!(t!(
+            "cli.release_branch_matches_base",
+            branch = release_branch
+        ));
+    }
 
     let github_actions = if init.github_actions {
         true

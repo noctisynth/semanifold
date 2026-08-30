@@ -15,8 +15,9 @@ use semifold_core::ReleaseContext;
 use semifold_engine::{
     Project, SemifoldService, SystemDependencies,
     release::{
-        ReleasePullRequestContext, render_release_branch, render_release_commit_message,
-        render_release_pull_request, render_release_pull_request_title,
+        ReleaseBranchRenderError, ReleasePullRequestContext, render_configured_release_branch,
+        render_release_commit_message, render_release_pull_request,
+        render_release_pull_request_title,
     },
 };
 
@@ -84,8 +85,13 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
     }
 
     let release_context = ReleaseContext::from_plan(&release_plan);
-    let release_branch = render_release_branch(&config.branches.release, &release_context)
-        .map_err(|error| anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)))?;
+    let release_branch = render_configured_release_branch(&config.branches, &release_context)
+        .map_err(|error| match error {
+            ReleaseBranchRenderError::MatchesBase { branch } => {
+                anyhow::anyhow!(t!("cli.release_branch_matches_base", branch = branch))
+            }
+            error => anyhow::anyhow!(t!("cli.ci.release_branch_invalid", error = error)),
+        })?;
     let release_commit_message =
         render_release_commit_message(config.release.commit_message.as_deref(), &release_context)
             .map_err(|error| anyhow::anyhow!(t!("cli.ci.commit_message_invalid", error = error)))?;

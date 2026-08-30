@@ -39,8 +39,10 @@ smif init --resolvers rust --resolvers nodejs \
 | --- | --- |
 | `--target <路径>` | 把变更集目录从默认 `.changes` 改为其他位置。 |
 | `--resolvers <ID>` | 扫描一种内置软件生态；可以重复指定。 |
+| `--base-branch <名称>` | 选择接收自动生成的发布 Pull Request 的基础分支。 |
+| `--release-branch <名称或模板>` | 选择由自动化维护的发布分支；模板渲染后也不能与基础分支相同。 |
 | `--force` | 明确重新初始化已有配置，不用于日常同步软件包。 |
 | `--allow-non-root` | 允许从子目录调用，同时使用自动发现的仓库根目录。 |
 | `--dry-run` | 只规划和报告初始化结果，不写文件。 |
 
-发现失败或必要选择无效时，初始化会在写入前停止。已有仓库不要把 `--force` 当作维护方式，因为它可能替换有意制定的策略；请先运行 `smif config sync --check`。
+发现失败或必要选择无效时，初始化会在写入前停止。尤其不要把 `--release-branch` 当成当前基础分支的另一个名称：生成的 CI 会强制更新该分支，并维护一条返回 `--base-branch` 的 Pull Request。已有仓库不要把 `--force` 当作维护方式，因为它可能替换有意制定的策略；请先运行 `smif config sync --check`。

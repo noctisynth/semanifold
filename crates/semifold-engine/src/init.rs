@@ -4,7 +4,10 @@ use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior, context};
 use semifold_core::EcosystemId;
 use semifold_resolver::{
-    config::{self, BranchesConfig, CommandConfig, PreCheckConfig, ResolverConfig, StdioType},
+    config::{
+        self, BranchesConfig, CommandConfig, ConfigValidationError, PreCheckConfig, ResolverConfig,
+        StdioType,
+    },
     resolver::ResolverType,
 };
 use thiserror::Error;
@@ -75,6 +78,10 @@ pub fn plan_init(
         plugins: BTreeMap::new(),
         resolver,
     };
+    config
+        .branches
+        .validate_release_branch(&config.branches.release)
+        .map_err(InitPlanningError::ConfigValidation)?;
     let config_path = options.target.join("config.toml");
     let config_content = toml_edit::ser::to_string_pretty(&config).map_err(|source| {
         InitPlanningError::ConfigSerialize {
@@ -200,6 +207,8 @@ fn command(command: &str, args: &[&str], dry_run: Option<bool>) -> CommandConfig
 
 #[derive(Debug, Error)]
 pub enum InitPlanningError {
+    #[error("invalid branch configuration")]
+    ConfigValidation(#[source] ConfigValidationError),
     #[error("package discovery failed during initialization: {0}")]
     Discovery(#[source] PackageDiscoveryError),
     #[error("failed to serialize initial configuration {path}: {reason}")]
@@ -293,6 +302,42 @@ mod tests {
                 .any(|file| file.content == "base=main nodejs")
         );
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_matching_base_and_release_branches_without_writing() {
+        let root = temporary_root();
+        fs::write(
+            root.join("package.json"),
+            r#"{"name":"example","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        let location = ProjectLocation {
+            root: root.clone(),
+            existing_config: None,
+        };
+        let target = root.join(".changes");
+
+        let result = plan_init(
+            &location,
+            InitOptions {
+                target: target.clone(),
+                resolvers: vec![ResolverType::Nodejs],
+                tags: BTreeMap::new(),
+                base_branch: "main".to_string(),
+                release_branch: "main".to_string(),
+                workflows: None,
+            },
+        );
+
+        assert!(matches!(
+            result,
+            Err(InitPlanningError::ConfigValidation(
+                ConfigValidationError::ReleaseBranchMatchesBase { branch }
+            )) if branch == "main"
+        ));
+        assert!(!target.exists());
         fs::remove_dir_all(root).unwrap();
     }
 

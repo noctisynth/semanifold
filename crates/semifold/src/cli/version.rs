@@ -6,7 +6,8 @@ use semifold_engine::{
     AppError, ApplyReport, ExecutionMode, PostVersionCommand, PostVersionCommandEvent,
     PostVersionCommandOutcome, Project, ReleaseApplyError, ReleaseApplyPlan,
     ReleaseExecutionOptions, SemifoldService, SystemDependencies, VersionWorkflowOutput,
-    WorkflowExecutionMode, publish_plan::StdioPolicy,
+    WorkflowExecutionMode, publish_plan::StdioPolicy, release::ReleaseBranchRenderError,
+    release_apply::ReleasePrepareError,
 };
 
 use crate::cli::{
@@ -47,7 +48,12 @@ pub(crate) async fn prepare_and_apply_release(
                 StepOutcome::Failed,
                 t!("cli.version.preparation_failed").into_owned(),
             );
-            let detail = format!("{:#}", anyhow::Error::new(error));
+            let detail = match error {
+                AppError::ReleasePrepare(ReleasePrepareError::ReleaseBranch(
+                    ReleaseBranchRenderError::MatchesBase { branch },
+                )) => t!("cli.release_branch_matches_base", branch = branch).into_owned(),
+                error => format!("{:#}", anyhow::Error::new(error)),
+            };
             return Err(anyhow::anyhow!(t!(
                 "cli.version.prepare_failed",
                 error = detail

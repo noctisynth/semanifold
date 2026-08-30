@@ -24,7 +24,7 @@ use crate::{
     project::Project,
     publish_plan::{CommandPhase, CommandSpec, StdioPolicy},
     publisher::{CommandError, CommandRunner},
-    release::render_release_branch,
+    release::render_configured_release_branch,
     workspace::{WorkspaceLoadError, load_workspace_graph},
 };
 
@@ -122,8 +122,9 @@ pub async fn prepare_release(
     if let Some(repository) = options.repository.clone() {
         release_context = release_context.with_repository(repository);
     }
-    let release_branch = render_release_branch(&project.config.branches.release, &release_context)
-        .map_err(ReleasePrepareError::ReleaseBranch)?;
+    let release_branch =
+        render_configured_release_branch(&project.config.branches, &release_context)
+            .map_err(ReleasePrepareError::ReleaseBranch)?;
     let changelog_renderer = release
         .order()
         .first()

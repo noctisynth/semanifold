@@ -39,8 +39,10 @@ Use the matching `--no-resolvers`, `--no-default-tags`, or `--no-github-actions`
 | --- | --- |
 | `--target <path>` | Changes the changeset directory from the default `.changes`. |
 | `--resolvers <id>` | Scans a built-in ecosystem; repeat for multiple ecosystems. |
+| `--base-branch <name>` | Selects the branch that receives the generated release pull request. |
+| `--release-branch <name-or-template>` | Selects the automation-maintained release branch; it must differ from the base branch after template rendering. |
 | `--force` | Explicitly reinitializes an existing configuration. It is not a package-sync command. |
 | `--allow-non-root` | Allows invocation from a subdirectory while using the discovered repository root. |
 | `--dry-run` | Plans and reports initialization without writing the files. |
 
-Initialization fails before writing when discovery or required choices are invalid. Existing repositories should not use `--force` as routine maintenance because it can replace intentional policy; run `smif config sync --check` instead.
+Initialization fails before writing when discovery or required choices are invalid. In particular, `--release-branch` is not another name for the current base branch: generated CI force-updates it while maintaining a pull request back to `--base-branch`. Existing repositories should not use `--force` as routine maintenance because it can replace intentional policy; run `smif config sync --check` instead.

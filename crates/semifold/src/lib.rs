@@ -4,6 +4,7 @@ use clap::Parser;
 use log::LevelFilter;
 use rust_i18n::t;
 use semifold_engine::{ProjectLoadError, ProjectLocation};
+use semifold_resolver::error::ResolveError;
 use std::{ffi::OsString, process::ExitCode};
 
 pub mod cli;
@@ -109,6 +110,10 @@ pub(crate) fn project_load_error_message_with_fallback(
     fallback: String,
 ) -> String {
     let message = match error {
+        ProjectLoadError::ConfigInvalid {
+            source: ResolveError::ReleaseBranchMatchesBase { branch, .. },
+            ..
+        } => t!("cli.release_branch_matches_base", branch = branch).into_owned(),
         ProjectLoadError::ConfigInvalid { source, .. } => source.to_string(),
         _ => fallback,
     };

@@ -208,6 +208,63 @@ fn dry_run_init_plans_without_writing_files() {
 }
 
 #[test]
+fn init_rejects_a_release_branch_that_matches_the_base_branch() {
+    let root = temporary_repository("init-matching-branches");
+
+    let init = run_smif(
+        &root,
+        &[
+            "init",
+            "--resolvers",
+            "rust",
+            "--default-tags",
+            "--base-branch",
+            "main",
+            "--release-branch",
+            "main",
+            "--no-github-actions",
+        ],
+    );
+
+    assert!(!init.status.success(), "{init:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(
+        output.contains("must differ from the base branch")
+            || output.contains("不能与基础分支相同"),
+        "{output}"
+    );
+    assert!(!root.join(".changes/config.toml").exists());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_load_rejects_a_release_branch_that_matches_the_base_branch() {
+    let invalid_config =
+        config("channel = \"stable\"").replace("release = \"release\"", "release = \"main\"");
+    let root = temporary_project("load-matching-branches", &invalid_config);
+
+    let status = run_smif(&root, &["status"]);
+
+    assert!(!status.status.success(), "{status:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&status.stdout),
+        String::from_utf8_lossy(&status.stderr)
+    );
+    assert!(
+        output.contains("must differ from the base branch")
+            || output.contains("不能与基础分支相同"),
+        "{output}"
+    );
+    assert!(!output.contains("config migrate"), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn init_reports_the_missing_parameter_instead_of_prompting_without_stdin() {
     let root = temporary_repository("init-missing-arguments");
 
@@ -266,6 +323,11 @@ fn init_help_uses_github_actions_flags() {
     assert!(output.contains("--no-github-actions"), "{output}");
     assert!(!output.contains("--write-ci"), "{output}");
     assert!(!output.contains("--no-write-ci"), "{output}");
+    assert!(
+        output.contains("must differ from the base branch")
+            || output.contains("不能与基础分支相同"),
+        "{output}"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -316,6 +378,35 @@ fn ci_version_branch_writes_the_version_workflow_output() {
     assert!(output.contains("\"schema-version\":1"), "{output}");
     assert!(output.contains("\"dry-run\":true"), "{output}");
     assert!(output.contains("\"next-version\":\"1.0.1\""), "{output}");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn ci_rejects_a_release_branch_template_that_renders_to_the_base_branch() {
+    let matching_template = config("channel = \"stable\"")
+        .replace("release = \"release\"", "release = '{{ \"main\" }}'");
+    let root = temporary_project("ci-matching-rendered-branch", &matching_template);
+    let github_output = root.join("github-output");
+
+    let ci = run_smif_in_github(&root, &["--dry-run", "ci"], &github_output);
+
+    assert!(!ci.status.success(), "{ci:?}");
+    let output = format!(
+        "{}{}",
+        String::from_utf8_lossy(&ci.stdout),
+        String::from_utf8_lossy(&ci.stderr)
+    );
+    assert!(
+        output.contains("must differ from the base branch")
+            || output.contains("不能与基础分支相同"),
+        "{output}"
+    );
+    assert!(root.join(".changes/feature.md").exists());
+    assert!(
+        fs::read_to_string(root.join("Cargo.toml"))
+            .unwrap()
+            .contains("version = \"1.0.0\"")
+    );
     fs::remove_dir_all(root).unwrap();
 }
 

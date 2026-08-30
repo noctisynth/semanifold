@@ -10,7 +10,9 @@ Semifold accepts TOML configuration at `.changes/config.toml`. Field names use k
 | Field | Type | Required | Meaning |
 | --- | --- | --- | --- |
 | `base` | string | yes | Branch that normal development and release preparation start from. |
-| `release` | strict MiniJinja template string | yes | Branch maintained for prepared version changes and the release pull request. |
+| `release` | strict MiniJinja template string | yes | Automation-maintained branch for prepared version changes and the release pull request; it must not resolve to `base`. |
+
+The release branch is owned by the release automation: `smif ci` force-updates it and opens or refreshes a pull request from it to `base`. Semifold does not interpret `release = "main"` as a trunk-release strategy. A fixed release branch must differ from `base`, and a template must also render to a different branch. Matching fixed names are rejected when the configuration is loaded; a matching template result is rejected before version files, branches, or remote refs are changed.
 
 A value without template syntax remains a fixed branch name. To derive a branch from the current version decision, use `release.plan.fingerprint`, `release.plan.common_version`, or read `release.plan.packages["<PackageId>"].next_version` through a stable `PackageId`:
 

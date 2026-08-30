@@ -565,6 +565,10 @@
 - [x] 非测试 target 通过 `clippy::unwrap_used`、`clippy::expect_used` 和
   `clippy::indexing_slicing`，生产代码不存在可识别的 panic 路径
 - [x] release branch / release PR 消费同一 workspace `ReleaseContext`，并支持固定分支与显式 plan/package 模板
+- [x] 配置加载与 `init` 拒绝和 base 相同的固定 release branch；模板渲染后在版本文件写入、
+  分支切换或强制 push 前再次拒绝与 base 相同的最终 release branch
+- [x] `--release-branch` help 与中英文配置、初始化和 CI 文档明确 release branch 必须独立于
+  base branch，且会由自动化强制维护
 - [x] 模板在严格模式下渲染，且 workspace 发布不会隐式选择 package version 或 tag
 - [x] changelog 默认模板保持现有输出，自定义模板可控制 release block 和单条 changeset 的渲染格式
 - [x] publish 能读取 marker 包围的自定义 changelog，并对无 marker 的旧格式保持兼容

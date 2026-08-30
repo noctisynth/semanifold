@@ -10,7 +10,9 @@ Semifold 读取 `.changes/config.toml` 中的 TOML 配置。字段名使用 keba
 | 字段 | 类型 | 必需 | 含义 |
 | --- | --- | --- | --- |
 | `base` | 字符串 | 是 | 日常开发与发布准备开始的基础分支。 |
-| `release` | 严格 MiniJinja 模板字符串 | 是 | 用来维护版本修改和发布拉取请求的分支。 |
+| `release` | 严格 MiniJinja 模板字符串 | 是 | 由自动化维护版本修改和发布拉取请求的分支；最终结果不能等于 `base`。 |
+
+发布分支由发布自动化接管：`smif ci` 会强制更新该分支，并从它创建或刷新指向 `base` 的 Pull Request。Semifold 不会把 `release = "main"` 解释为 trunk release 策略。固定发布分支必须与 `base` 不同，模板渲染结果也必须落在其他分支。相同的固定分支名会在读取配置时被拒绝；相同的模板结果会在修改版本文件、分支或远端 ref 之前被拒绝。
 
 不含模板语法的值会保持为固定分支名。需要按当前版本决定生成分支时，可以使用 `release.plan.fingerprint`、`release.plan.common_version`，或通过稳定 `PackageId` 读取 `release.plan.packages["<PackageId>"].next_version`：
 

@@ -13,6 +13,8 @@ smif ci
 
 On the base branch, `ci` computes the version operation, renders the configured release branch, commit message, and pull request title, applies the version files, force-updates that branch, and creates or refreshes its pull request back to the base branch. The commit message and pull request title both default to `chore(release): bump versions`; optionally customize them under `[release]` with the same strict `release.*` context used by the branch template.
 
+The rendered release branch must differ from the base branch. Semifold checks this before applying version files or changing Git refs; using the base branch as the release branch is rejected rather than treated as a trunk-release workflow.
+
 Contributors therefore only need to commit a changeset with their code and merge that pull request. Maintainers review versions and changelogs in the generated release pull request.
 
 ## When no changesets remain

@@ -12,7 +12,7 @@ use semifold_core::{
 use semifold_resolver::{
     adapter::{AdapterError, EcosystemPlanInput},
     changeset::{BumpLevel as ResolverBumpLevel, Changeset},
-    config::{ChannelBump, Config, ReleaseChannel as ResolverReleaseChannel},
+    config::{BranchesConfig, ChannelBump, Config, ReleaseChannel as ResolverReleaseChannel},
 };
 use semver::VersionReq;
 use thiserror::Error;
@@ -117,6 +117,17 @@ pub fn render_release_branch(
     let reference = format!("refs/heads/{branch}");
     if !git2::Reference::is_valid_name(&reference) {
         return Err(ReleaseBranchRenderError::InvalidGitBranch { branch });
+    }
+    Ok(branch)
+}
+
+pub fn render_configured_release_branch(
+    branches: &BranchesConfig,
+    release: &ReleaseContext,
+) -> Result<String, ReleaseBranchRenderError> {
+    let branch = render_release_branch(&branches.release, release)?;
+    if branch == branches.base {
+        return Err(ReleaseBranchRenderError::MatchesBase { branch });
     }
     Ok(branch)
 }
@@ -263,6 +274,8 @@ pub enum ReleaseBranchRenderError {
     Template(#[from] minijinja::Error),
     #[error("rendered release branch is not a valid Git branch: {branch}")]
     InvalidGitBranch { branch: String },
+    #[error("rendered release branch matches the base branch: {branch}")]
+    MatchesBase { branch: String },
 }
 
 #[derive(Debug, Error)]
@@ -473,6 +486,20 @@ mod tests {
             .is_err()
         );
         assert!(render_release_branch("release branch", &context).is_err());
+    }
+
+    #[test]
+    fn configured_release_branch_must_not_render_to_the_base_branch() {
+        let context = context(vec![planned_package("core", semver::Version::new(1, 1, 0))]);
+        let branches = BranchesConfig {
+            base: "main".to_string(),
+            release: "{{ \"main\" }}".to_string(),
+        };
+
+        assert!(matches!(
+            render_configured_release_branch(&branches, &context),
+            Err(ReleaseBranchRenderError::MatchesBase { branch }) if branch == "main"
+        ));
     }
 
     #[test]

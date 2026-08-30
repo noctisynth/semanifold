@@ -48,6 +48,8 @@ This file says:
 3. each package chooses the adapter that understands its manifest;
 4. each ecosystem defines how to check for an existing version and how to publish.
 
+Keep `base` and `release` separate. The generated automation force-updates the release branch while maintaining its pull request back to the base branch, so Semifold rejects a fixed or rendered release branch that matches `base`.
+
 ## Configuration sections
 
 | Section | Responsibility |

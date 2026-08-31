@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.2
+
+### Dependencies
+
+- Update semifold to 0.3.2.
+
 ## v0.3.1
 
 ### New Features

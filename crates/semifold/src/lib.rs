@@ -31,7 +31,7 @@ where
     match run_with_cli(Cli::parse_from(args)) {
         Ok(()) => 0,
         Err(error) => {
-            cli::terminal::Terminal::detect().error(&error.to_string());
+            cli::terminal::Terminal::detect().error(&cli::github::render_command_error(&error));
             1
         }
     }

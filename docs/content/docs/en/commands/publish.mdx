@@ -31,3 +31,10 @@ For each eligible package, Semifold runs configured pre-publish and publish comm
 | `--github-release` | Creates configured GitHub Releases and uploads assets; only accepted in CI. |
 
 If a registry version already exists, its registry command is skipped. With GitHub Releases enabled, Semifold can still create a missing Release; an already existing Release does not re-upload missing assets.
+
+
+## GitHub error diagnostics
+
+GitHub failures identify the operation and include the HTTP status, API message, validation details, and documentation link when available. Client failures include their underlying error chain. These details do not require `--debug`; GitHub tokens are redacted. A 403 includes permission checks appropriate to the operation, without assuming that permissions are the only possible cause.
+
+Release creation and asset upload failures retain the package and failure stage, partial publish report, and recovery guidance. An existing Release still follows the normal idempotent skip behavior.

@@ -1,3 +1,4 @@
+use semifold_changelog::github::{GitHubFailure, GitHubOperation};
 use std::env;
 
 use anyhow::Context as _;
@@ -124,7 +125,10 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         .split_once('/')
         .ok_or(anyhow::anyhow!(t!("cli.ci.github_repo_invalid_format")))?;
     let github_token = env::var("GITHUB_TOKEN").context("GITHUB_TOKEN is not set")?;
-    let octocrab = Octocrab::builder().personal_token(&*github_token).build()?;
+    let octocrab = Octocrab::builder()
+        .personal_token(&*github_token)
+        .build()
+        .map_err(|error| GitHubFailure::new(GitHubOperation::Initialize, error))?;
 
     let head = repo.head()?;
     let commit = head.peel_to_commit()?;
@@ -151,7 +155,12 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         &[&parent_commit],
     )?;
 
-    force_push_release(&repo, &github_token, &pull_request_context.branch)?;
+    force_push_release(&repo, &github_token, &pull_request_context.branch).map_err(|error| {
+        anyhow::anyhow!(t!(
+            "cli.github.push_failed",
+            error = semifold_changelog::github::format_error_chain(error.as_ref())
+        ))
+    })?;
 
     let head = format!("{}:{}", owner, pull_request_context.branch);
     let pulls = octocrab.pulls(owner, repo_name);
@@ -161,7 +170,8 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
         .head(head)
         .base(base_branch)
         .send()
-        .await?
+        .await
+        .map_err(|error| GitHubFailure::new(GitHubOperation::ListPullRequests, error))?
         .take_items();
 
     if existing_prs.is_empty() {
@@ -174,7 +184,8 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
             )
             .body(&pull_request.body)
             .send()
-            .await?;
+            .await
+            .map_err(|error| GitHubFailure::new(GitHubOperation::CreatePullRequest, error))?;
     } else {
         let pr = existing_prs
             .first()
@@ -185,7 +196,8 @@ pub(crate) async fn run(_ci: &CI, project: &Project, dry_run: bool) -> anyhow::R
             .title(&pull_request.title)
             .body(&pull_request.body)
             .send()
-            .await?;
+            .await
+            .map_err(|error| GitHubFailure::new(GitHubOperation::UpdatePullRequest, error))?;
     }
 
     terminal.summary(StepOutcome::Success, &t!("cli.ci.complete"));

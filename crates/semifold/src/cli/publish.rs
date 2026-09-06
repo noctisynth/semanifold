@@ -117,6 +117,21 @@ pub(crate) async fn publish(
                     ));
                 }
             }
+            if let AppError::PublishExecution(execution) = &error
+                && let Some((package, failure)) =
+                    execution.report.packages.iter().find_map(|package| {
+                        package
+                            .github_failure
+                            .as_ref()
+                            .map(|failure| (package, failure))
+                    })
+            {
+                return Err(anyhow::anyhow!(t!(
+                    "cli.github.package_failed",
+                    package = package.package.as_str(),
+                    error = super::github::render(failure)
+                )));
+            }
             return Err(error.into());
         }
         Err(error) => return Err(error.into()),
@@ -331,6 +346,7 @@ mod tests {
     fn asset_failure_after_release_creation_requires_a_new_version() {
         let report = PublishReport {
             packages: vec![semifold_engine::publisher::PackagePublishReport {
+                github_failure: None,
                 package: semifold_core::PackageId::new("core"),
                 status: PublishStatus::Failed(PublishFailureStage::AssetUpload),
                 commands: Vec::new(),

@@ -261,6 +261,7 @@ mod tests {
         let plan = publish_plan();
         let report = PublishReport {
             packages: vec![PackagePublishReport {
+                github_failure: None,
                 package: PackageId::new("core"),
                 status: PublishStatus::Failed(PublishFailureStage::Command(CommandPhase::Publish)),
                 commands: Vec::new(),

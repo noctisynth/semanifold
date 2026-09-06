@@ -861,6 +861,20 @@ Octocrab 返回结构化 GitHub API 错误时，必须展示失败的 create/upd
 单行；包含 API 错误、权限提示或文档链接时，首行只表达失败操作，后续事实使用缩进且带
 `Error`、`Hint`、`Documentation` 语义标签的层级结构，不得将多条事实逐行顶格输出。
 
+#### GitHub 操作诊断
+
+所有 GitHub 调用必须保留失败操作和结构化诊断，覆盖客户端初始化、CI 发布 PR 查询/创建/更新、
+status 评论和 PR 文件的查询/分页/写入、publish Release 创建与附件上传，以及 changelog PR 元数据查询。
+共享不可变 `GitHubFailure` / `GitHubDiagnostic` 在现有 changelog 集成层定义，由 engine 保留并传递，
+CLI 统一本地化展示操作、HTTP 状态、message、API validation errors 和 documentation URL；非 API
+错误保留 source chain。不得输出请求头、token、完整请求或响应 debug dump；动态文本清除控制字符并
+遮蔽当前 GitHub token。403 提示按操作区分 PR、评论、Release 权限，但不武断归因。
+发布报告与 release preparation 保留诊断事实，既有 workflow output schema 不变；CI/publish 的致命
+错误、评论写入与远程元数据查询的非致命降级、Release already_exists 幂等语义均不变。
+测试策略：离线构造 API/嵌套客户端错误，覆盖 403、422 validation、5xx、脱敏和双语操作输出，
+并检查 CI/status 各调用边界、发布失败报告和元数据降级路径。当前任务按用户要求禁止编译，
+Rust 测试与 Cargo changeset status 验证留待空间恢复后执行，不将静态检查标记为运行验证。
+
 #### CLI 参数与交互契约
 
 CLI 不提供全局或命令级 `--non-interactive` 模式。交互提示只是参数缺省时面向终端用户的便利回退，

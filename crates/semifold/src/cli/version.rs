@@ -168,6 +168,13 @@ fn render_release_plan_activity(plan: &ReleaseApplyPlan, dry_run: bool, terminal
             package = package.as_str()
         ));
     }
+    for (package, failure) in &plan.github_failures {
+        terminal.warning(&t!(
+            "cli.github.package_failed",
+            package = package.as_str(),
+            error = super::github::render(failure)
+        ));
+    }
     let mut runnable = Vec::new();
     for planned in &plan.post_version_commands {
         let command = format!(

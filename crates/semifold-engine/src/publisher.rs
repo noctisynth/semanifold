@@ -1,3 +1,4 @@
+use semifold_changelog::github::{GitHubFailure, GitHubOperation};
 use std::{
     collections::BTreeMap,
     future::Future,
@@ -110,6 +111,7 @@ pub enum ForgeReleaseOutcome {
 #[derive(Debug)]
 pub struct ForgeError {
     message: String,
+    github: Option<GitHubFailure>,
 }
 
 impl std::fmt::Display for ForgeError {
@@ -119,6 +121,16 @@ impl std::fmt::Display for ForgeError {
 }
 
 impl std::error::Error for ForgeError {}
+
+impl ForgeError {
+    fn github(operation: GitHubOperation, error: octocrab::Error) -> Self {
+        let failure = GitHubFailure::new(operation, error);
+        Self {
+            message: failure.to_string(),
+            github: Some(failure),
+        }
+    }
+}
 
 pub trait ForgeClient {
     fn create_release<'a>(
@@ -169,9 +181,7 @@ impl ForgeClient for GithubForgeClient {
                 {
                     Ok(ForgeReleaseOutcome::AlreadyExists)
                 }
-                Err(error) => Err(ForgeError {
-                    message: format!("failed to create package release: {error}"),
-                }),
+                Err(error) => Err(ForgeError::github(GitHubOperation::CreateRelease, error)),
             }
         })
     }
@@ -190,9 +200,7 @@ impl ForgeClient for GithubForgeClient {
                 .upload_asset(release_id.0, name, bytes::Bytes::from(content))
                 .send()
                 .await
-                .map_err(|error| ForgeError {
-                    message: format!("failed to upload package release asset: {error}"),
-                })?;
+                .map_err(|error| ForgeError::github(GitHubOperation::UploadAsset, error))?;
             Ok(())
         })
     }
@@ -603,6 +611,7 @@ pub struct PackagePublishReport {
     pub commands: Vec<CommandReport>,
     pub forge: ForgeDisposition,
     pub error: Option<String>,
+    pub github_failure: Option<GitHubFailure>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -675,6 +684,7 @@ where
                 commands: Vec::new(),
                 forge: ForgeDisposition::NotRequested,
                 error: None,
+                github_failure: None,
             })
             .collect(),
     };
@@ -761,6 +771,7 @@ where
                         package_report.status =
                             PublishStatus::Failed(PublishFailureStage::ForgeRelease);
                         package_report.error = Some(error.to_string());
+                        package_report.github_failure = error.github;
                         return Err(PublishExecutionError { report });
                     }
                 };
@@ -792,6 +803,7 @@ where
                             package_report.status =
                                 PublishStatus::Failed(PublishFailureStage::AssetUpload);
                             package_report.error = Some(error.to_string());
+                            package_report.github_failure = error.github;
                             return Err(PublishExecutionError { report });
                         }
                     }
@@ -849,6 +861,144 @@ mod tests {
             }
         });
         (format!("http://{address}"), receiver)
+    }
+
+    #[tokio::test]
+    async fn github_adapter_preserves_api_errors_for_release_and_asset_operations() {
+        let body = r#"{"message":"Validation Failed","errors":[{"resource":"Release","field":"tag_name","code":"invalid"}],"documentation_url":"https://docs.github.com/rest/releases"}"#;
+        let response = format!(
+            "HTTP/1.1 422 Unprocessable Entity\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let existing_body =
+            r#"{"message":"Validation Failed","errors":[{"code":"already_exists"}]}"#;
+        let existing_response = format!(
+            "HTTP/1.1 422 Unprocessable Entity\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{existing_body}",
+            existing_body.len()
+        );
+        let (url, _requests) =
+            serve_http_responses(vec![response.clone(), response, existing_response]);
+        let client = octocrab::Octocrab::builder()
+            .base_uri(url.as_str())
+            .unwrap()
+            .upload_uri(url.as_str())
+            .unwrap()
+            .build()
+            .unwrap();
+        let forge = GithubForgeClient::new(client);
+        let release = ForgeRelease {
+            owner: "owner".into(),
+            repository: "repo".into(),
+            tag: "pkg-v1.0.0".into(),
+            title: "pkg".into(),
+            body: "changes".into(),
+            prerelease: false,
+        };
+        let errors = [
+            (
+                forge.create_release(&release).await.unwrap_err(),
+                GitHubOperation::CreateRelease,
+            ),
+            (
+                forge
+                    .upload_asset(&release, &ForgeReleaseId(1), "asset.txt", vec![])
+                    .await
+                    .unwrap_err(),
+                GitHubOperation::UploadAsset,
+            ),
+        ];
+        assert_eq!(
+            forge.create_release(&release).await.unwrap(),
+            ForgeReleaseOutcome::AlreadyExists
+        );
+        for (error, operation) in errors {
+            let diagnostic = error.github.unwrap();
+            assert_eq!(diagnostic.operation, operation);
+            assert_eq!(diagnostic.diagnostic.status_code, Some(422));
+            assert_eq!(diagnostic.diagnostic.message, "Validation Failed");
+            assert!(
+                diagnostic
+                    .diagnostic
+                    .details
+                    .iter()
+                    .any(|detail| detail.contains("tag_name"))
+            );
+            assert_eq!(
+                diagnostic.diagnostic.documentation_url.as_deref(),
+                Some("https://docs.github.com/rest/releases")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn github_release_failure_reaches_the_publish_report() {
+        let body = r#"{"message":"Resource not accessible by integration"}"#;
+        let response = format!(
+            "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let (url, _requests) = serve_http_responses(vec![response]);
+        let forge = GithubForgeClient::new(
+            octocrab::Octocrab::builder()
+                .base_uri(url)
+                .unwrap()
+                .build()
+                .unwrap(),
+        );
+        let mut plan = publish_plan(vec![package("pkg", false, vec![])]);
+        plan.packages[0].forge = Some(crate::publish_plan::PackageForgePlan {
+            release: ForgeRelease {
+                owner: "owner".into(),
+                repository: "repo".into(),
+                tag: "pkg-v1.0.0".into(),
+                title: "pkg".into(),
+                body: "changes".into(),
+                prerelease: false,
+            },
+        });
+        let runner = RecordingRunner {
+            commands: Mutex::new(Vec::new()),
+            fail: None,
+        };
+        let registry = StaticRegistry {
+            existing: Vec::new(),
+            checked: Mutex::new(Vec::new()),
+        };
+        let error = execute_publish_plan(
+            &mut plan,
+            &runner,
+            &registry,
+            Some(ForgeExecution {
+                client: &forge,
+                file_system: &StaticFileSystem,
+                asset_resolver: &StaticAssetResolver,
+                root: Path::new("."),
+            }),
+            false,
+        )
+        .await
+        .unwrap_err();
+        let package = &error.report.packages[0];
+        assert_eq!(
+            package.status,
+            PublishStatus::Failed(PublishFailureStage::ForgeRelease)
+        );
+        assert_eq!(
+            package
+                .github_failure
+                .as_ref()
+                .unwrap()
+                .diagnostic
+                .status_code,
+            Some(403)
+        );
+        assert!(
+            package
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("Resource not accessible by integration")
+        );
     }
 
     struct RecordingRunner {

@@ -48,3 +48,10 @@ jobs:
 Downstream jobs read `needs.release.outputs.version` or `needs.release.outputs.publish`. The branch that did not run produces an empty string. On a partial publish failure, Semifold tries to write publish JSON with recovery states before returning a non-zero status.
 
 `--dry-run` prepares the selected branch behavior without pushing a branch, creating a pull request, or publishing. Use the generated workflow as the supported baseline instead of reconstructing permissions from a minimal snippet.
+
+
+## GitHub error diagnostics
+
+GitHub failures identify the operation and include the HTTP status, API message, validation details, and documentation link when available. Client failures include their underlying error chain. These details do not require `--debug`; GitHub tokens are redacted. A 403 includes permission checks appropriate to the operation, without assuming that permissions are the only possible cause.
+
+Release pull request queries, creation, updates, and branch push failures stop the command. When `ci` selects publishing, it uses the same Release and asset diagnostics as `publish`.

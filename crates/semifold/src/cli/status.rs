@@ -1,3 +1,4 @@
+use semifold_changelog::github::{GitHubFailure, GitHubOperation};
 use std::{collections::BTreeSet, env};
 
 use anyhow::Context as _;
@@ -183,7 +184,8 @@ pub(crate) async fn run(status: &Status, project: &Project, dry_run: bool) -> an
 
     let octocrab = Octocrab::builder()
         .personal_token(env::var("GITHUB_TOKEN")?)
-        .build()?;
+        .build()
+        .map_err(|error| GitHubFailure::new(GitHubOperation::Initialize, error))?;
 
     let is_matched = base_ref == config.branches.base
         && (head_ref != config.branches.base || head_owner != owner);
@@ -191,16 +193,25 @@ pub(crate) async fn run(status: &Status, project: &Project, dry_run: bool) -> an
         let issues = octocrab.issues(owner, repo_name);
 
         let comments = octocrab
-            .all_pages(issues.list_comments(pr_number).send().await?)
-            .await?;
+            .all_pages(
+                issues
+                    .list_comments(pr_number)
+                    .send()
+                    .await
+                    .map_err(|error| GitHubFailure::new(GitHubOperation::ListComments, error))?,
+            )
+            .await
+            .map_err(|error| GitHubFailure::new(GitHubOperation::ListComments, error))?;
         let files = octocrab
             .all_pages(
                 octocrab
                     .pulls(owner, repo_name)
                     .list_files(pr_number)
-                    .await?,
+                    .await
+                    .map_err(|error| GitHubFailure::new(GitHubOperation::ListFiles, error))?,
             )
-            .await?;
+            .await
+            .map_err(|error| GitHubFailure::new(GitHubOperation::ListFiles, error))?;
         let changeset_directory = project
             .changeset_dir
             .strip_prefix(&project.root)
@@ -232,7 +243,7 @@ pub(crate) async fn run(status: &Status, project: &Project, dry_run: bool) -> an
             )
             .await
         {
-            terminal.warning(&render_comment_write_error(&error));
+            terminal.warning(&super::github::render(&error));
         }
     }
 
@@ -247,73 +258,6 @@ fn should_write_status_comment(requested: bool, matched: bool, dry_run: bool) ->
     requested && matched && !dry_run
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CommentOperation {
-    Create,
-    Update,
-}
-
-#[derive(Debug, Eq, PartialEq)]
-enum GitHubCommentError {
-    Api {
-        status: String,
-        status_code: u16,
-        message: String,
-        documentation_url: Option<String>,
-    },
-    Client {
-        message: String,
-    },
-}
-
-impl GitHubCommentError {
-    fn from_api_error(source: &octocrab::GitHubError) -> Self {
-        Self::from_api_parts(
-            source.status_code.to_string(),
-            source.status_code.as_u16(),
-            source.message.clone(),
-            source.documentation_url.clone(),
-        )
-    }
-
-    fn from_api_parts(
-        status: String,
-        status_code: u16,
-        message: String,
-        documentation_url: Option<String>,
-    ) -> Self {
-        Self::Api {
-            status,
-            status_code,
-            message,
-            documentation_url,
-        }
-    }
-}
-
-impl From<octocrab::Error> for GitHubCommentError {
-    fn from(error: octocrab::Error) -> Self {
-        match error {
-            octocrab::Error::GitHub { source, .. } => Self::from_api_error(&source),
-            error => Self::Client {
-                message: format_error_chain(&error),
-            },
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-struct CommentWriteError {
-    operation: CommentOperation,
-    source: GitHubCommentError,
-}
-
-impl CommentWriteError {
-    fn new(operation: CommentOperation, source: GitHubCommentError) -> Self {
-        Self { operation, source }
-    }
-}
-
 async fn write_status_comment(
     octocrab: &Octocrab,
     owner: &str,
@@ -321,102 +265,26 @@ async fn write_status_comment(
     pull_request: u64,
     existing: Option<&Comment>,
     body: String,
-) -> Result<(), CommentWriteError> {
+) -> Result<(), GitHubFailure> {
     let (operation, result) = if let Some(comment) = existing {
         (
-            CommentOperation::Update,
-            update_status_comment(octocrab, owner, repository, comment, &body).await,
+            GitHubOperation::UpdateComment,
+            octocrab
+                .issues(owner, repository)
+                .update_comment(comment.id, &body)
+                .await,
         )
     } else {
         (
-            CommentOperation::Create,
-            create_status_comment(octocrab, owner, repository, pull_request, &body).await,
+            GitHubOperation::CreateComment,
+            octocrab
+                .issues(owner, repository)
+                .create_comment(pull_request, &body)
+                .await,
         )
     };
-    result.map_err(|source| CommentWriteError::new(operation, source))?;
-
+    result.map_err(|error| GitHubFailure::new(operation, error))?;
     Ok(())
-}
-
-async fn create_status_comment(
-    octocrab: &Octocrab,
-    owner: &str,
-    repository: &str,
-    pull_request: u64,
-    body: &str,
-) -> Result<(), GitHubCommentError> {
-    octocrab
-        .issues(owner, repository)
-        .create_comment(pull_request, body)
-        .await?;
-    Ok(())
-}
-
-async fn update_status_comment(
-    octocrab: &Octocrab,
-    owner: &str,
-    repository: &str,
-    comment: &Comment,
-    body: &str,
-) -> Result<(), GitHubCommentError> {
-    octocrab
-        .issues(owner, repository)
-        .update_comment(comment.id, body)
-        .await?;
-    Ok(())
-}
-
-fn render_comment_write_error(error: &CommentWriteError) -> String {
-    let operation = match error.operation {
-        CommentOperation::Create => t!("cli.status.comment_operation_create"),
-        CommentOperation::Update => t!("cli.status.comment_operation_update"),
-    };
-    match &error.source {
-        GitHubCommentError::Client { message } => t!(
-            "cli.status.comment_failed_with_error",
-            operation = operation,
-            error = message
-        )
-        .into_owned(),
-        GitHubCommentError::Api {
-            status,
-            status_code,
-            message,
-            documentation_url,
-        } => {
-            let mut lines = vec![
-                t!("cli.status.comment_failed", operation = operation).into_owned(),
-                t!(
-                    "cli.status.github_api_error",
-                    status = status,
-                    message = message
-                )
-                .into_owned(),
-            ];
-            if *status_code == 403 {
-                lines.push(t!("cli.status.comment_permission_hint").into_owned());
-            }
-            if let Some(documentation_url) = documentation_url.as_deref() {
-                lines.push(
-                    t!("cli.status.github_documentation", url = documentation_url).into_owned(),
-                );
-            }
-            lines.join("\n    ")
-        }
-    }
-}
-
-fn format_error_chain(error: &(dyn std::error::Error + 'static)) -> String {
-    let mut messages = vec![error.to_string()];
-    let mut source = error.source();
-    while let Some(error) = source {
-        let message = error.to_string();
-        if messages.last() != Some(&message) {
-            messages.push(message);
-        }
-        source = error.source();
-    }
-    messages.join(": ")
 }
 
 struct GithubCommentModel {
@@ -606,15 +474,6 @@ fn pull_request_changeset_id(
 mod tests {
     use super::*;
 
-    fn api_error(status_code: u16) -> GitHubCommentError {
-        GitHubCommentError::Api {
-            status: format!("{status_code} Forbidden"),
-            status_code,
-            message: "Resource not accessible by integration".to_string(),
-            documentation_url: Some("https://docs.github.com/rest/issues/comments".to_string()),
-        }
-    }
-
     #[test]
     fn dry_run_never_writes_status_comments() {
         assert!(!should_write_status_comment(true, true, true));
@@ -713,76 +572,5 @@ mod tests {
             )
             .is_none()
         );
-    }
-
-    #[test]
-    fn github_comment_warning_includes_api_details_and_permission_guidance() {
-        let rendered = render_comment_write_error(&CommentWriteError {
-            operation: CommentOperation::Create,
-            source: api_error(403),
-        });
-
-        assert_eq!(
-            rendered,
-            concat!(
-                "Failed to create the release plan pull request comment.\n",
-                "    Error: GitHub API returned 403 Forbidden: ",
-                "Resource not accessible by integration\n",
-                "    Hint: Check the workflow token's issues/pull-requests permissions ",
-                "and whether this is a fork pull request.\n",
-                "    GitHub documentation: ",
-                "https://docs.github.com/rest/issues/comments"
-            )
-        );
-        assert!(!rendered.contains("Authorization"));
-    }
-
-    #[test]
-    fn github_comment_warning_distinguishes_update_without_overstating_non_403_errors() {
-        let rendered = render_comment_write_error(&CommentWriteError {
-            operation: CommentOperation::Update,
-            source: GitHubCommentError::Api {
-                status: "500 Internal Server Error".to_string(),
-                status_code: 500,
-                message: "Server Error".to_string(),
-                documentation_url: None,
-            },
-        });
-
-        assert_eq!(
-            rendered,
-            concat!(
-                "Failed to update the release plan pull request comment.\n",
-                "    Error: GitHub API returned 500 Internal Server Error: Server Error"
-            )
-        );
-    }
-
-    #[test]
-    fn github_comment_client_error_stays_on_one_line() {
-        let rendered = render_comment_write_error(&CommentWriteError {
-            operation: CommentOperation::Create,
-            source: GitHubCommentError::Client {
-                message: "request timed out: connection closed".to_string(),
-            },
-        });
-
-        assert_eq!(
-            rendered,
-            "Failed to create the release plan pull request comment: request timed out: connection closed"
-        );
-        assert!(!rendered.contains('\n'));
-    }
-
-    #[test]
-    fn github_api_error_preserves_structured_details() {
-        let converted = GitHubCommentError::from_api_parts(
-            reqwest::StatusCode::FORBIDDEN.to_string(),
-            reqwest::StatusCode::FORBIDDEN.as_u16(),
-            "Resource not accessible by integration".to_string(),
-            Some("https://docs.github.com/rest/issues/comments".to_string()),
-        );
-
-        assert_eq!(converted, api_error(403));
     }
 }

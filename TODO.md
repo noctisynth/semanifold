@@ -652,3 +652,11 @@
 - [ ] 删除 Rspress 专用依赖、配置、组件与旧内容
 - [x] 创建并验证 `@semifold/docs` changeset
 - [x] 运行 production build、静态 direct-route smoke test 与 `smif status`
+
+## GitHub 诊断覆盖
+
+统一诊断已接入 CI PR、status 查询/评论、publish Release/附件和 changelog PR 元数据路径；
+已同步双语文档并新增回归测试代码，格式、locale key 一致性及 changeset 静态校验通过。
+
+- [ ] 运行 GitHub 诊断回归测试与相关 Rust 检查（本次用户要求禁止编译）。
+- [ ] 运行 `cargo run -p semifold --bin smif -- status`，验证 changeset 的实际解析和发布计划（本次未运行）。

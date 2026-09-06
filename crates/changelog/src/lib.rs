@@ -17,6 +17,7 @@ use semifold_core::{
 use semifold_resolver::{changeset, config::ChangelogConfig, error::ResolveError};
 use serde::Serialize;
 
+pub mod github;
 pub mod types;
 pub mod utils;
 
@@ -24,11 +25,13 @@ pub struct GeneratedChangelog {
     pub content: String,
     pub requires_marker: bool,
     pub remote_metadata_failed: bool,
+    pub github_failures: Vec<github::GitHubFailure>,
 }
 
 pub struct CollectedChangelogContext<'release> {
     pub context: ChangelogContext<'release>,
     pub remote_metadata_failed: bool,
+    pub github_failures: Vec<github::GitHubFailure>,
 }
 
 pub struct ChangelogSource<'a> {
@@ -295,6 +298,7 @@ pub async fn collect_changelog_context<'release>(
 ) -> Result<CollectedChangelogContext<'release>, ResolveError> {
     let mut collected_changesets = Vec::new();
     let mut remote_metadata_failed = false;
+    let mut github_failures = Vec::new();
 
     for changeset in changesets {
         let Some(changed_package) = changeset
@@ -330,8 +334,9 @@ pub async fn collect_changelog_context<'release>(
             .await
             {
                 Ok(pr_info) => pr_info,
-                Err(_error) => {
+                Err(error) => {
                     remote_metadata_failed = true;
+                    github_failures.push(error);
                     None
                 }
             }
@@ -383,6 +388,7 @@ pub async fn collect_changelog_context<'release>(
             dependency_updates,
         },
         remote_metadata_failed,
+        github_failures,
     })
 }
 
@@ -408,6 +414,7 @@ pub async fn generate_changelog<'release>(
         content: renderer.render(&collected.context)?,
         requires_marker: renderer.is_customized(),
         remote_metadata_failed: collected.remote_metadata_failed,
+        github_failures: collected.github_failures,
     })
 }
 

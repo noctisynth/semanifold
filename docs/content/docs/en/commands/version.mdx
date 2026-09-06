@@ -36,3 +36,10 @@ The command rejects a dirty Git worktree by default. `--allow-dirty` means the e
 Planning or validation failure leaves package files and changesets untouched. If a `post-version` command fails after validated file edits were applied, Semifold keeps those edits and retains the changesets, then reports the failed command and recovery facts. Inspect the Git diff, fix the hook, and retry instead of deleting the changeset by hand.
 
 After success, test and review the generated diff before committing it to the configured release branch.
+
+
+## GitHub error diagnostics
+
+GitHub failures identify the operation and include the HTTP status, API message, validation details, and documentation link when available. Client failures include their underlying error chain. These details do not require `--debug`; GitHub tokens are redacted. A 403 includes permission checks appropriate to the operation, without assuming that permissions are the only possible cause.
+
+Changelog pull request metadata lookup failures remain warnings. They now include the affected package and GitHub diagnostic; version preparation continues without that remote metadata.

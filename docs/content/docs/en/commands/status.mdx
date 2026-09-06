@@ -33,3 +33,10 @@ With global `--dry-run`, Semifold may collect and render the read-only facts nee
 If GitHub rejects comment creation or update, the release plan remains available and `status` completes successfully. The warning includes the failed operation, GitHub API status and message, any documentation URL returned by GitHub, and a permission hint for `403 Forbidden` responses.
 
 If a package, target version, or reason is wrong, correct the changeset or dependency configuration rather than manually editing a package version.
+
+
+## GitHub error diagnostics
+
+GitHub failures identify the operation and include the HTTP status, API message, validation details, and documentation link when available. Client failures include their underlying error chain. These details do not require `--debug`; GitHub tokens are redacted. A 403 includes permission checks appropriate to the operation, without assuming that permissions are the only possible cause.
+
+Comment and changed-file queries, including pagination, report detailed failures. Comment creation or update failures remain warnings and do not invalidate the release plan.

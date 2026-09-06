@@ -7,6 +7,7 @@ use semifold_core::RepositoryContext;
 pub mod ci;
 pub mod commit;
 pub mod config;
+pub(crate) mod github;
 pub mod init;
 pub mod mcp;
 pub mod publish;

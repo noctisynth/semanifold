@@ -69,6 +69,7 @@ pub struct ReleaseApplyPlan {
     pub channel_bumps_to_consume: Vec<PackageId>,
     pub post_version_commands: Vec<PostVersionCommand>,
     pub remote_metadata_failures: Vec<PackageId>,
+    pub github_failures: Vec<(PackageId, semifold_changelog::github::GitHubFailure)>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -134,6 +135,7 @@ pub async fn prepare_release(
     let mut file_edits = release.file_edits().to_vec();
     let mut changelogs = BTreeMap::new();
     let mut remote_metadata_failures = Vec::new();
+    let mut github_failures = Vec::new();
 
     for package_id in release.order() {
         let renderer = changelog_renderer.as_ref().ok_or_else(|| {
@@ -187,6 +189,12 @@ pub async fn prepare_release(
             options.collect_remote_metadata,
         )
         .await?;
+        github_failures.extend(
+            changelog
+                .github_failures
+                .into_iter()
+                .map(|error| (package_id.clone(), error)),
+        );
         if changelog.remote_metadata_failed {
             remote_metadata_failures.push(package_id.clone());
         }
@@ -232,6 +240,7 @@ pub async fn prepare_release(
         channel_bumps_to_consume,
         post_version_commands: plan_post_version_commands(project)?,
         remote_metadata_failures,
+        github_failures,
     })
 }
 

@@ -441,9 +441,19 @@ impl SemifoldService<SystemDependencies> {
                 octocrab::Octocrab::builder()
                     .personal_token(token)
                     .build()
-                    .map_err(AppError::PublishSetup)?
+                    .map_err(|error| {
+                        AppError::PublishSetup(semifold_changelog::github::GitHubFailure::new(
+                            semifold_changelog::github::GitHubOperation::Initialize,
+                            error,
+                        ))
+                    })?
             } else {
-                octocrab::Octocrab::default()
+                octocrab::Octocrab::builder().build().map_err(|error| {
+                    AppError::PublishSetup(semifold_changelog::github::GitHubFailure::new(
+                        semifold_changelog::github::GitHubOperation::Initialize,
+                        error,
+                    ))
+                })?
             };
             Some(GithubForgeClient::new(client))
         } else {
@@ -521,7 +531,7 @@ pub enum AppError {
     #[error("failed to plan publish: {0}")]
     PublishPlan(#[source] PublishPlanError),
     #[error("failed to initialize publish dependencies: {0}")]
-    PublishSetup(#[source] octocrab::Error),
+    PublishSetup(#[source] semifold_changelog::github::GitHubFailure),
     #[error("failed to execute publish plan: {0}")]
     PublishExecution(#[source] Box<PublishExecutionError>),
 }

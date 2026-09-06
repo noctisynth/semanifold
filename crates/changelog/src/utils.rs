@@ -5,6 +5,7 @@ use octocrab::Octocrab;
 
 use semifold_resolver::error::ResolveError;
 
+use crate::github::{GitHubFailure, GitHubOperation};
 use crate::{RELEASE_MARKER_END, RELEASE_MARKER_PREFIX};
 
 #[derive(Debug)]
@@ -25,18 +26,24 @@ pub async fn query_pr_for_commit(
     owner: &str,
     repo: &str,
     commit_info: &CommitInfo,
-) -> octocrab::Result<Option<PrInfo>> {
+) -> Result<Option<PrInfo>, GitHubFailure> {
     let octocrab = if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-        Octocrab::builder().personal_token(token).build()?
+        Octocrab::builder()
+            .personal_token(token)
+            .build()
+            .map_err(|error| GitHubFailure::new(GitHubOperation::Initialize, error))?
     } else {
-        Octocrab::builder().build()?
+        Octocrab::builder()
+            .build()
+            .map_err(|error| GitHubFailure::new(GitHubOperation::Initialize, error))?
     };
 
     let prs = octocrab
         .repos(owner, repo)
         .list_pulls(commit_info.oid.to_string())
         .send()
-        .await?;
+        .await
+        .map_err(|error| GitHubFailure::new(GitHubOperation::QueryCommitPullRequest, error))?;
 
     if let Some(pr) = prs.items.into_iter().next() {
         return Ok(Some(PrInfo {
@@ -47,7 +54,11 @@ pub async fn query_pr_for_commit(
     }
 
     if let Some(pr_number) = pull_request_number(&commit_info.message) {
-        let pr = octocrab.pulls(owner, repo).get(pr_number).await?;
+        let pr = octocrab
+            .pulls(owner, repo)
+            .get(pr_number)
+            .await
+            .map_err(|error| GitHubFailure::new(GitHubOperation::QueryCommitPullRequest, error))?;
         return Ok(Some(PrInfo {
             number: pr.number,
             author: pr.user.map(|u| u.login),

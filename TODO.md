@@ -658,5 +658,5 @@
 统一诊断已接入 CI PR、status 查询/评论、publish Release/附件和 changelog PR 元数据路径；
 已同步双语文档并新增回归测试代码，格式、locale key 一致性及 changeset 静态校验通过。
 
-- [ ] 运行 GitHub 诊断回归测试与相关 Rust 检查（本次用户要求禁止编译）。
-- [ ] 运行 `cargo run -p semifold --bin smif -- status`，验证 changeset 的实际解析和发布计划（本次未运行）。
+- [x] GitHub Actions [Unit Test #34055233369](https://github.com/noctisynth/semifold/actions/runs/34055233369) 通过 workspace 编译、N-API 冒烟测试、格式、Clippy 与 Rust 测试，本地未编译。
+- [x] 为遵守本地禁止编译约束，使用已安装的 `smif status` 替代 Cargo 启动：解析 1 个 changeset，规划 semifold、semifold-engine、semifold-changelog、@semifold/docs 及依赖传播的 @semifold/cli 共 5 个 patch 升级。

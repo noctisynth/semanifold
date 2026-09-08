@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { markdownPath, renderIndex, renderMarkdown, type AgentPage } from '../lib/agent-docs';
+import { markdownPath, renderIndex, renderMarkdown } from '../lib/agent-docs.ts';
 
-const page: AgentPage = {
+const page = {
   slugs: ['commands', 'ci'], url: '/docs/commands/ci', locale: 'en',
   data: { title: 'CI', description: 'Prepare a release PR.' },
 };
-const chinese: AgentPage = { ...page, locale: 'zh', url: '/zh/docs/commands/ci', data: { title: '持续集成' } };
+const chinese = { ...page, locale: 'zh', url: '/zh/docs/commands/ci', data: { title: '持续集成' } };
 
 describe('agent documentation projections', () => {
   test('each language indexes only its own pages with one document title', () => {
@@ -60,7 +60,7 @@ describe('agent documentation projections', () => {
 test('distributed skill has valid discovery metadata and a complete reference bundle', () => {
   const root = resolve(import.meta.dir, '../../skills/semifold');
   const skill = readFileSync(resolve(root, 'SKILL.md'), 'utf8');
-  const frontmatter = Bun.YAML.parse(skill.split('---')[1]) as { name: string; description: string };
+  const frontmatter = Bun.YAML.parse(skill.split('---')[1]);
   expect(frontmatter.name).toBe('semifold');
   expect(frontmatter.description.length).toBeGreaterThan(0);
   expect(frontmatter.description.length).toBeLessThanOrEqual(1024);

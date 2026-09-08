@@ -580,3 +580,5 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 - 使用纯格式化函数隔离路由依赖；测试覆盖单 H1、语言隔离、Markdown URL 映射、正文/链接保留；
   静态产物检查覆盖索引中的全部 Markdown 链接、双语路由与 HTML alternate。Skill 校验检查
   frontmatter、相对引用和未完成占位符。用户禁止本地编译时仅执行脚本测试和静态校验，构建验证待 CI。
+
+- Bun 专用测试采用 `scripts/*.test.mjs`，通过 `bun test` 执行；不混入 Next 应用的 TypeScript 类型环境，不为测试全局声明扩大生产类型范围。

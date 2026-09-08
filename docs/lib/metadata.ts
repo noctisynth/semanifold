@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { Locale } from '@/lib/i18n';
 import { source } from '@/lib/source';
+import { markdownPath } from '@/lib/agent-docs';
 
 export const siteUrl = new URL('https://semifold.noctisynth.org');
 
@@ -57,6 +58,7 @@ export function docsPageMetadata(
     description: page.data.description,
     alternates: {
       canonical: page.url,
+      types: { 'text/markdown': markdownPath(page) },
       languages: {
         ...(en ? { en, 'x-default': en } : {}),
         ...(zh ? { 'zh-CN': zh } : {}),

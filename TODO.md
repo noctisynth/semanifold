@@ -660,3 +660,10 @@
 
 - [x] GitHub Actions [Unit Test #34055233369](https://github.com/noctisynth/semifold/actions/runs/34055233369) 通过 workspace 编译、N-API 冒烟测试、格式、Clippy 与 Rust 测试，本地未编译。
 - [x] 为遵守本地禁止编译约束，使用已安装的 `smif status` 替代 Cargo 启动：解析 1 个 changeset，规划 semifold、semifold-engine、semifold-changelog、@semifold/docs 及依赖传播的 @semifold/cli 共 5 个 patch 升级。
+
+## Agent 文档入口
+
+- [x] 实现同源分语言索引、逐页 Markdown 路由与 HTML alternate，投影逻辑测试通过；静态导出另行验收。
+- [x] 完成双语 Agent 指南、Semifold Skill 和仓库贡献入口。
+- [x] Bun 测试验证格式化逻辑、Skill frontmatter、引用和 locale parity；使用已安装的 `smif status` 验证独立 changeset，未编译 Rust。
+- [ ] 验证 Next 静态构建与生成产物（本地禁止编译，待 CI）。

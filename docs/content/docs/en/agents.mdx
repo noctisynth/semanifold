@@ -1,0 +1,30 @@
+---
+title: Using Semifold with agents
+description: Find focused Markdown documentation and a portable Semifold skill for release tasks.
+---
+
+Agents can read the same maintained content as this website through the [documentation index](/llms.txt), the [Chinese index](/zh/llms.txt), or [complete bilingual text](/llms-full.txt). The indexes link directly to individual Markdown pages so an agent can load only what the task needs. Each documentation page advertises its Markdown version with an HTML alternate link.
+
+## Get the Semifold skill
+
+The repository distributes [skills/semifold](https://github.com/noctisynth/semifold/tree/main/skills/semifold) in the [Agent Skills format](https://agentskills.io/specification). Copy the whole `semifold` folder, including `references/`, into the skills location supported by your agent client, or use that client's repository skill installer with repository `noctisynth/semifold` and path `skills/semifold`. Installation and discovery locations depend on the client; this repository does not install it globally.
+
+The skill routes changeset creation, configuration maintenance, release review, and release troubleshooting to the existing command documentation. It preserves your repository instructions and the scope you authorize. `AGENTS.md` at the Semifold repository root instead guides agents contributing to Semifold itself.
+
+## Before a task
+
+Run `smif --version` and `smif <command> --help`. Read the target repository's `.changes/config.toml` and workflow; use exact configured package IDs and tags. For older versions, installed help takes precedence over examples using newer flags. Do not infer an installed version from the website's current documentation.
+
+## Task checkpoints
+
+| Task | Prerequisites and operation | Expected result and side effects | Recovery reference |
+| --- | --- | --- | --- |
+| Record a change | Configured package IDs; `smif commit` with complete explicit arguments when non-interactive | One new changeset; versions unchanged. Review `smif status` next. | [Changesets](/docs/commands/commit/) |
+| Review release intent | Valid configuration and changesets; `smif status` | Package/version plan and propagation reasons; no package file writes. `--comment` adds a GitHub write. | [Status](/docs/commands/status/) |
+| Maintain configuration | Existing project; `smif config sync --check` | Reports drift; applying `config sync` can update configuration. | [Configuration](/docs/commands/config/) |
+| Prepare versions | Choose manual or CI workflow; inspect hooks | Version/changelog edits and changeset consumption; hook failure can leave partial applied state. | [Version](/docs/commands/version/) |
+| Publish | Prepared versions, credentials, and explicit release scope | Registry and optional GitHub mutations; partial progress is reported. | [Publish](/docs/commands/publish/) |
+
+`--dry-run` can execute configured commands explicitly enabled for dry run, and publish preflight can access registries. Inspect hooks and respect network or local build constraints before describing a preview as harmless.
+
+With generated GitHub Actions, follow [CI](/docs/commands/ci/) and avoid duplicate local version or publish runs for the same release.

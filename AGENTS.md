@@ -48,3 +48,11 @@ PRD 是需求、架构和设计的技术事实来源。开始任何实现前，�
 - 所有面向用户的 CLI 文案（命令描述、flag help、成功/错误/状态输出和交互提示）必须通过 `rust-i18n` 的 `t!` 宏提供；不得在 Rust 源码中新增硬编码的自然语言文本。
 - 实现或修改用户可见文案时，必须同步更新 `crates/semifold/locales/en.toml` 和 `crates/semifold/locales/zh.toml` 中对应的 locale key，并遵循现有 `[cli.*]` 的分组结构；不得依赖英文 fallback 掩盖中文缺失。
 - 在提交实现前，检查新增或修改的用户可见路径是否具有 locale key，并确认 `en.toml` 与 `zh.toml` 的 key 集合完全一致；测试断言可使用必要的固定字符串，但不应将其作为生产文案来源。
+
+## 文档与 Skill 入口
+
+- 文档站设计：[docs/prd/documentation-redesign.md](docs/prd/documentation-redesign.md)。
+- 双语正文只维护 `docs/content/docs/en` 与 `docs/content/docs/zh`；网页、Agent 索引和逐页 Markdown 从同一源生成。不要编辑旧 `docs/docs` 作为生产内容。
+- `skills/semifold/SKILL.md` 面向使用 Semifold 的 Agent，引用产品文档；此文件面向修改 Semifold 仓库的 Agent。
+- 无构建验证：在 `docs/` 运行 `bun test scripts/agent-docs.test.ts` 与 `bun scripts/check-locales.mjs`。
+- 完整站点验证：`bun run docs:check` 包含静态构建，仅在用户允许本地构建时运行，否则交由 CI。

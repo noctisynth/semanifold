@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "introduction",
+    "agents",
     "getting-started",
     "workspace",
     "concepts",

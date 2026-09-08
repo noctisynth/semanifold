@@ -25,6 +25,11 @@ const requiredFiles = [
   'zh/guide/start/quick-start/index.html',
   'api/search',
   'llms.txt',
+  'zh/llms.txt',
+  'markdown/en/index.md',
+  'markdown/zh/index.md',
+  'markdown/en/agents.md',
+  'markdown/zh/agents.md',
   'llms-full.txt',
 ];
 
@@ -93,3 +98,28 @@ if (broken.length > 0) {
 console.log(
   'Static output: required routes, locale search, and internal links passed.',
 );
+
+// Validate the actual exported Markdown linked from both agent indexes.
+for (const [locale, index] of [['en', 'llms.txt'], ['zh', 'zh/llms.txt']]) {
+  const content = await readFile(resolve(outputRoot, index), 'utf8');
+  if ((content.match(/^# /gm) ?? []).length !== 1) {
+    throw new Error(`${index} must contain exactly one document title.`);
+  }
+  const links = [...content.matchAll(/\]\((https:\/\/semifold\.noctisynth\.org\/markdown\/[^)]+)\)/g)];
+  if (links.length === 0) throw new Error(`${index} contains no Markdown links.`);
+  for (const [, link] of links) {
+    const path = new URL(link).pathname;
+    if (!path.startsWith(`/markdown/${locale}/`)) throw new Error(`Mixed locale in ${index}: ${path}`);
+    const markdown = await readFile(resolve(outputRoot, path.slice(1)), 'utf8');
+    if (!markdown.includes(`Language: ${locale}`)) throw new Error(`Missing locale: ${path}`);
+    const source = markdown.match(/^Source: (https:\/\/[^\s]+)/m)?.[1];
+    if (!source) throw new Error(`Missing source URL: ${path}`);
+    const html = await readFile(resolve(outputRoot, new URL(source).pathname.slice(1), 'index.html'), 'utf8');
+    const tags = [...html.matchAll(/<link\b[^>]*>/g)].map((match) => match[0]);
+    if (!tags.some((tag) => tag.includes('rel="alternate"') && tag.includes('type="text/markdown"') &&
+      (tag.includes(`href="${path}"`) || tag.includes(`href="https://semifold.noctisynth.org${path}"`)))) {
+      throw new Error(`Missing HTML Markdown alternate: ${source}`);
+    }
+  }
+}
+console.log('Agent output: locale indexes, Markdown bodies, and HTML discovery links passed.');

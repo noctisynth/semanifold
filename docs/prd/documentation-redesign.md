@@ -398,7 +398,7 @@ Fumadocs MDX 开启 processed Markdown 输出，并静态生成：
 
 - `/llms.txt`：页面索引；
 - `/llms-full.txt`：完整公开文档；
-- 可选的逐页 Markdown route 在静态导出纵向切片验证后决定。
+- 逐页 Markdown route 按第 18 节从同一 processed MDX 内容静态生成。
 
 下一版本或未发布页面不得混入默认 `llms-full.txt`，除非文本中明确携带 availability。
 
@@ -564,3 +564,19 @@ CI 中 docs job 与 Rust tests 分离，避免文档依赖安装拖慢纯 Rust �
 `1.1.0-beta.0` 提升到 `1.1.0-rc.0`，计划指纹为 `8fc3d5a6632c`。
 
 阶段 2、阶段 3 的其余工作流、workspace、自动化内容与阶段 5 的内容清理仍在进行。旧 Rspress 内容和配置暂时保留为事实核对与迁移线索；生产构建已经切换到 Fumadocs，但当前导航仍未覆盖完整产品内容，不能被解释为全部重写已经结束。
+
+## 18. Agent 文档与 Skill
+
+- `/llms.txt` 保持一个 H1，以英文文档分组索引为主体，并链接 `/zh/llms.txt`、全文和 Skill。
+- `/zh/llms.txt` 单独索引中文内容，禁止 fallback；原 `/llms-full.txt` 保留双语全文兼容行为。
+- `/markdown/{en,zh}/{slug}.md` 从同一 Fumadocs processed Markdown 生成，根文档为 `index.md`；
+  保留标题、描述、原始网页 URL 和语言，正文内部相对链接解析为原网页对应的绝对 URL。
+- 网页 metadata 提供 `alternate` / `text/markdown` 链接；索引直接链接 Markdown，按现有任务模块分组。
+- 增加双语 Agent 使用说明，说明入口、版本适配、Skill 获取和操作的前置条件、输出、副作用及恢复路径。
+- 仓库分发 `skills/semifold/SKILL.md`，元数据满足 Agent Skills 格式；正文仅保留流程选择、
+  PackageId、非交互参数、dry-run 例外和发布恢复等决策规则，详细说明引用既有公开文档。
+  一个按需读取的 release workflow reference 负责流程分流，不复制 CLI 参数参考。
+- `AGENTS.md` 增加文档源与 Skill 的职责、开发验证入口，不把使用者的 Skill 作为仓库贡献规则。
+- 使用纯格式化函数隔离路由依赖；测试覆盖单 H1、语言隔离、Markdown URL 映射、正文/链接保留；
+  静态产物检查覆盖索引中的全部 Markdown 链接、双语路由与 HTML alternate。Skill 校验检查
+  frontmatter、相对引用和未完成占位符。用户禁止本地编译时仅执行脚本测试和静态校验，构建验证待 CI。

@@ -2805,3 +2805,9 @@ Semifold 的中心抽象不应继续是同时解析、排序、写文件和发�
 为核心。
 
 这不只是为了代码整洁度，而是为了使“跨语言 monorepo 发布”成为实际存在于核心模型中的能力。
+
+### Agent 文档入口与技能分发
+
+产品文档继续以 `docs/content/docs/{en,zh}` 的 MDX 为唯一正文来源；Agent 阅读入口、逐页 Markdown
+和 Semifold 使用 Skill 的设计委托 `documentation-redesign.md` 第 18 节。不改变 CLI、发布模型或 MCP
+工具协议，不为静态文档新增 MCP 服务。仓库贡献规则与面向使用者的 Skill 分开维护。
